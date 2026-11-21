@@ -9,6 +9,7 @@ lists the maintainers of the whole project.
 | Name | GitHub | Affiliation | Areas |
 | --- | --- | --- | --- |
 | Sam Yaple | [@SamYaple](https://github.com/SamYaple) | Independent | All crates |
+| Paul Bourke | [@brk3](https://github.com/brk3) | Independent | All crates |
 
 Maintainers review and merge pull requests, triage issues, cut releases and
 handle security and Code of Conduct reports. They are the code owners in

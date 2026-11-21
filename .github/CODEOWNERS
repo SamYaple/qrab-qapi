@@ -2,4 +2,4 @@
 # review from an owner listed here, so this file decides who can approve
 # changes. The last matching pattern wins, so keep the catch-all first.
 
-*                   @SamYaple
+*                   @SamYaple @brk3
