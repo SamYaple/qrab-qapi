@@ -1,0 +1,22 @@
+[package]
+name = "qrab-qapi"
+version = "0.1.0"
+description = "QEMU QMP and guest agent (QGA) types generated from every QEMU release schema"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository = "https://github.com/qrab-dev/qrab-qapi"
+homepage = "https://qrab.dev"
+documentation = "https://docs.rs/qrab-qapi"
+readme = "README.md"
+keywords = ["qemu", "qmp", "qga", "qapi", "virtualization"]
+categories = ["api-bindings", "virtualization", "emulators"]
+include = ["/src/**", "/tests/**", "/build.rs", "/README.md", "/LICENSE", "/NOTICE"]
+
+[package.metadata.docs.rs]
+# docs.rs builds the default features only. Never enable `schema-docs`
+# there: its output carries QEMU's GPL-2.0-or-later schema documentation.
+targets = ["x86_64-unknown-linux-gnu"]
+
+[lib]
+name = "qapi"

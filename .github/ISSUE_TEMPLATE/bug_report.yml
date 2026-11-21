@@ -1,0 +1,76 @@
+name: Bug report
+description: Something in the qrab-qapi crates does not work as documented.
+labels: ["kind/bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. **Do not report security
+        vulnerabilities here**; follow SECURITY.md to report them privately.
+        Remove secrets, tokens and private addresses from anything you paste.
+  - type: dropdown
+    id: crate
+    attributes:
+      label: Crate
+      multiple: true
+      options:
+        - qrab-qapi (generated types)
+        - qrab-qapi-protocol (QMP / QGA clients)
+        - qrab-qapi-macros
+        - qrab-qapi-codegen (parser / generator)
+        - documentation
+        - other / not sure
+    validations:
+      required: true
+  - type: input
+    id: crate-version
+    attributes:
+      label: Crate version
+      description: The version of each affected crate from Cargo.lock, or the commit if you build from git.
+      placeholder: "qrab-qapi 0.1.0, qrab-qapi-protocol 0.1.0"
+    validations:
+      required: true
+  - type: input
+    id: qemu-version
+    attributes:
+      label: QEMU version
+      description: The QEMU or qemu-ga version of the peer (for example from query-version or guest-info), or the QEMU release whose schema is involved.
+      placeholder: "QEMU 11.1.3"
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you saw, including error messages.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce
+      description: A minimal program, QMP or QGA transcript, or generator command that reproduces the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Rust version, OS, enabled features and any QEMU_MIN_VERSION / QEMU_MAX_VERSION build bounds.
+      placeholder: |
+        Rust:
+        OS:
+        Features:
+        QEMU_MIN_VERSION / QEMU_MAX_VERSION:
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Relevant error output or the raw messages exchanged with QEMU or the guest agent.
+      render: text

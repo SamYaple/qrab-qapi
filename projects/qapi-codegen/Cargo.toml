@@ -1,0 +1,21 @@
+[package]
+name = "qrab-qapi-codegen"
+version = "0.1.0"
+description = "Generates version-annotated Rust types from QEMU QAPI schemas"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository = "https://github.com/qrab-dev/qrab-qapi"
+homepage = "https://qrab.dev"
+documentation = "https://docs.rs/qrab-qapi-codegen"
+readme = "README.md"
+keywords = ["qemu", "qapi", "qmp", "codegen", "virtualization"]
+categories = ["development-tools::build-utils", "command-line-utilities", "virtualization"]
+include = ["/src/**", "/tests/**", "/qemu-versions.lock", "/KNOWN_ISSUES.md", "/README.md", "/LICENSE", "/NOTICE"]
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[lib]
+name = "qapi_codegen"
+path = "src/lib.rs"

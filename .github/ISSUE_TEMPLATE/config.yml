@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/qrab-dev/qrab-qapi/security/advisories/new
+    about: Report vulnerabilities privately, never in a public issue. See SECURITY.md.
+  - name: Code of Conduct report
+    url: https://github.com/qrab-dev/qrab-qapi/blob/main/CODE_OF_CONDUCT.md
+    about: How to report a Code of Conduct violation in confidence.
+  - name: Problems with qrab itself
+    url: https://github.com/qrab-dev/qrab/issues
+    about: Bugs and features of the qrab VM platform belong in the qrab repository.

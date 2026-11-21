@@ -1,0 +1,148 @@
+# The required checks of qrab's main-review-gate ruleset: the job names
+# fmt, clippy, test, cargo-deny and check-qapi are the check contexts. Keep
+# them single, non-matrix jobs, and keep this workflow free of path filters,
+# or a required check never reports.
+#
+# Every job runs on every change. Its steps after the checkout are guarded on
+# the files they need (the Cargo workspace, contrib/check-qapi.sh), so a job
+# with nothing to check yet succeeds with those steps skipped.
+#
+# Only GitHub's own actions (actions/*) are used, and there is no build
+# cache: every job builds from a clean checkout.
+#
+# Each job's toolchain install adds the rustup components that its steps,
+# and the scripts they run, use (clippy, rustfmt): the minimal profile has
+# only cargo, rustc and rust-std.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  # The toolchain the checks are pinned to; the repository has no
+  # rust-toolchain file. Raise it deliberately, fixing new lints in the same PR.
+  RUST_TOOLCHAIN: "1.97.1"
+
+jobs:
+  fmt:
+    name: fmt
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the Rust toolchain
+        if: hashFiles('Cargo.toml') != ''
+        run: |
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --component rustfmt
+          rustup default "$RUST_TOOLCHAIN"
+      - name: Check formatting
+        if: hashFiles('Cargo.toml') != ''
+        run: cargo fmt --all --check
+
+  clippy:
+    name: clippy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the Rust toolchain
+        if: hashFiles('Cargo.toml') != ''
+        run: |
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --component clippy
+          rustup default "$RUST_TOOLCHAIN"
+      # Every crate in the workspace, the generated QMP and QGA sources included.
+      - name: Run Clippy
+        if: hashFiles('Cargo.toml') != ''
+        run: cargo clippy --locked --workspace --all-targets --no-deps -- -D warnings
+
+  # The default members (qrab-qapi-macros, qrab-qapi, qrab-qapi-protocol)
+  # build from the checked-in generated sources and need no QEMU source or
+  # Python. The generator's tests need both and run in check-qapi.
+  test:
+    name: test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the Rust toolchain
+        if: hashFiles('Cargo.toml') != ''
+        run: |
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
+          rustup default "$RUST_TOOLCHAIN"
+      - name: Run the tests
+        if: hashFiles('Cargo.toml') != ''
+        run: cargo test --locked
+
+  cargo-deny:
+    name: cargo-deny
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the Rust toolchain
+        if: hashFiles('Cargo.toml') != ''
+        run: |
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
+          rustup default "$RUST_TOOLCHAIN"
+      # Built from its crates.io source at a pinned version and lock file.
+      - name: Install cargo-deny
+        if: hashFiles('Cargo.toml') != ''
+        run: cargo install --locked cargo-deny@0.19.4
+      - name: Check dependency licenses
+        if: hashFiles('Cargo.toml') != ''
+        run: cargo deny --locked check licenses
+
+  check-qapi:
+    name: check-qapi
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check out vendor/qemu with its release tags
+        if: hashFiles('contrib/check-qapi.sh') != ''
+        run: |
+          set -euo pipefail
+          git submodule update --init vendor/qemu
+          git -C vendor/qemu fetch --quiet --tags origin
+          missing=$(awk '!/^#/ && NF { print $1 }' projects/qapi-codegen/qemu-versions.lock |
+            while read -r tag; do
+              git -C vendor/qemu rev-parse -q --verify "refs/tags/$tag" >/dev/null || printf '%s ' "$tag"
+            done)
+          [[ -z $missing ]] || { printf '::error::vendor/qemu lacks the tags %s\n' "$missing"; exit 1; }
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        if: hashFiles('contrib/check-qapi.sh') != ''
+        with:
+          python-version: "3.14"
+      # contrib/check-qapi.sh runs strict Clippy on all four crates.
+      - name: Install the Rust toolchain
+        if: hashFiles('contrib/check-qapi.sh') != ''
+        run: |
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --component clippy
+          rustup default "$RUST_TOOLCHAIN"
+      # Generator tests, byte-for-byte regeneration of QMP and QGA, the
+      # schema-docs mode and the bounded builds of each maintained series.
+      - name: Run check-qapi
+        if: hashFiles('contrib/check-qapi.sh') != ''
+        run: bash contrib/check-qapi.sh

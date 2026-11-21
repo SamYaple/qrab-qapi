@@ -1,0 +1,5 @@
+# Code owners for qrab-qapi. The review rules on main require an approving
+# review from an owner listed here, so this file decides who can approve
+# changes. The last matching pattern wins, so keep the catch-all first.
+
+*                   @SamYaple
