@@ -33,6 +33,8 @@ You need:
   currently 1.97.1, in [.github/workflows/ci.yml](.github/workflows/ci.yml).
 - Optionally [cargo-deny](https://github.com/EmbarkStudios/cargo-deny), for
   the dependency license check.
+- For generator work: Git, Python 3.14 or newer, and the `vendor/qemu`
+  submodule with its release tags (see below).
 
 The default workspace members (`qrab-qapi-macros`, `qrab-qapi` and
 `qrab-qapi-protocol`) build from the checked-in generated sources and need
@@ -44,7 +46,23 @@ cargo fmt --all --check
 cargo clippy --locked --workspace --all-targets --no-deps -- -D warnings
 cargo test --locked
 cargo deny --locked check licenses
+bash contrib/check-qapi.sh
 ```
+
+`contrib/check-qapi.sh` runs the checks that need the QEMU source:
+
+- the generator tests
+
+It needs the QEMU source with its release tags:
+
+```sh
+git submodule update --init vendor/qemu
+git -C vendor/qemu fetch origin --tags
+```
+
+`vendor/qemu` is a git submodule of the QEMU repository named in
+[.gitmodules](.gitmodules). The tags it must hold are the ones pinned in
+[`projects/qapi-codegen/qemu-versions.lock`](projects/qapi-codegen/qemu-versions.lock).
 
 ## Dependencies and licensing
 

@@ -22,4 +22,6 @@ path = "src/lib.rs"
 
 [dependencies]
 thiserror = { workspace = true }
+tempfile = { workspace = true }
+tar = { version = "0.4", default-features = false }
 nom = "8.0.0"
