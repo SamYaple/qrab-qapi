@@ -41,12 +41,34 @@ pub fn not_line_ending(input: &str) -> IResult<&str, &str> {
     take_till(|c| c == '\r' || c == '\n').parse(input)
 }
 
+pub(crate) fn lines(mut input: &str) -> impl Iterator<Item = &str> {
+    std::iter::from_fn(move || {
+        if input.is_empty() {
+            return None;
+        }
+        let end = input.find(['\r', '\n']).unwrap_or(input.len());
+        let line = &input[..end];
+        input = &input[end..];
+        if input.starts_with("\r\n") {
+            input = &input[2..];
+        } else if !input.is_empty() {
+            input = &input[1..];
+        }
+        Some(line)
+    })
+}
+
 pub fn whitespace0(input: &str) -> IResult<&str, &str> {
     take_while(is_whitespace).parse(input)
 }
 
 pub fn whitespace1(input: &str) -> IResult<&str, &str> {
     take_while1(is_whitespace).parse(input)
+}
+
+/// Python whitespace that stays on one physical schema line.
+pub(crate) fn line_space0(input: &str) -> IResult<&str, &str> {
+    take_while(|c| is_whitespace(c) && !matches!(c, '\r' | '\n')).parse(input)
 }
 
 pub fn clean_lines(input: &str) -> IResult<&str, &str> {

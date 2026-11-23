@@ -1,9 +1,16 @@
 pub mod common;
 pub mod qapi_cond;
+pub mod qapi_documentation;
+pub mod qapi_enum;
+pub mod qapi_enum_value;
 pub mod qapi_feature;
 pub mod qapi_features;
 pub mod qapi_include;
+pub mod qapi_member;
+pub mod qapi_members;
 pub mod qapi_pragma;
+pub mod qapi_struct;
+pub mod qapi_type_ref;
 
 use std::cell::Cell;
 
