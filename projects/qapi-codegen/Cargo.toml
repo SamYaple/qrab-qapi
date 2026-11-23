@@ -21,4 +21,5 @@ name = "qapi_codegen"
 path = "src/lib.rs"
 
 [dependencies]
+thiserror = { workspace = true }
 nom = "8.0.0"

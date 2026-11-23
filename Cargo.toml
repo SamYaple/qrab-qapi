@@ -17,3 +17,6 @@ default-members = [
 edition = "2024"
 rust-version = "1.88"
 license = "Apache-2.0"
+
+[workspace.dependencies]
+thiserror = "2"

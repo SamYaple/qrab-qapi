@@ -297,6 +297,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use crate::parse_schema;
     use crate::set_parser_version;
 
     #[test]
@@ -317,6 +318,49 @@ mod tests {
         }
     }
 
+    #[test]
+    fn modern_separators_match_qemu() {
+        set_parser_version((11, 1, 3));
+        for input in [
+            "{ 'enum': 'E', 'data': ['a' 'b'] }",
+            "{ 'enum': 'E', 'data': ['a',] }",
+            "{ 'enum': 'E' 'data': ['a'] }",
+            "{ 'enum': 'E', 'data': ['a'], }",
+            "{ 'struct': 'S', 'data': { 'x': 'str', 'x': 'int' } }",
+            "{ 'enum': 'E', 'enum': 'F', 'data': [] }",
+        ] {
+            assert!(
+                parse_schema(input).is_err(),
+                "Accepted invalid QAPI: {input}"
+            );
+        }
+        parse_schema("{ 'enum': 'E', 'data': ['a', 'b'] }").unwrap();
+    }
+
+    #[test]
+    fn dictionary_keywords_are_exact_strings() {
+        set_parser_version((11, 1, 3));
+        for input in [
+            "{ 'enum ': 'E', 'data': ['a'] }",
+            "{ 'enum# comment\n': 'E', 'data': ['a'] }",
+            "{ 'enum': 'E', 'data ': ['a'] }",
+        ] {
+            assert!(parse_schema(input).is_err(), "accepted {input}");
+        }
+        parse_schema("{ 'enum' # comment\n : 'E', 'data': ['a'] }").unwrap();
+    }
+
+    #[test]
+    fn historical_separator_compatibility() {
+        set_parser_version((1, 0, 0));
+        parse_schema("{ 'enum': 'E' 'data': ['a' 'b',], }").unwrap();
+    }
+
+    #[test]
+    fn comments_can_end_at_eof() {
+        parse_schema("# final comment").unwrap();
+        parse_schema("{ 'enum': 'E', 'data': ['a'] } # final comment").unwrap();
+    }
     #[test]
     fn string_decoding_follows_legacy_escape_eras() {
         use super::{QapiString, qstring};
