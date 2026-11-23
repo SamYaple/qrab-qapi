@@ -2,6 +2,7 @@
 #![forbid(unsafe_code)]
 
 pub mod parsers;
+pub mod qapi_ir;
 pub mod versions;
 
 pub use parsers::{
