@@ -38,4 +38,4 @@ of Origin sign-off. Everyone who takes part follows the
 The crates are licensed under the Apache License, Version 2.0
 ([LICENSE](LICENSE)). The documentation is licensed under CC-BY-4.0
 ([LICENSE-docs](LICENSE-docs)). [NOTICE](NOTICE) describes the third-party
-QEMU material and the `schema-docs` restriction above.
+QEMU material and the `schema-docs` restriction.
