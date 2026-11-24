@@ -12,10 +12,8 @@ fn enumeration(wire: &str, payload: EnumVariantKind, array: bool) -> Enum {
             kind: payload,
             array,
             meta: Metadata {
-                doc: None,
-                schema_doc: None,
-                schema_item: None,
                 attributes: vec![Attribute::with_value("name", wire)],
+                ..Default::default()
             },
         }],
     }
@@ -127,10 +125,8 @@ fn payload_history_keeps_each_shape_and_avoids_real_variant_name_collisions() {
             kind: EnumVariantKind::Unit,
             array: false,
             meta: Metadata {
-                doc: None,
-                schema_doc: None,
-                schema_item: None,
                 attributes: vec![Attribute::with_value("name", "value-legacy")],
+                ..Default::default()
             },
         });
         merge_enum(&mut registry, "Example", &input, (major, 0, 0));

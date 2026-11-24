@@ -1,11 +1,11 @@
 //! QAPI definitions supplied implicitly by QEMU rather than schema files.
-use crate::unified::{SchemaContext, SchemaErrorKind, SchemaResult, Version, definition, require};
+use crate::unified::{SchemaContext, SchemaError, SchemaErrorKind, SchemaResult, Version};
 use crate::{
     MembersOrRef, QapiEnum, QapiEnumValue, QapiMembers, QapiSchema, QapiSchemaToken, QapiStruct,
     QapiTypeRef,
 };
 use std::{
-    collections::{BTreeSet, HashMap},
+    collections::BTreeSet,
     path::{Path, PathBuf},
 };
 
@@ -93,7 +93,7 @@ impl Builtins {
     /// Whether no definition may take `name`: a builtin type, or `QType`.
     /// QEMU checks no names before 2.4, but there too a definition of a
     /// builtin's name could not be told apart from the builtin.
-    fn reserves(self, name: &str) -> bool {
+    pub(crate) fn reserves(self, name: &str) -> bool {
         self.defines(name) || self >= Self::QType && name == "QType"
     }
 
@@ -211,11 +211,11 @@ pub(crate) fn used_predefined(schemas: &[(&Path, QapiSchema<'_>)]) -> BTreeSet<&
         .collect()
 }
 
-/// Parse a release's schema files, check their definitions' names as the
-/// release's generator does, and add the predefined definitions of
+/// Parse a release's schema files and add the predefined definitions of
 /// `predefined` that the release's generator makes. A selection of releases
 /// defines a predefined type in every release of its era once one release
-/// uses it, as QEMU does, rather than only in the releases that use it.
+/// uses it, as QEMU does, rather than only in the releases that use it. The
+/// validation checks the definitions' names.
 pub(crate) fn parse_sources<'s>(
     sources: &'s [(PathBuf, String)],
     predefined: &BTreeSet<&str>,
@@ -224,41 +224,17 @@ pub(crate) fn parse_sources<'s>(
         .iter()
         .map(|(path, content)| {
             let schema = crate::parse_schema(content)
-                .map_err(SchemaErrorKind::Parse)
+                .map_err(|error| {
+                    let position = (error.line, error.column);
+                    SchemaError::from(SchemaErrorKind::Parse(error)).at(Some(position))
+                })
                 .in_file(path)?;
             Ok((path.as_path(), schema))
         })
         .collect::<SchemaResult<Vec<_>>>()?;
-    let builtins = Builtins::current();
-    crate::arrays::normalize(&mut schemas)?;
-    // From 2.4 all definitions share one namespace. Before, only the C
-    // symbols of one kind of definition clash, which the lowering checks.
-    let shared_namespace = crate::parser_version() >= (2, 4, 0);
-    let mut definitions = HashMap::new();
-    for (path, schema) in &schemas {
-        for token in &schema.0 {
-            let Some(name) = token.definition_name() else {
-                continue;
-            };
-            crate::schema_names::validate_definition(token)
-                .and_then(|()| {
-                    require(!builtins.reserves(name), || SchemaErrorKind::Predefined {
-                        name: name.to_owned(),
-                    })
-                })
-                .and_then(|()| match definitions.insert(name, *path) {
-                    Some(previous) if shared_namespace => Err(SchemaErrorKind::Duplicate {
-                        name: name.to_owned(),
-                        previous: previous.to_path_buf(),
-                    }
-                    .into()),
-                    _ => Ok(()),
-                })
-                .in_definition(|| definition(token))
-                .in_file(path)?;
-        }
-    }
-    let predefined = builtins.predefined(predefined);
+    crate::schema_docs::resolve_legacy(&mut schemas);
+    crate::arrays::normalize(&mut schemas, sources)?;
+    let predefined = Builtins::current().predefined(predefined);
     if !predefined.is_empty() {
         schemas.push((Path::new("<predefined QAPI types>"), QapiSchema(predefined)));
     }
@@ -268,59 +244,6 @@ pub(crate) fn parse_sources<'s>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::unified::SchemaError;
-
-    fn parse(version: Version, files: &[(&str, &str)]) -> SchemaResult<Vec<String>> {
-        crate::set_parser_version(version);
-        let sources: Vec<_> = files
-            .iter()
-            .map(|(path, text)| (PathBuf::from(path), text.to_string()))
-            .collect();
-        let schemas = parse_sources(&sources, &PREDEFINED.into())?;
-        Ok(schemas
-            .iter()
-            .flat_map(|(_, schema)| &schema.0)
-            .filter_map(|token| token.definition_name().map(str::to_owned))
-            .collect())
-    }
-
-    fn kind(error: SchemaError) -> SchemaErrorKind {
-        error.kind().clone()
-    }
-
-    #[test]
-    fn each_era_reserves_its_own_builtin_names() {
-        for (version, name, reserved) in [
-            ((2, 3, 0), "dict", true),
-            ((2, 3, 0), "any", false),
-            ((2, 4, 0), "dict", false),
-            ((2, 4, 0), "int8", true),
-            ((2, 4, 0), "size", true),
-            ((2, 4, 0), "any", false),
-            ((2, 5, 0), "any", true),
-            ((2, 5, 0), "QType", false),
-            ((2, 6, 0), "QType", true),
-            ((2, 6, 0), "null", false),
-            ((2, 10, 0), "null", true),
-            ((11, 1, 3), "str", true),
-        ] {
-            let schema = format!("{{'enum':'{name}','data':[]}}");
-            let result = parse(version, &[("a.json", &schema)]);
-            if reserved {
-                let error = result.unwrap_err();
-                assert_eq!(error.file(), Some(Path::new("a.json")));
-                assert_eq!(error.definition(), Some(format!("enum '{name}'").as_str()));
-                assert_eq!(
-                    kind(error),
-                    SchemaErrorKind::Predefined { name: name.into() },
-                    "{version:?} {name}"
-                );
-            } else {
-                result.unwrap();
-            }
-        }
-    }
-
     #[test]
     fn builtin_types_follow_each_era() {
         for (version, builtins) in [
@@ -381,55 +304,6 @@ mod tests {
             [
                 "none", "qnull", "qnum", "qstring", "qdict", "qlist", "qbool"
             ]
-        );
-    }
-
-    #[test]
-    fn definitions_share_one_namespace_from_2_4() {
-        let files = [
-            ("a.json", "{'struct':'Foo','data':{}}"),
-            ("b.json", "{'command':'Foo'}"),
-        ];
-        parse((2, 3, 0), &files).unwrap();
-        let error = parse((2, 4, 0), &files).unwrap_err();
-        assert_eq!(error.file(), Some(Path::new("b.json")));
-        assert_eq!(error.definition(), Some("command 'Foo'"));
-        assert_eq!(
-            kind(error),
-            SchemaErrorKind::Duplicate {
-                name: "Foo".into(),
-                previous: "a.json".into(),
-            }
-        );
-        let error = parse(
-            (11, 1, 3),
-            &[(
-                "a.json",
-                "{'enum':'Foo','data':[]} {'struct':'Foo','data':{}}",
-            )],
-        )
-        .unwrap_err();
-        assert_eq!(
-            kind(error),
-            SchemaErrorKind::Duplicate {
-                name: "Foo".into(),
-                previous: "a.json".into(),
-            }
-        );
-    }
-
-    #[test]
-    fn definition_names_are_checked_before_their_reservation() {
-        let error = parse((2, 6, 0), &[("a.json", "{'struct':'q_empty','data':{}}")]).unwrap_err();
-        assert_eq!(
-            kind(error),
-            SchemaErrorKind::InvalidName {
-                name: "q_empty".into()
-            }
-        );
-        assert_eq!(
-            parse((2, 6, 0), &[("a.json", "{'struct':'Foo','data':{}}")]).unwrap(),
-            ["Foo", "QType", "q_empty"]
         );
     }
 }

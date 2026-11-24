@@ -77,8 +77,8 @@ pub(crate) fn synthesized(rust_name: &str) -> String {
 
 /// A helper type's or event's claim on a name in one release.
 enum RoleClaim<'a> {
-    /// A union's branch enum or a command's request type.
-    Helper,
+    /// A union's branch enum or, as a `request`, a command's request type.
+    Helper { request: bool },
     /// The `run`th run of an event that has `runs` of them.
     Event {
         raw: &'a String,
@@ -96,12 +96,19 @@ enum RoleClaim<'a> {
 /// So does each later run of releases: a type starts a run when it changes
 /// kind or returns after an absence, a command or event when it returns. A
 /// newer release therefore never renames a symbol of the older ones.
+///
+/// A name that can carry a command, that of a command or of its request
+/// type, also holds that name with `Returns` appended: `#[qapi]` names the
+/// enum of a command's return types so. A claim whose `Returns` name is held
+/// already gets a generated name instead.
 #[derive(Default)]
 pub(crate) struct SchemaNames {
     versions: BTreeSet<Version>,
     /// Every planned name, which the types that the lowering extracts avoid.
     pub names: HashSet<String>,
     owners: HashMap<String, Owner>,
+    /// The names that hold their `Returns` name.
+    returns: HashSet<String>,
     roles: BTreeMap<String, String>,
     unions: BTreeMap<String, BTreeSet<Version>>,
     aliases: BTreeMap<String, String>,
@@ -197,53 +204,75 @@ impl SchemaNames {
         }
     }
 
-    /// Take `preferred` unless another claim holds it.
-    fn take_plain(&mut self, preferred: &str, owner: Owner) -> Option<String> {
+    /// Whether a claim that can carry a command may take `name`: no other
+    /// claim holds its `Returns` name.
+    fn returns_free(&self, name: &str) -> bool {
+        self.returns.contains(name) || !self.owners.contains_key(&format!("{name}Returns"))
+    }
+
+    /// Hold the `Returns` name of `name`, which can carry a command.
+    fn hold_returns(&mut self, name: &str) {
+        if self.returns.insert(name.to_owned()) {
+            self.owners.insert(format!("{name}Returns"), Owner::Role);
+        }
+    }
+
+    /// Take `preferred` unless another claim holds it, or a claim that can
+    /// carry a command (`command`) would clash with the `Returns` name.
+    fn take_plain(&mut self, preferred: &str, owner: Owner, command: bool) -> Option<String> {
         let free = match self.owners.get(preferred) {
             None => true,
             Some(Owner::Type) => owner == Owner::Command,
             Some(Owner::Command) => owner == Owner::Type,
             Some(Owner::Role) => false,
         };
-        free.then(|| {
+        (free && (!command || self.returns_free(preferred))).then(|| {
             self.owners.entry(preferred.to_owned()).or_insert(owner);
+            if command {
+                self.hold_returns(preferred);
+            }
             preferred.to_owned()
         })
     }
 
     /// Take the first of `{preferred}Generated`, `{preferred}Generated2`, ...
-    /// that no claim holds.
-    fn take_generated(&mut self, preferred: &str, owner: Owner) -> String {
+    /// that no claim holds, with its `Returns` name for a `command`.
+    fn take_generated(&mut self, preferred: &str, owner: Owner, command: bool) -> String {
         let base = format!("{preferred}Generated");
         let mut name = base.clone();
         let mut suffix = 2;
-        while self.owners.contains_key(&name) {
+        while self.owners.contains_key(&name) || (command && !self.returns_free(&name)) {
             name = format!("{base}{suffix}");
             suffix += 1;
         }
         self.owners.insert(name.clone(), owner);
+        if command {
+            self.hold_returns(&name);
+        }
         name
     }
 
     /// Name the claims of one release, in order: plain names first, so that
     /// no generated name takes the plain name of a claim of the same release.
-    /// A later run never takes the plain name, which its first run holds.
-    fn take_all(&mut self, claims: &[(String, Owner, bool)]) -> Vec<String> {
+    /// A later run never takes the plain name, which its first run holds. A
+    /// claim is `(preferred, owner, later, command)`, where `command` says
+    /// that the name can carry a command.
+    fn take_all(&mut self, claims: &[(String, Owner, bool, bool)]) -> Vec<String> {
         let plain: Vec<_> = claims
             .iter()
-            .map(|(preferred, owner, later)| {
+            .map(|(preferred, owner, later, command)| {
                 if *later {
                     None
                 } else {
-                    self.take_plain(preferred, *owner)
+                    self.take_plain(preferred, *owner, *command)
                 }
             })
             .collect();
         plain
             .into_iter()
             .zip(claims)
-            .map(|(name, (preferred, owner, _))| {
-                name.unwrap_or_else(|| self.take_generated(preferred, *owner))
+            .map(|(name, (preferred, owner, _, command))| {
+                name.unwrap_or_else(|| self.take_generated(preferred, *owner, *command))
             })
             .collect()
     }
@@ -307,7 +336,7 @@ impl SchemaNames {
             let mut runs = Vec::new();
             for (index, starts) in type_starts.iter().enumerate() {
                 if let Some(run) = starts.iter().position(|since| *since == version) {
-                    claims.push((identities[index].0.clone(), Owner::Type, run > 0));
+                    claims.push((identities[index].0.clone(), Owner::Type, run > 0, false));
                     runs.push((index, run));
                 }
             }
@@ -333,7 +362,7 @@ impl SchemaNames {
             let mut runs = Vec::new();
             for (raw, starts) in &command_starts {
                 if let Some(run) = starts.iter().position(|since| *since == version) {
-                    claims.push((rustify_name(raw), Owner::Command, run > 0));
+                    claims.push((rustify_name(raw), Owner::Command, run > 0, true));
                     runs.push((raw, run, starts.len()));
                 }
             }
@@ -353,23 +382,23 @@ impl SchemaNames {
 
             // The helper types and event types that this release adds.
             let mut claims = Vec::new();
-            let mut helpers = BTreeSet::new();
+            let mut helpers = BTreeMap::new();
             for (raw, versions) in &self.unions {
                 if versions.contains(&version) {
                     let root = self.type_name_at(raw, version);
-                    helpers.insert(format!("{root}Branch"));
+                    helpers.insert(format!("{root}Branch"), false);
                 }
             }
             for (raw, starts) in &command_starts {
                 if starts.first() == Some(&version) {
-                    helpers.insert(format!("{}Command", self.command_root(raw)));
+                    helpers.insert(format!("{}Command", self.command_root(raw)), true);
                 }
             }
-            helpers.retain(|preferred| !self.roles.contains_key(preferred));
+            helpers.retain(|preferred, _| !self.roles.contains_key(preferred));
             claims.extend(
                 helpers
                     .into_iter()
-                    .map(|preferred| (preferred, RoleClaim::Helper)),
+                    .map(|(preferred, request)| (preferred, RoleClaim::Helper { request })),
             );
             for (raw, starts) in &event_starts {
                 if let Some(run) = starts.iter().position(|since| *since == version) {
@@ -383,13 +412,14 @@ impl SchemaNames {
                 .iter()
                 .map(|(preferred, claim)| {
                     let later = matches!(claim, RoleClaim::Event { run, .. } if *run > 0);
-                    (preferred.clone(), Owner::Role, later)
+                    let command = matches!(claim, RoleClaim::Helper { request: true });
+                    (preferred.clone(), Owner::Role, later, command)
                 })
                 .collect();
             let names = self.take_all(&requests);
             for ((preferred, claim), name) in claims.into_iter().zip(names) {
                 match claim {
-                    RoleClaim::Helper => {
+                    RoleClaim::Helper { .. } => {
                         self.roles.insert(preferred, name);
                     }
                     RoleClaim::Event { raw, run, runs } => {
@@ -729,6 +759,40 @@ mod tests {
         crate::set_parser_version((5, 0, 0));
         assert_eq!(plan.type_name("FooBarGenerated"), "FooBarGenerated");
         assert_eq!(plan.type_name("FooBAR"), "FooBarGenerated2");
+    }
+
+    #[test]
+    fn no_type_takes_the_name_of_a_command_s_returns_enum() {
+        let releases = [
+            (
+                (5, 0, 0),
+                "{'command':'ping'} {'struct':'EchoReturns','data':{}}",
+            ),
+            (
+                (5, 1, 0),
+                "{'command':'ping'} {'struct':'PingReturns','data':{}}
+                 {'struct':'PingCommandReturns','data':{}}
+                 {'struct':'EchoReturns','data':{}} {'command':'echo'}",
+            ),
+        ];
+        let after = symbols(&releases);
+        // A later type yields the names of the enums of the command and of
+        // its request type...
+        assert_eq!(after["(5, 0, 0) request ping"], "Ping");
+        assert_eq!(after["(5, 1, 0) type PingReturns"], "PingReturnsGenerated");
+        assert_eq!(
+            after["(5, 1, 0) type PingCommandReturns"],
+            "PingCommandReturnsGenerated"
+        );
+        // ...and a later command, whose enum would take an earlier type's
+        // name, a name of its own.
+        assert_eq!(after["(5, 0, 0) type EchoReturns"], "EchoReturns");
+        assert_eq!(after["(5, 1, 0) request echo"], "EchoGenerated");
+        // The types that the lowering names avoid them too.
+        let plan = planned(&releases);
+        for name in ["PingReturns", "PingCommandReturns", "EchoGeneratedReturns"] {
+            assert!(plan.names.contains(name), "{name}");
+        }
     }
 
     #[test]

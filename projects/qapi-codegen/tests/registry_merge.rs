@@ -9,13 +9,15 @@ use std::sync::OnceLock;
 use qapi_codegen::qapi_ir::{Attribute, Metadata, rustify_name};
 use qapi_codegen::unified::{
     RegistryError, UnifiedRegistry, UnifiedStruct, UnifiedType, WarningKind, build_qga_registry,
-    build_unified_registry,
+    build_qmp_registry,
 };
 use qapi_codegen::versions::{
     PINNED_VERSIONS, extract_schema_from_tag, find_schema_entry, parse_pinned_versions,
     parse_version_tag,
 };
-use qapi_codegen::{QapiSchemaToken, parse_schema_with_version, read_schema_with_version};
+use qapi_codegen::{
+    IncludeError, QapiSchemaToken, ReadError, parse_schema_with_version, read_schema_with_version,
+};
 
 fn qemu_root() -> &'static Path {
     let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -54,7 +56,7 @@ fn qmp() -> &'static UnifiedRegistry {
     REGISTRY.get_or_init(|| {
         let tags = representative_tags();
         let tags: Vec<_> = tags.iter().map(String::as_str).collect();
-        build_unified_registry(qemu_root(), &tags).expect("build_unified_registry failed")
+        build_qmp_registry(qemu_root(), &tags).expect("build_qmp_registry failed")
     })
 }
 
@@ -136,12 +138,12 @@ fn repository(releases: &[(&str, &[(&str, &str)])]) -> tempfile::TempDir {
 
 #[test]
 fn registry_errors_name_the_release() {
-    let error = build_unified_registry(Path::new("."), &["v1.x"]).unwrap_err();
+    let error = build_qmp_registry(Path::new("."), &["v1.x"]).unwrap_err();
     assert!(
         matches!(&error, RegistryError::Tag { tag } if tag == "v1.x"),
         "{error:?}"
     );
-    let error = build_unified_registry(qemu_root(), &["v99.0.0"]).unwrap_err();
+    let error = build_qmp_registry(qemu_root(), &["v99.0.0"]).unwrap_err();
     assert!(
         matches!(&error, RegistryError::Extract { tag, .. } if tag == "v99.0.0"),
         "{error:?}"
@@ -150,18 +152,18 @@ fn registry_errors_name_the_release() {
         ("v0.15.0", &[]),
         ("v1.0", &[]),
         (
-            "v2.0.0",
+            "v2.1.0",
             &[("qapi-schema.json", "{ 'include': 'missing.json' }")],
         ),
         (
-            "v2.1.0",
+            "v2.2.0",
             &[("qapi-schema.json", "{ 'enum': 'int', 'data': [] }")],
         ),
     ]);
     // Before 1.0 a release has no QMP schema and is left out.
-    let registry = build_unified_registry(repo.path(), &["v0.15.0"]).unwrap();
+    let registry = build_qmp_registry(repo.path(), &["v0.15.0"]).unwrap();
     assert!(registry.types.is_empty());
-    let error = build_unified_registry(repo.path(), &["v0.15.0", "v1.0"]).unwrap_err();
+    let error = build_qmp_registry(repo.path(), &["v0.15.0", "v1.0"]).unwrap_err();
     assert!(
         matches!(&error, RegistryError::MissingEntry { tag, protocol: "QMP" } if tag == "v1.0"),
         "{error:?}"
@@ -171,22 +173,22 @@ fn registry_errors_name_the_release() {
         matches!(&error, RegistryError::MissingEntry { tag, protocol: "QGA" } if tag == "v1.0"),
         "{error:?}"
     );
-    let error = build_unified_registry(repo.path(), &["v2.0.0"]).unwrap_err();
+    let error = build_qmp_registry(repo.path(), &["v2.1.0"]).unwrap_err();
     assert!(
-        matches!(&error, RegistryError::Read { tag, .. } if tag == "v2.0.0"),
+        matches!(&error, RegistryError::Read { tag, .. } if tag == "v2.1.0"),
         "{error:?}"
     );
-    let error = build_unified_registry(repo.path(), &["v2.1.0"]).unwrap_err();
+    let error = build_qmp_registry(repo.path(), &["v2.2.0"]).unwrap_err();
     assert!(
-        matches!(&error, RegistryError::Schema { tag, .. } if tag == "v2.1.0"),
+        matches!(&error, RegistryError::Schema { tag, .. } if tag == "v2.2.0"),
         "{error:?}"
     );
-    assert_eq!(error.to_string(), "Failed to process v2.1.0");
+    assert_eq!(error.to_string(), "Failed to process v2.2.0");
 }
 
 #[test]
 fn tolerated_schema_quirks_are_returned_as_warnings() {
-    let registry = build_unified_registry(qemu_root(), &["v1.7.0", "v2.4.0"]).unwrap();
+    let registry = build_qmp_registry(qemu_root(), &["v1.7.0", "v2.4.0"]).unwrap();
     let warning = |tag: &str, kind: &WarningKind| {
         registry
             .warnings
@@ -720,4 +722,125 @@ fn test_doc_preservation_in_ir() {
     let doc = running.meta.schema_doc.as_deref().unwrap();
     assert!(doc.contains("VCPUs"), "{doc}");
     assert!(!doc.starts_with('\n') && !doc.ends_with('\n'));
+}
+
+#[test]
+fn registry_errors_name_the_schema_file_in_its_release() {
+    let repo = repository(&[
+        (
+            "v9.0.0",
+            &[
+                ("qapi/qapi-schema.json", "{ 'include': 'one.json' }"),
+                ("qapi/one.json", "{ 'enum': }"),
+            ],
+        ),
+        (
+            "v9.1.0",
+            &[(
+                "qapi/one.json",
+                "{ 'command': 'ping' }\n{ 'command': 'pong', 'data': 'Missing' }",
+            )],
+        ),
+        ("v9.2.0", &[("qapi/one.json", "{ 'include': 'two.json' }")]),
+        ("v10.0.0", &[("qapi/one.json", "{ 'include': 'one.json' }")]),
+    ]);
+    let error = build_qmp_registry(repo.path(), &["v9.0.0"]).unwrap_err();
+    let RegistryError::Read { source, .. } = &error else {
+        panic!("{error:?}")
+    };
+    assert!(
+        matches!(source, ReadError::Parse { path, .. } if path == Path::new("v9.0.0:qapi/one.json")),
+        "{source:?}"
+    );
+    assert_eq!(
+        source.to_string(),
+        "Failed to parse schema file v9.0.0:qapi/one.json with the grammar of QEMU 9.0.0"
+    );
+    let error = build_qmp_registry(repo.path(), &["v9.1.0"]).unwrap_err();
+    let RegistryError::Schema { source, .. } = &error else {
+        panic!("{error:?}")
+    };
+    assert_eq!(source.file(), Some(Path::new("v9.1.0:qapi/one.json")));
+    let error = build_qmp_registry(repo.path(), &["v9.2.0"]).unwrap_err();
+    let RegistryError::Read { source, .. } = &error else {
+        panic!("{error:?}")
+    };
+    assert!(
+        matches!(source, ReadError::Include { from, kind: IncludeError::Unreadable { .. }, .. }
+            if from == Path::new("v9.2.0:qapi/one.json")),
+        "{source:?}"
+    );
+    assert_eq!(
+        source.to_string(),
+        "v9.2.0:qapi/one.json:1:1: can't read include file 'two.json'"
+    );
+    let error = build_qmp_registry(repo.path(), &["v10.0.0"]).unwrap_err();
+    assert!(
+        matches!(&error, RegistryError::Read {
+            source: ReadError::Include { from, kind: IncludeError::Loop { path }, .. }, ..
+        } if from == Path::new("v10.0.0:qapi/one.json") && path == from),
+        "{error:?}"
+    );
+    // A file that is not UTF-8, which the helper cannot write.
+    std::fs::write(repo.path().join("qapi/one.json"), b"\xff").unwrap();
+    for args in [
+        &["add", "-A"][..],
+        &["commit", "-qm", "v10.1.0"],
+        &["tag", "v10.1.0"],
+    ] {
+        let status = Command::new("git")
+            .args([
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.invalid",
+            ])
+            .args(["-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false"])
+            .args(args)
+            .current_dir(repo.path())
+            .status()
+            .unwrap();
+        assert!(status.success(), "git {args:?}");
+    }
+    let error = build_qmp_registry(repo.path(), &["v10.1.0"]).unwrap_err();
+    assert!(
+        matches!(&error, RegistryError::Read { source: ReadError::Read { path, .. }, .. }
+            if path == Path::new("v10.1.0:qapi/one.json")),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn a_release_is_checked_in_the_order_of_its_includes() {
+    // Until 2.11 the QMP schema is at the top of the tree, so its label
+    // has no directory.
+    let main = "{ 'struct': 'a b', 'data': {} }\n{ 'include': 'qapi/one.json' }\n";
+    let repo = repository(&[
+        (
+            "v2.9.0",
+            &[
+                ("qapi-schema.json", main),
+                ("qapi/one.json", "{ 'include': 'two.json' }\n"),
+                ("qapi/two.json", "{ 'struct': 'c d', 'data': {} }\n"),
+            ],
+        ),
+        (
+            "v2.10.0",
+            &[("qapi-schema.json", "{ 'include': 'qapi/one.json' }\n")],
+        ),
+    ]);
+    for (tag, file) in [
+        ("v2.9.0", "v2.9.0:qapi-schema.json"),
+        ("v2.10.0", "v2.10.0:qapi/two.json"),
+    ] {
+        let error = build_qmp_registry(repo.path(), &[tag]).unwrap_err();
+        let RegistryError::Schema { source, .. } = &error else {
+            panic!("{error:?}")
+        };
+        assert_eq!(
+            (source.file(), source.line()),
+            (Some(Path::new(file)), Some(1)),
+            "{source}"
+        );
+    }
 }

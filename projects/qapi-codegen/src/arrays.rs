@@ -1,7 +1,10 @@
 //! Resolve QEMU's implicit `ElementList` names to ordinary array references.
 use crate::unified::{SchemaContext, SchemaErrorKind, SchemaResult, definition, require};
 use crate::{MembersOrRef, QapiMembers, QapiSchema, QapiSchemaToken, QapiString, QapiTypeRef};
-use std::{collections::HashMap, path::Path};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 
 fn visit_type<'a>(
     value: &mut QapiTypeRef<'a>,
@@ -36,10 +39,12 @@ fn visit_object<'a>(
 
 fn visit<'a>(
     schema: &mut QapiSchema<'a>,
+    content: &str,
     mut visitor: impl FnMut(&mut QapiTypeRef<'a>) -> SchemaResult,
 ) -> SchemaResult {
     for token in &mut schema.0 {
         let label = definition(token);
+        let text = token.definition_text();
         let mut visit_token = || -> SchemaResult {
             match token {
                 QapiSchemaToken::Struct(value) => visit_members(&mut value.data, &mut visitor)?,
@@ -73,7 +78,9 @@ fn visit<'a>(
             }
             Ok(())
         };
-        visit_token().in_definition(|| label)?;
+        visit_token()
+            .in_definition(|| label)
+            .at(|| crate::locate(content, text?))?;
     }
     Ok(())
 }
@@ -82,7 +89,10 @@ fn visit<'a>(
 /// accepts from 4.2: before, every array is spelled `[Element]`. The arrays of
 /// the builtin types are predefined; another type's exists only where the
 /// release spells it `[Element]` somewhere.
-pub(crate) fn normalize<'a>(schemas: &mut [(&Path, QapiSchema<'a>)]) -> SchemaResult {
+pub(crate) fn normalize<'a>(
+    schemas: &mut [(&Path, QapiSchema<'a>)],
+    sources: &[(PathBuf, String)],
+) -> SchemaResult {
     if crate::parser_version() < (4, 2, 0) {
         return Ok(());
     }
@@ -90,8 +100,8 @@ pub(crate) fn normalize<'a>(schemas: &mut [(&Path, QapiSchema<'a>)]) -> SchemaRe
     for element in crate::builtins::Builtins::current().types() {
         aliases.insert(format!("{element}List"), QapiString::Borrowed(element));
     }
-    for (_, schema) in schemas.iter_mut() {
-        visit(schema, |value| {
+    for ((_, schema), (_, content)) in schemas.iter_mut().zip(sources) {
+        visit(schema, content, |value| {
             if let QapiTypeRef::ArrayRef(element) = value {
                 aliases
                     .entry(format!("{element}List"))
@@ -100,8 +110,8 @@ pub(crate) fn normalize<'a>(schemas: &mut [(&Path, QapiSchema<'a>)]) -> SchemaRe
             Ok(())
         })?;
     }
-    for (path, schema) in schemas {
-        visit(schema, |value| {
+    for ((path, schema), (_, content)) in schemas.iter_mut().zip(sources) {
+        visit(schema, content, |value| {
             let (name, array) = match &*value {
                 QapiTypeRef::Ref(name) => (name.as_ref(), false),
                 QapiTypeRef::ArrayRef(name) => (name.as_ref(), true),
@@ -128,8 +138,12 @@ mod tests {
 
     fn members(version: (u32, u32, u32), text: &str) -> SchemaResult<Vec<(String, String)>> {
         crate::set_parser_version(version);
-        let mut schemas = vec![(Path::new("a.json"), crate::parse_schema(text).unwrap())];
-        normalize(&mut schemas)?;
+        let sources = [(PathBuf::from("a.json"), text.to_owned())];
+        let mut schemas = vec![(
+            Path::new("a.json"),
+            crate::parse_schema(&sources[0].1).unwrap(),
+        )];
+        normalize(&mut schemas, &sources)?;
         let mut members = Vec::new();
         for token in &schemas[0].1.0 {
             if let QapiSchemaToken::Struct(value) = token {
@@ -172,7 +186,7 @@ mod tests {
     fn arrays_of_arrays_are_refused() {
         for text in [
             "{'struct':'Holder','data':{'values':['intList']}}",
-            "{'struct':'Holder','data':{'direct':['intList'],'alias':'intListList'}}",
+            "\n  {'struct':'Holder','data':{'direct':['intList'],'alias':'intListList'}}",
         ] {
             let error = members((4, 2, 0), text).unwrap_err();
             assert!(
@@ -181,6 +195,12 @@ mod tests {
             );
             assert_eq!(error.file(), Some(Path::new("a.json")));
             assert_eq!(error.definition(), Some("struct 'Holder'"));
+            let (line, column) = if text.starts_with('\n') {
+                (2, 3)
+            } else {
+                (1, 1)
+            };
+            assert_eq!((error.line(), error.column()), (Some(line), Some(column)));
         }
     }
 }

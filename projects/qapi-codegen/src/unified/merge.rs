@@ -72,6 +72,29 @@ fn merge_bool_attrs(existing: &mut UnifiedStruct, new_meta: &Metadata, version: 
     }
 }
 
+/// Spell a merged type as the newest release does: its QAPI name, and the
+/// `name` attribute that the lowering gives it where that differs from the
+/// Rust name. The registry merges releases by Rust name, so a renamed type
+/// such as `SGXInfo`, which QEMU 10.1 spells `SgxInfo`, is one entry. A name
+/// attribute that only the newest spelling needs joins with the release's
+/// other new attributes.
+fn refresh_name(name: &mut String, meta: &mut Metadata, latest_name: &str, latest: &Metadata) {
+    let wire = |meta: &Metadata| {
+        meta.attributes
+            .iter()
+            .position(|attr| matches!(attr, Attribute::Item { name, .. } if name == "name"))
+    };
+    latest_name.clone_into(name);
+    if let Some(old) = wire(meta) {
+        match wire(latest) {
+            Some(new) => meta.attributes[old] = latest.attributes[new].clone(),
+            None => {
+                meta.attributes.remove(old);
+            }
+        }
+    }
+}
+
 /// Map from QAPI variant name to its Rust name (for detecting renames).
 pub(super) fn variant_rust_name(v: &EnumVariant) -> String {
     crate::qapi_ir::rustify_variant(&v.name)
@@ -175,6 +198,12 @@ pub(super) fn merge_enum(registry: &mut UnifiedRegistry, name: &str, e: &Enum, v
             e.meta.schema_doc.as_deref(),
         );
         refresh_current_attributes(&mut existing.ir.meta, &e.meta);
+        refresh_name(
+            &mut existing.ir.name,
+            &mut existing.ir.meta,
+            &e.name,
+            &e.meta,
+        );
         // Union enum-level attributes across versions.
         for new_attr in &e.meta.attributes {
             if !existing
@@ -375,14 +404,19 @@ pub(super) fn merge_struct(
             s.meta.schema_doc.as_deref(),
         );
         refresh_current_attributes(&mut existing.ir.meta, &s.meta);
+        refresh_name(
+            &mut existing.ir.name,
+            &mut existing.ir.meta,
+            &s.name,
+            &s.meta,
+        );
         // Merge version-tracked boolean command attributes (allow_preconfig, allow_oob, etc.)
         merge_bool_attrs(existing, &s.meta, version);
         merge_returns(existing, &s.meta, version);
-        // Union struct-level attributes across versions. We preserve the
-        // older version's attributes (e.g. `name = "SGXInfo"` wire override
-        // from pre-10.1) and add any new attributes the newer version
-        // introduced. Version-tracked attrs and bool attrs are handled
-        // separately above.
+        // Union struct-level attributes across versions: keep the older
+        // version's attributes and add any new attributes the newer version
+        // introduced. Version-tracked attrs, bool attrs and the name are
+        // handled separately above.
         for new_attr in &s.meta.attributes {
             if !existing
                 .ir

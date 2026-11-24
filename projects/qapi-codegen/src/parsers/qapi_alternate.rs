@@ -1,5 +1,6 @@
 use super::common::QapiString;
-use super::common::{qstring, take_dict, take_kv};
+use super::common::{Malformed, keep, malformed_key};
+use super::common::{expression_text, other_key, qstring, take_keyed_dict, take_kv};
 use super::qapi_alternatives::QapiAlternatives;
 use super::qapi_alternatives::take_alternatives;
 use super::qapi_cond::QapiCond;
@@ -13,6 +14,12 @@ use nom::branch::alt;
 use nom::combinator::opt;
 use nom::error::{Error, ErrorKind};
 
+/// The keys whose `null` QEMU 2.4 to 4.1 take for an absent key.
+const ABSENT: &[&str] = &["if"];
+
+/// The keys that the parser reads; from 2.4 the others are kept for the
+/// validation.
+const READ: &[&str] = &["alternate", "data", "if", "features"];
 pub fn take_alternate(input: &str) -> IResult<&str, QapiAlternate<'_>> {
     QapiAlternate::parse(input)
 }
@@ -24,6 +31,13 @@ pub struct QapiAlternate<'i> {
     pub r#if: Option<QapiCond<'i>>,
     pub features: Option<QapiFeatures<'i>>,
     pub doc: Option<QapiDocumentation<'i>>,
+    /// From 2.4, the keys whose values the grammar refused, for the
+    /// validation.
+    pub malformed: Malformed<'i>,
+    /// The keys of the definition's expression, in their order there.
+    pub keys: Vec<QapiString<'i>>,
+    /// The definition's expression in its schema file, from `{` to `}`.
+    pub text: &'i str,
 }
 
 impl<'i> QapiAlternate<'i> {
@@ -31,7 +45,13 @@ impl<'i> QapiAlternate<'i> {
     ///               'data': ALTERNATIVES,
     ///               '*if': COND,
     ///               '*features': FEATURES }
+    ///
+    /// From 2.4: the generators of earlier releases skip it.
     pub fn parse(input: &'i str) -> IResult<&'i str, Self> {
+        if super::parser_version() < (2, 4, 0) {
+            let error = nom::error::Error::new(input, nom::error::ErrorKind::Tag);
+            return Err(nom::Err::Error(error));
+        }
         Self::parse_v1(input)
     }
 
@@ -42,16 +62,20 @@ impl<'i> QapiAlternate<'i> {
             ..Default::default()
         };
         let start = input;
-        let (input, _) = take_dict(alt((
+        let (input, (_, keys)) = take_keyed_dict(alt((
             take_kv("alternate", qstring).map(|v| s.name = v),
             take_alternatives.map(|v| s.data = v),
             take_cond.map(|v| s.r#if = Some(v)),
             take_features.map(|v| s.features = Some(v)),
+            other_key(READ),
+            malformed_key(READ).map(|entry| keep(&mut s.malformed, ABSENT, entry)),
         )))
         .parse(input)?;
-        if s.name.is_empty() || s.data.is_empty() {
+        if !super::common::named(&keys, "alternate", &s.name) {
             return Err(nom::Err::Error(Error::new(start, ErrorKind::Tag)));
         }
+        s.keys = keys;
+        s.text = expression_text(start, input);
         Ok((input, s))
     }
 }

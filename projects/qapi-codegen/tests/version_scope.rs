@@ -8,7 +8,8 @@ use std::path::Path;
 fn explicit_file_grammar_restores_the_caller_after_success_and_failure() {
     let original = parser_version();
     with_parser_version((11, 1, 3), || {
-        let legacy = "{'enum':'Kind','data':['one',]}";
+        // 2.3 reads any escape, 11.1 only `\\`.
+        let legacy = r"{'command':'c\'d'}";
         let schema = parse_schema_with_version(legacy, (2, 3, 0)).unwrap();
         assert_eq!(schema.len(), 1);
         assert_eq!(parser_version(), (11, 1, 3));
@@ -25,7 +26,7 @@ fn reading_schema_files_restores_the_caller_grammar() {
     std::fs::create_dir_all(&dir).unwrap();
     let root = dir.join("root.json");
     std::fs::write(&root, "{ 'include': 'legacy.json' }\n").unwrap();
-    std::fs::write(dir.join("legacy.json"), "{'enum':'Kind','data':['one',]}\n").unwrap();
+    std::fs::write(dir.join("legacy.json"), "{'command':'c\\'d'}\n").unwrap();
     with_parser_version((11, 1, 3), || {
         assert_eq!(
             read_schema_with_version(&root, Some((2, 3, 0)))

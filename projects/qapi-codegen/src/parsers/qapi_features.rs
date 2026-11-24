@@ -34,8 +34,10 @@ mod tests {
     fn test_parse_features_single_dict() {
         let input = "[{'name':'deprecated'}]";
         let expected = QapiFeatures(vec![QapiFeature {
+            malformed: Vec::new(),
             name: "deprecated".into(),
             r#if: None,
+            keys: Some(vec!["name".into()]),
         }]);
         let (remaining, result) = QapiFeatures::parse(input).expect("Parsing failed");
         assert_eq!(remaining, "");
@@ -46,8 +48,10 @@ mod tests {
     fn test_parse_features_single_string() {
         let input = "['deprecated']";
         let expected = QapiFeatures(vec![QapiFeature {
+            malformed: Vec::new(),
             name: "deprecated".into(),
             r#if: None,
+            keys: None,
         }]);
         let (remaining, result) = QapiFeatures::parse(input).expect("Parsing failed");
         assert_eq!(remaining, "");
@@ -58,8 +62,10 @@ mod tests {
     fn test_parse_features_with_if() {
         let input = "[{'name':'deprecated','if':'CONFIG_OPTION'}]";
         let expected = QapiFeatures(vec![QapiFeature {
+            malformed: Vec::new(),
             name: "deprecated".into(),
             r#if: Some(QapiCond::ConfigName("CONFIG_OPTION".into())),
+            keys: Some(vec!["name".into(), "if".into()]),
         }]);
         let (remaining, result) = QapiFeatures::parse(input).expect("Parsing failed");
         assert_eq!(remaining, "");
@@ -71,12 +77,16 @@ mod tests {
         let input = "[{'name':'deprecated','if':'CONFIG_OPTION'},'testfeature']";
         let expected = QapiFeatures(vec![
             QapiFeature {
+                malformed: Vec::new(),
                 name: "deprecated".into(),
                 r#if: Some(QapiCond::ConfigName("CONFIG_OPTION".into())),
+                keys: Some(vec!["name".into(), "if".into()]),
             },
             QapiFeature {
+                malformed: Vec::new(),
                 name: "testfeature".into(),
                 r#if: None,
+                keys: None,
             },
         ]);
         let (remaining, result) = QapiFeatures::parse(input).expect("Parsing failed");
@@ -88,8 +98,10 @@ mod tests {
     fn test_parse_feature_dict() {
         let input = "{'name':'deprecated'}";
         let expected = QapiFeature {
+            malformed: Vec::new(),
             name: "deprecated".into(),
             r#if: None,
+            keys: Some(vec!["name".into()]),
         };
         let (remaining, result) = QapiFeature::parse(input).expect("Parsing failed");
         assert_eq!(remaining, "");
@@ -100,8 +112,10 @@ mod tests {
     fn test_parse_feature_string() {
         let input = "'deprecated'";
         let expected = QapiFeature {
+            malformed: Vec::new(),
             name: "deprecated".into(),
             r#if: None,
+            keys: None,
         };
         let (remaining, result) = QapiFeature::parse(input).expect("Parsing failed");
         assert_eq!(remaining, "");
@@ -112,8 +126,10 @@ mod tests {
     fn test_parse_feature_with_if() {
         let input = "{'name':'deprecated','if':'CONFIG_OPTION'}";
         let expected = QapiFeature {
+            malformed: Vec::new(),
             name: "deprecated".into(),
             r#if: Some(QapiCond::ConfigName("CONFIG_OPTION".into())),
+            keys: Some(vec!["name".into(), "if".into()]),
         };
         let (remaining, result) = QapiFeature::parse(input).expect("Parsing failed");
         assert_eq!(remaining, "");
@@ -123,13 +139,11 @@ mod tests {
     #[test]
     fn test_parse_features_invalid() {
         let invalid_inputs = [
-            "",                                          // Empty input
-            "[",                                         // Incomplete list
-            "[{'name':'deprecated'}",                    // Missing closing bracket
-            "['deprecated'",                             // Missing closing quote
-            "[{'name':'deprecated','if':}]",             // Missing condition value
-            "[{'name':'deprecated','unknown':'value'}]", // Unknown field
-            "[{'if':'CONFIG_OPTION'}]",                  // Missing 'name' field
+            "",                              // Empty input
+            "[",                             // Incomplete list
+            "[{'name':'deprecated'}",        // Missing closing bracket
+            "['deprecated'",                 // Missing closing quote
+            "[{'name':'deprecated','if':}]", // Missing condition value
         ];
         for input in invalid_inputs.iter() {
             let result = QapiFeatures::parse(input);
@@ -144,12 +158,10 @@ mod tests {
     #[test]
     fn test_parse_feature_invalid() {
         let invalid_inputs = [
-            "",                                        // Empty input
-            "{'name':'deprecated'",                    // Missing closing brace
-            "'deprecated",                             // Missing closing quote
-            "{'name':'deprecated','if':}",             // Missing condition value
-            "{'name':'deprecated','unknown':'value'}", // Unknown field
-            "{'if':'CONFIG_OPTION'}",                  // Missing 'name' field
+            "",                            // Empty input
+            "{'name':'deprecated'",        // Missing closing brace
+            "'deprecated",                 // Missing closing quote
+            "{'name':'deprecated','if':}", // Missing condition value
         ];
         for input in invalid_inputs.iter() {
             let result = QapiFeature::parse(input);

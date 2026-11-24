@@ -1,3 +1,5 @@
+use crate::{IncludeError, ReadError};
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
@@ -96,12 +98,68 @@ pub enum TreeError {
 /// The schema files of one release, extracted into a temporary directory that
 /// is removed when this value is dropped.
 #[derive(Debug)]
-pub struct ExtractedSchemas(tempfile::TempDir);
+pub struct ExtractedSchemas {
+    dir: tempfile::TempDir,
+    /// The canonical path of `dir`, which the paths read from it start with.
+    root: PathBuf,
+    tag: String,
+}
 
 impl ExtractedSchemas {
     /// The directory the release's `qapi`, `qga` and top-level schema files are in.
     pub fn path(&self) -> &Path {
-        self.0.path()
+        self.dir.path()
+    }
+
+    /// Name a file of the release as git names a file of its tag,
+    /// `<tag>:<path>`, such as `v11.1.3:qga/qapi-schema.json`. A path outside
+    /// the extracted schemas is returned unchanged.
+    pub fn label(&self, path: &Path) -> PathBuf {
+        let Ok(relative) = path.strip_prefix(&self.root) else {
+            return path.to_path_buf();
+        };
+        let mut label = OsString::from(format!("{}:", self.tag));
+        label.push(relative);
+        label.into()
+    }
+
+    /// The error of reading the release's schemas, with its path labelled.
+    pub(crate) fn label_error(&self, error: ReadError) -> ReadError {
+        match error {
+            ReadError::Resolve { path, source } => ReadError::Resolve {
+                path: self.label(&path),
+                source,
+            },
+            ReadError::Include {
+                from,
+                line,
+                column,
+                kind,
+            } => ReadError::Include {
+                from: self.label(&from),
+                line,
+                column,
+                kind: match kind {
+                    IncludeError::Loop { path } => IncludeError::Loop {
+                        path: self.label(&path),
+                    },
+                    kind => kind,
+                },
+            },
+            ReadError::Read { path, source } => ReadError::Read {
+                path: self.label(&path),
+                source,
+            },
+            ReadError::Parse {
+                path,
+                version,
+                source,
+            } => ReadError::Parse {
+                path: self.label(&path),
+                version,
+                source,
+            },
+        }
     }
 }
 
@@ -297,7 +355,13 @@ pub fn parse_version_tag(tag: &str) -> Option<(u32, u32, u32)> {
 /// without schema files gives an empty directory.
 pub fn extract_schema_from_tag(qemu_repo: &Path, tag: &str) -> Result<ExtractedSchemas, TreeError> {
     let tree = resolve_release(qemu_repo, tag, "tree")?;
-    let tmpdir = tempfile::tempdir().map_err(TreeError::TempDir)?;
+    let dir = tempfile::tempdir().map_err(TreeError::TempDir)?;
+    let root = std::fs::canonicalize(dir.path()).map_err(TreeError::TempDir)?;
+    let schemas = ExtractedSchemas {
+        dir,
+        root,
+        tag: tag.into(),
+    };
     let roots = git_text(
         qemu_repo,
         "ls-tree",
@@ -314,7 +378,7 @@ pub fn extract_schema_from_tag(qemu_repo: &Path, tag: &str) -> Result<ExtractedS
     )?;
     let paths: Vec<_> = roots.split('\0').filter(|path| !path.is_empty()).collect();
     if paths.is_empty() {
-        return Ok(ExtractedSchemas(tmpdir));
+        return Ok(schemas);
     }
     let tar_data = git_stdout(
         qemu_repo,
@@ -335,7 +399,7 @@ pub fn extract_schema_from_tag(qemu_repo: &Path, tag: &str) -> Result<ExtractedS
             continue;
         }
 
-        let dest = tmpdir.path().join(&path);
+        let dest = schemas.path().join(&path);
         let unpack_error = |source| TreeError::Unpack {
             path: path.clone(),
             source,
@@ -346,7 +410,7 @@ pub fn extract_schema_from_tag(qemu_repo: &Path, tag: &str) -> Result<ExtractedS
         entry.unpack(&dest).map_err(unpack_error)?;
     }
 
-    Ok(ExtractedSchemas(tmpdir))
+    Ok(schemas)
 }
 
 /// Given a QEMU source root, or the schemas extracted from a release, find

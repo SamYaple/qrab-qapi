@@ -1,6 +1,7 @@
-use super::common::{line_ending, lines, qcomment, whitespace1};
+use super::common::{is_whitespace, line_ending, lines, qcomment, whitespace1};
 use super::qapi_alternate::QapiAlternate;
 use super::qapi_command::QapiCommand;
+use super::qapi_documentation::QapiDocumentation;
 use super::qapi_documentation::{QapiFreeformDoc, QapiSectionDocumentation};
 use super::qapi_enum::QapiEnum;
 use super::qapi_event::QapiEvent;
@@ -36,6 +37,13 @@ pub enum QapiSchemaToken<'i> {
     FreeformDoc(QapiFreeformDoc<'i>),
     Comment(&'i str),
     EmptyLines,
+    /// Before 2.4, an expression with a metatype that the release's
+    /// generators read loosely, ignoring keys and values they do not use,
+    /// but that its grammar does not describe.
+    Unsupported(&'i str),
+    /// From 2.4, an expression without a key that names a kind of
+    /// definition or directive, which the validation refuses.
+    NoMetatype(&'i str),
 }
 
 impl<'i> QapiSchemaToken<'i> {
@@ -47,6 +55,44 @@ impl<'i> QapiSchemaToken<'i> {
             Self::Event(value) => Some(value.name.as_ref()),
             Self::Struct(value) => Some(value.name.as_ref()),
             Self::Union(value) => Some(value.name.as_ref()),
+            _ => None,
+        }
+    }
+
+    /// The definition's expression in its schema file.
+    pub(crate) fn definition_text(&self) -> Option<&'i str> {
+        match self {
+            Self::Alternate(value) => Some(value.text),
+            Self::Command(value) => Some(value.text),
+            Self::Enum(value) => Some(value.text),
+            Self::Event(value) => Some(value.text),
+            Self::Struct(value) => Some(value.text),
+            Self::Union(value) => Some(value.text),
+            Self::NoMetatype(text) => Some(text),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn documentation_mut(&mut self) -> Option<&mut Option<QapiDocumentation<'i>>> {
+        match self {
+            Self::Alternate(value) => Some(&mut value.doc),
+            Self::Command(value) => Some(&mut value.doc),
+            Self::Enum(value) => Some(&mut value.doc),
+            Self::Event(value) => Some(&mut value.doc),
+            Self::Struct(value) => Some(&mut value.doc),
+            Self::Union(value) => Some(&mut value.doc),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn documentation(&self) -> Option<&QapiDocumentation<'i>> {
+        match self {
+            Self::Alternate(value) => value.doc.as_ref(),
+            Self::Command(value) => value.doc.as_ref(),
+            Self::Enum(value) => value.doc.as_ref(),
+            Self::Event(value) => value.doc.as_ref(),
+            Self::Struct(value) => value.doc.as_ref(),
+            Self::Union(value) => value.doc.as_ref(),
             _ => None,
         }
     }
@@ -77,48 +123,85 @@ impl<'i> QapiSchema<'i> {
             QapiUnion::parse.map(QapiSchemaToken::Union),
             QapiInclude::parse.map(QapiSchemaToken::Include),
             QapiPragma::parse.map(QapiSchemaToken::Pragma),
+            documented_expression,
             invalid_documentation,
             // Bare ## separator (not followed by doc content, common in v2.x)
             bare_doc_separator.map(|_| QapiSchemaToken::EmptyLines),
             legacy_comment.map(QapiSchemaToken::Comment),
+            ignored_expression,
         ));
-        let strict = super::parser_version() >= (2, 9, 0);
-        // Free-form prose cannot replace a declaration's own documentation.
-        let mut needs_definition_doc = false;
-        many0(|input| {
-            let (remaining, token) = token_parser.parse(input)?;
-            let documented = match &token {
-                QapiSchemaToken::Alternate(value) => Some(value.doc.is_some()),
-                QapiSchemaToken::Command(value) => Some(value.doc.is_some()),
-                QapiSchemaToken::Enum(value) => Some(value.doc.is_some()),
-                QapiSchemaToken::Event(value) => Some(value.doc.is_some()),
-                QapiSchemaToken::Struct(value) => Some(value.doc.is_some()),
-                QapiSchemaToken::Union(value) => Some(value.doc.is_some()),
-                _ => None,
-            };
-            if strict && needs_definition_doc && documented == Some(false) {
-                return Err(nom::Err::Failure(nom::error::Error::new(
-                    input,
-                    nom::error::ErrorKind::Verify,
-                )));
-            }
-            if matches!(
-                &token,
-                QapiSchemaToken::Doc(_) | QapiSchemaToken::FreeformDoc(_)
-            ) {
-                needs_definition_doc = true;
-            } else if documented.is_some()
-                || matches!(
-                    &token,
-                    QapiSchemaToken::Include(_) | QapiSchemaToken::Pragma(_)
-                )
-            {
-                needs_definition_doc = false;
-            }
-            Ok((remaining, token))
-        })
-        .map(Self)
-        .parse(input)
+        many0(|input| token_parser.parse(input))
+            .map(Self)
+            .parse(input)
+    }
+}
+
+/// An expression that the definitions' grammar does not read. Before 2.4,
+/// one without a metatype that the release's generators read (`enum`,
+/// `type`, `union`, `command`, and from 2.1 `event` and `include`), which
+/// they skip, such as a `'struct'`, `'alternate'` or `'pragma'` of later
+/// releases, or else one whose values they read loosely, which the IR
+/// cannot represent. The keys they do not read are ignored as they are.
+/// From 2.4, an object without a metatype or directive key, which QEMU
+/// refuses only with the definitions' checks.
+fn ignored_expression(input: &str) -> IResult<&str, QapiSchemaToken<'_>> {
+    let version = super::parser_version();
+    let metas: &[&str] = if version >= (2, 9, 0) {
+        &[
+            "enum",
+            "struct",
+            "union",
+            "alternate",
+            "command",
+            "event",
+            "include",
+            "pragma",
+        ]
+    } else if version >= (2, 4, 0) {
+        &[
+            "enum",
+            "struct",
+            "union",
+            "alternate",
+            "command",
+            "event",
+            "include",
+        ]
+    } else if version >= (2, 1, 0) {
+        &["enum", "type", "union", "command", "event", "include"]
+    } else {
+        &["enum", "type", "union", "command"]
+    };
+    let refuse = || nom::Err::Error(nom::error::Error::new(input, nom::error::ErrorKind::Tag));
+    match super::common::top_level_expression(input) {
+        Ok((Some(keys), rest)) => {
+            let text = super::common::expression_text(input, rest).trim_end_matches(is_whitespace);
+            let read = keys.iter().any(|key| metas.contains(&key.as_ref()));
+            Ok((
+                rest,
+                match (version >= (2, 4, 0), read) {
+                    // The grammar of the definition or directive refuses it.
+                    (true, true) => return Err(refuse()),
+                    (true, false) => QapiSchemaToken::NoMetatype(text),
+                    (false, true) => QapiSchemaToken::Unsupported(text),
+                    (false, false) => QapiSchemaToken::Comment(text),
+                },
+            ))
+        }
+        _ => Err(refuse()),
+    }
+}
+
+/// From 2.4, an expression without a metatype after a documentation
+/// comment, which QEMU refuses for its metatype first.
+fn documented_expression(input: &str) -> IResult<&str, QapiSchemaToken<'_>> {
+    let (rest, _) = QapiDocumentation::parse(input)?;
+    match ignored_expression(rest)? {
+        (rest, token @ QapiSchemaToken::NoMetatype(_)) => Ok((rest, token)),
+        _ => Err(nom::Err::Error(nom::error::Error::new(
+            input,
+            nom::error::ErrorKind::Tag,
+        ))),
     }
 }
 
@@ -146,16 +229,19 @@ fn invalid_documentation(input: &str) -> IResult<&str, QapiSchemaToken<'_>> {
     } else {
         false
     };
-    let error = nom::error::Error::new(input, nom::error::ErrorKind::Verify);
-    Err(
-        if super::parser_version() >= (2, 9, 0)
-            && (shorthand || symbol || (super::parser_version() >= (5, 0, 0) && first == "##"))
+    if super::parser_version() >= (2, 9, 0) && (shorthand || symbol) {
+        // A comment that QEMU reads without fault: what follows it fails.
+        let error = match super::doc_comment::read(input.trim_start_matches(is_whitespace), &mut ())
         {
-            nom::Err::Failure(error)
-        } else {
-            nom::Err::Error(error)
-        },
-    )
+            Ok((_, rest)) => nom::error::Error::new(rest, nom::error::ErrorKind::Eof),
+            Err(_) => nom::error::Error::new(input, nom::error::ErrorKind::Verify),
+        };
+        return Err(nom::Err::Failure(error));
+    }
+    Err(nom::Err::Error(nom::error::Error::new(
+        input,
+        nom::error::ErrorKind::Verify,
+    )))
 }
 
 /// Matches a bare `##` line (with optional trailing whitespace) that acts as a separator.

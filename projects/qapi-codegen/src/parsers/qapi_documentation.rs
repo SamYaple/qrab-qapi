@@ -3,7 +3,6 @@ use super::{
     parser_version,
 };
 use nom::IResult;
-use nom::Offset;
 use nom::Parser;
 use nom::bytes::complete::{tag, tag_no_case};
 use nom::character::complete::space0;
@@ -92,6 +91,8 @@ pub struct QapiDocumentation<'i> {
     pub notes: Vec<&'i str>,
     pub examples: Vec<&'i str>,
     pub todos: Vec<&'i str>,
+    /// The comment in its schema file, from its opening `##` to its end.
+    pub text: &'i str,
 }
 
 fn documentation_line(input: &str) -> IResult<&str, &str> {
@@ -106,6 +107,26 @@ fn documentation_end(input: &str) -> IResult<&str, &str> {
         peek(nom::branch::alt((line_ending, nom::combinator::eof))),
     ))
     .parse(input)
+}
+
+/// The closing line of a comment before 2.9: `##`, more `#` and spaces
+/// allowed. A `##` line with text is an ordinary comment.
+fn legacy_end(input: &str) -> IResult<&str, &str> {
+    recognize((
+        line_space0,
+        tag("##"),
+        nom::bytes::complete::take_while(|c| c == '#'),
+        line_space0,
+        peek(nom::branch::alt((line_ending, nom::combinator::eof))),
+    ))
+    .parse(input)
+}
+
+/// The text of a comment that starts at `start`, after its indentation, and
+/// ends where `rest` begins.
+fn block<'i>(start: &'i str, rest: &'i str) -> &'i str {
+    let start = line_space0(start).map_or(start, |(start, _)| start);
+    &start[..start.len() - rest.len()]
 }
 
 fn documentation_start(input: &str) -> IResult<&str, &str> {
@@ -169,23 +190,17 @@ impl<'i> QapiDocumentation<'i> {
         let mut lines = Vec::new();
         loop {
             let end = if legacy {
-                recognize((
-                    line_space0,
-                    tag("##"),
-                    nom::bytes::complete::take_while(|c| c == '#'),
-                    line_space0,
-                    peek(nom::branch::alt((line_ending, nom::combinator::eof))),
-                ))
-                .parse(input)
+                legacy_end(input)
             } else {
                 documentation_end(input)
             };
             if let Ok((next, _)) = end {
                 let mut doc = Self {
                     name,
+                    text: block(start, next),
                     ..Self::default()
                 };
-                doc.parse_lines(&lines, legacy, start)?;
+                doc.parse_lines(&lines, legacy);
                 return Ok((next, doc));
             }
             if let Ok((next, _)) = (line_space0, line_ending).parse(input) {
@@ -200,9 +215,10 @@ impl<'i> QapiDocumentation<'i> {
                 Err(nom::Err::Error(_)) if legacy => {
                     let mut doc = Self {
                         name,
+                        text: block(start, input),
                         ..Self::default()
                     };
-                    doc.parse_lines(&lines, legacy, start)?;
+                    doc.parse_lines(&lines, legacy);
                     return Ok((input, doc));
                 }
                 Err(error) => return Err(error),
@@ -210,18 +226,11 @@ impl<'i> QapiDocumentation<'i> {
         }
     }
 
-    fn parse_lines(
-        &mut self,
-        lines: &[&'i str],
-        legacy: bool,
-        source: &'i str,
-    ) -> Result<(), nom::Err<Error<&'i str>>> {
-        let duplicate = |line| {
-            nom::Err::Failure(Error::new(
-                &source[source.offset(line)..],
-                ErrorKind::Verify,
-            ))
-        };
+    /// Sort the comment's lines into its sections. The rules they must
+    /// follow are checked as QEMU's parser reads them, in
+    /// [`doc_comment`](super::doc_comment); before 2.9, tags are matched
+    /// regardless of case.
+    fn parse_lines(&mut self, lines: &[&'i str], legacy: bool) {
         #[derive(Clone, Copy)]
         enum Section {
             Description,
@@ -250,8 +259,6 @@ impl<'i> QapiDocumentation<'i> {
         }
         let mut section = Section::Description;
         let mut features = false;
-        let mut features_seen = false;
-        let mut singleton_sections = std::collections::HashSet::new();
         let mut previous_blank = true;
         for &line in lines {
             let indented = line.starts_with([' ', '\t']);
@@ -266,9 +273,6 @@ impl<'i> QapiDocumentation<'i> {
                     } else {
                         &mut self.fields
                     };
-                    if !legacy && target.iter().any(|(previous, _)| *previous == name) {
-                        return Err(duplicate(line));
-                    }
                     target.push((name, vec![value.trim_start()]));
                     if features {
                         self.body.push(line);
@@ -285,27 +289,24 @@ impl<'i> QapiDocumentation<'i> {
                     .split_once(':')
                     .filter(|(_, value)| !value.starts_with(':'))
                 {
-                    let name = name.to_ascii_lowercase();
-                    // Returns/Since have been singleton sections since formal
-                    // docs arrived; Errors joined them in the 9.0 doc parser.
-                    if !legacy
-                        && (matches!(name.as_str(), "returns" | "since")
-                            || name == "errors" && parser_version() >= (9, 0, 0))
-                        && !singleton_sections.insert(name.clone())
-                    {
-                        return Err(duplicate(line));
-                    }
+                    let name = if legacy {
+                        name.to_ascii_lowercase()
+                    } else {
+                        match name {
+                            "Returns" | "Errors" | "Note" | "Notes" | "Example" | "Examples"
+                            | "Features" | "Since" => name.to_ascii_lowercase(),
+                            "TODO" => "todo".into(),
+                            _ => String::new(),
+                        }
+                    };
                     let next = match name.as_str() {
                         "returns" => Some(Section::Returns),
-                        "errors" => Some(Section::Errors),
+                        // QEMU reads an Errors section from 9.0.
+                        "errors" if parser_version() >= (9, 0, 0) => Some(Section::Errors),
                         "note" | "notes" => Some(Section::Notes),
                         "example" | "examples" => Some(Section::Examples),
                         "todo" => Some(Section::Todos),
                         "features" if value.trim().is_empty() => {
-                            if features_seen && parser_version() >= (9, 0, 0) {
-                                return Err(duplicate(line));
-                            }
-                            features_seen = true;
                             self.body.push(line);
                             features = true;
                             section = Section::Description;
@@ -384,7 +385,6 @@ impl<'i> QapiDocumentation<'i> {
         for (_, lines) in self.fields.iter_mut().chain(self.features.iter_mut()) {
             trim_lines(lines);
         }
-        Ok(())
     }
 }
 
@@ -439,7 +439,7 @@ impl<'i> QapiSectionDocumentation<'i> {
         let (input, desc_str) = opt(take_multiline_text).parse(input)?;
         let (input, _) = many0(take_empty_line).parse(input)?;
         let (input, _) = if parser_version() < (2, 9, 0) {
-            preceded(line_space0, tag("##")).parse(input)
+            legacy_end(input)
         } else {
             documentation_end(input)
         }?;
@@ -510,7 +510,7 @@ impl<'i> QapiFreeformDoc<'i> {
         let mut input = input;
         loop {
             let end = if parser_version() < (2, 9, 0) {
-                preceded(line_space0, tag::<&str, &str, Error<&str>>("##")).parse(input)
+                legacy_end(input)
             } else {
                 documentation_end(input)
             };
@@ -539,34 +539,30 @@ mod tests {
     use crate::parsers::set_parser_version;
 
     #[test]
-    fn duplicate_doc_sections_follow_their_grammar_era() {
-        for (section, introduced) in [
-            ("Since: 1.0", (2, 9, 0)),
-            ("Returns: result", (2, 9, 0)),
-            ("Errors: failure", (9, 0, 0)),
-            ("Features:\n# @flag: description", (9, 0, 0)),
-            ("@member: description", (2, 9, 0)),
-        ] {
-            let input = format!("##\n# @Example:\n#\n# {section}\n#\n# {section}\n##\n");
-            // Duplicate Features would also duplicate @flag, independently
-            // invalid since formal docs, so keep the second header empty.
-            let input = if section.starts_with("Features:") {
-                input.replacen("# @flag: description\n##", "##", 1)
-            } else {
-                input
-            };
-            set_parser_version(if introduced == (9, 0, 0) {
-                (8, 2, 0)
-            } else {
-                (2, 8, 0)
-            });
-            assert!(QapiDocumentation::parse(&input).is_ok(), "{input}");
-            set_parser_version(introduced);
-            assert!(QapiDocumentation::parse(&input).is_err(), "{input}");
-        }
+    fn section_tags_match_case_sensitively_from_2_9() {
+        let input = "##\n# @Example:\n#\n# returns: text\n#\n# errors: text\n##\n";
         set_parser_version((11, 1, 3));
-        let input = "##\n# @Example:\n# Note: first\n#\n# Note: second\n##\n";
-        assert!(QapiDocumentation::parse(input).is_ok());
+        let (_, doc) = QapiDocumentation::parse(input).unwrap();
+        assert!(doc.returns.is_empty() && doc.errors.is_empty());
+        assert_eq!(doc.description, ["returns: text", "", "errors: text"]);
+        let input = input
+            .replace("returns", "Returns")
+            .replace("errors", "Errors");
+        let (_, doc) = QapiDocumentation::parse(&input).unwrap();
+        assert_eq!((doc.returns, doc.errors), (vec!["text"], vec!["text"]));
+        // Before 2.9 comments had no grammar: any case names a section.
+        set_parser_version((2, 8, 0));
+        let (_, doc) =
+            QapiDocumentation::parse("##\n# @Example:\n#\n# RETURNS: text\n##\n").unwrap();
+        assert_eq!(doc.returns, ["text"]);
+    }
+
+    #[test]
+    fn a_legacy_hash_line_with_text_is_a_comment() {
+        // Before 2.9 QEMU read every `#` line as a comment.
+        for input in ["##\n#\n## text\n", "##\n# = Section\n## text\n##\n"] {
+            crate::parse_schema_with_version(input, (2, 8, 0)).unwrap();
+        }
     }
 
     #[test]
@@ -576,6 +572,18 @@ mod tests {
         let (remaining, doc) = QapiDocumentation::parse(input).unwrap();
         assert!(remaining.starts_with("\n{ 'type'"));
         assert_eq!(doc.description, ["first paragraph", "continuation"]);
+    }
+
+    #[test]
+    fn errors_sections_begin_in_9_0() {
+        let input = "##\n# @Example:\n#\n# Errors: failure details\n##\n{ 'struct': 'Example', 'data': {} }";
+        set_parser_version((8, 2, 0));
+        let (_, doc) = QapiDocumentation::parse(input).unwrap();
+        assert!(doc.errors.is_empty());
+        assert!(doc.description.contains(&"Errors: failure details"));
+        set_parser_version((9, 0, 0));
+        let (_, doc) = QapiDocumentation::parse(input).unwrap();
+        assert_eq!(doc.errors, ["failure details"]);
     }
 
     #[test]

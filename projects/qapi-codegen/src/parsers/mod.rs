@@ -1,4 +1,5 @@
 pub mod common;
+pub(crate) mod doc_comment;
 pub mod qapi_alternate;
 pub mod qapi_alternative;
 pub mod qapi_alternatives;

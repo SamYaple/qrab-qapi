@@ -1,5 +1,6 @@
 use super::common::QapiString;
-use super::common::{qstring, take_dict, take_kv};
+use super::common::{Malformed, keep, malformed_key};
+use super::common::{expression_text, other_key, qstring, read_since, take_keyed_dict, take_kv};
 use super::parser_version;
 use super::qapi_cond::{QapiCond, take_cond};
 use super::qapi_documentation::QapiDocumentation;
@@ -11,6 +12,12 @@ use nom::branch::alt;
 use nom::combinator::opt;
 use nom::error::{Error, ErrorKind};
 
+/// The keys whose `null` QEMU 2.4 to 4.1 take for an absent key.
+const ABSENT: &[&str] = &["base", "if"];
+
+/// The keys that the parser reads; from 2.4 the others are kept for the
+/// validation.
+const READ: &[&str] = &["type", "struct", "base", "if", "features", "data"];
 pub fn take_struct(input: &str) -> IResult<&str, QapiStruct<'_>> {
     QapiStruct::parse(input)
 }
@@ -23,6 +30,13 @@ pub struct QapiStruct<'i> {
     pub r#if: Option<QapiCond<'i>>,
     pub features: Option<QapiFeatures<'i>>,
     pub doc: Option<QapiDocumentation<'i>>,
+    /// From 2.4, the keys whose values the grammar refused, for the
+    /// validation.
+    pub malformed: Malformed<'i>,
+    /// The keys of the definition's expression, in their order there.
+    pub keys: Vec<QapiString<'i>>,
+    /// The definition's expression in its schema file, from `{` to `}`.
+    pub text: &'i str,
 }
 
 impl<'i> QapiStruct<'i> {
@@ -36,7 +50,9 @@ impl<'i> QapiStruct<'i> {
         }
     }
 
-    /// v1 (QEMU v1.0–v2.3.0): accepts `'type'` or `'struct'` keyword.
+    /// v1 (QEMU v1.0–v2.3.0): the `'type'` keyword. Their generators ignore
+    /// an expression with the later `'struct'` keyword, and the keys they do
+    /// not read: `'base'` before 1.7.
     pub fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
         let (input, doc) = opt(QapiDocumentation::parse).parse(input)?;
         let mut s = Self {
@@ -45,21 +61,25 @@ impl<'i> QapiStruct<'i> {
         };
         let start = input;
         let mut has_data = false;
-        let take_name = alt((take_kv("struct", qstring), take_kv("type", qstring)));
-        let (input, _) = take_dict(alt((
+        let take_name = take_kv("type", qstring);
+        let (input, (_, keys)) = take_keyed_dict(alt((
             take_name.map(|v| s.name = v),
-            take_kv("base", qstring).map(|v| s.base = Some(v)),
-            take_cond.map(|v| s.r#if = Some(v)),
-            take_features.map(|v| s.features = Some(v)),
+            read_since((1, 7, 0), take_kv("base", qstring)).map(|v| s.base = Some(v)),
+            read_since((2, 4, 0), take_cond).map(|v| s.r#if = Some(v)),
+            read_since((2, 4, 0), take_features).map(|v| s.features = Some(v)),
             take_kv("data", take_members).map(|v| {
                 has_data = true;
                 s.data = v;
             }),
+            other_key(READ),
+            malformed_key(READ).map(|entry| keep(&mut s.malformed, ABSENT, entry)),
         )))
         .parse(input)?;
-        if s.name.is_empty() || !has_data {
+        if !super::common::named(&keys, "type", &s.name) || !has_data {
             return Err(nom::Err::Error(Error::new(start, ErrorKind::Tag)));
         }
+        s.keys = keys;
+        s.text = expression_text(start, input);
         Ok((input, s))
     }
 
@@ -72,7 +92,7 @@ impl<'i> QapiStruct<'i> {
         };
         let start = input;
         let mut has_data = false;
-        let (input, _) = take_dict(alt((
+        let (input, (_, keys)) = take_keyed_dict(alt((
             take_kv("struct", qstring).map(|v| s.name = v),
             take_kv("base", qstring).map(|v| s.base = Some(v)),
             take_cond.map(|v| s.r#if = Some(v)),
@@ -81,11 +101,15 @@ impl<'i> QapiStruct<'i> {
                 has_data = true;
                 s.data = v;
             }),
+            other_key(READ),
+            malformed_key(READ).map(|entry| keep(&mut s.malformed, ABSENT, entry)),
         )))
         .parse(input)?;
-        if s.name.is_empty() || !has_data {
+        if !super::common::named(&keys, "struct", &s.name) {
             return Err(nom::Err::Error(Error::new(start, ErrorKind::Tag)));
         }
+        s.keys = keys;
+        s.text = expression_text(start, input);
         Ok((input, s))
     }
 }
@@ -106,9 +130,16 @@ mod tests {
     fn data_is_required_even_when_empty() {
         for version in [(1, 0, 0), (11, 1, 3)] {
             set_parser_version(version);
-            assert!(QapiStruct::parse("{ 'struct': 'MissingData' }").is_err());
+            let keyword = if version < (2, 4, 0) {
+                "type"
+            } else {
+                "struct"
+            };
+            // From 2.4 the validation refuses a missing 'data'.
+            let missing = format!("{{ '{keyword}': 'MissingData' }}");
+            assert_eq!(QapiStruct::parse(&missing).is_err(), version < (2, 4, 0));
             assert_eq!(
-                QapiStruct::parse("{ 'struct': 'Empty', 'data': {} }")
+                QapiStruct::parse(&format!("{{ '{keyword}': 'Empty', 'data': {{}} }}"))
                     .unwrap()
                     .0,
                 ""
@@ -143,17 +174,12 @@ mod tests {
     }
 
     #[test]
-    fn test_struct_keyword_also_accepted_in_v1() {
-        set_parser_version((2, 0, 0));
+    fn test_struct_keyword_defines_no_struct_in_v1() {
+        set_parser_version((2, 3, 0));
         let input = "{ 'struct': 'NameInfo', 'data': {'*name': 'str'} }";
-        let result = QapiStruct::parse(input);
-        match result {
-            Ok((remaining, s)) => {
-                assert_eq!(remaining, "");
-                assert_eq!(s.name, "NameInfo");
-            }
-            Err(e) => panic!("v1 should also accept 'struct': {}", e),
-        }
+        assert!(QapiStruct::parse(input).is_err());
+        let schema = crate::parse_schema(input).unwrap();
+        assert!(matches!(schema.0[..], [crate::QapiSchemaToken::Comment(_)]));
     }
 
     #[test]

@@ -1,6 +1,6 @@
 //! Explicit broad scan; normal generation remains independent of extra local tags.
 use qapi_codegen::{
-    unified::{build_qga_registry, build_unified_registry},
+    unified::{build_qga_registry, build_qmp_registry},
     versions::{
         PINNED_VERSIONS, discover_qga_version_tags, discover_version_tags, parse_pinned_versions,
         parse_version_tag_full, verify_pinned_versions,
@@ -33,10 +33,7 @@ fn all_mirrored_schema_era_releases_lower_without_skipping_present_inputs() {
         qga_tags.len()
     );
     assert_eq!(
-        build_unified_registry(&repo, &qmp_tags)
-            .unwrap()
-            .versions
-            .len(),
+        build_qmp_registry(&repo, &qmp_tags).unwrap().versions.len(),
         qmp_tags.len()
     );
     assert_eq!(

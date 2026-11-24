@@ -8,18 +8,17 @@ use super::merge::{
 };
 use super::*;
 
-/// Parse the QMP schemas of the given release tags and merge them into a
-/// unified registry. Releases before 1.0, which have no QMP schema, are left
-/// out. Extraction and parsing run in parallel across versions; merging is
+/// Parse the QMP schemas of the given release tags and merge them into one
+/// registry. Releases before 1.0, which have no QMP schema, are left out. Extraction and parsing run in parallel across versions; merging is
 /// sequential, in release order.
-pub fn build_unified_registry(
+pub fn build_qmp_registry(
     qemu_repo: &Path,
     version_tags: &[&str],
 ) -> Result<UnifiedRegistry, RegistryError> {
     build_registry(qemu_repo, version_tags, false)
 }
 
-/// Build a unified registry from the QGA schemas of the given release tags.
+/// Build the registry of the QGA schemas of the given release tags.
 /// Releases that predate the guest agent's schema are left out.
 pub fn build_qga_registry(
     qemu_repo: &Path,

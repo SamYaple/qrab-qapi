@@ -288,6 +288,9 @@ pub fn process_legacy_alternate(q: QapiUnion) -> Result<Enum, LowerError> {
         r#if: q.r#if,
         features: q.features,
         doc: q.doc,
+        malformed: q.malformed,
+        keys: q.keys,
+        text: q.text,
     })
 }
 
@@ -764,6 +767,11 @@ pub fn process_command(
     add_schema_facts! {meta, SchemaItem::Command, q.doc, &mut fields};
     if let Some(returns) = q.returns {
         let (r#type, array) = process_type_ref(&returns, &q.name, "returns")?;
+        meta.qapi_returns = Some(if array {
+            format!("[{}]", r#type)
+        } else {
+            r#type.to_owned()
+        });
         let rust_type = super::rustify_type(r#type);
         let r#type = if array {
             format!("Vec<{}>", rust_type)
@@ -817,18 +825,19 @@ mod tests {
     fn make_enum_value(name: &str) -> QapiEnumValue<'_> {
         QapiEnumValue {
             name: name.into(),
-            r#if: None,
-            features: None,
+            ..Default::default()
         }
     }
 
     fn member<'a>(name: &'a str, r#type: QapiTypeRef<'a>) -> QapiMember<'a> {
         QapiMember {
+            malformed: Vec::new(),
             name: name.into(),
             optional: false,
             r#type,
             r#if: None,
             features: None,
+            keys: None,
         }
     }
 
@@ -1014,14 +1023,9 @@ mod tests {
                 "U",
                 "b",
             ),
-            (
-                "{ 'alternate': 'A', 'data': { 'b': { 'a': 'int' } } }",
-                "A",
-                "b",
-            ),
         ] {
             assert_eq!(
-                lower_first(input, (2, 0, 0)),
+                lower_first(input, (2, 3, 0)),
                 Err(LowerError::AnonymousStruct {
                     definition: definition.into(),
                     member: member.into(),
@@ -1052,9 +1056,11 @@ mod tests {
         let alternate = QapiAlternate {
             name: "A".into(),
             data: QapiAlternatives(vec![QapiAlternative {
+                malformed: Vec::new(),
                 name: "b".into(),
                 r#type: QapiTypeRef::Unset,
                 r#if: None,
+                keys: None,
             }]),
             ..Default::default()
         };
@@ -1315,6 +1321,9 @@ mod tests {
             r#if: None,
             features: None,
             doc: None,
+            malformed: Vec::new(),
+            keys: Vec::new(),
+            text: "",
         };
         let e = process_enum(q);
         assert_eq!(e.name, "StatusCode");
@@ -1362,16 +1371,21 @@ mod tests {
             name: "MyEnum".into(),
             data: vec![QapiEnumValue {
                 name: "deprecated-val".into(),
-                r#if: None,
                 features: Some(QapiFeatures(vec![QapiFeature {
+                    malformed: Vec::new(),
                     name: "deprecated".into(),
                     r#if: None,
+                    keys: None,
                 }])),
+                ..Default::default()
             }],
             prefix: None,
             r#if: None,
             features: None,
             doc: None,
+            malformed: Vec::new(),
+            keys: Vec::new(),
+            text: "",
         };
         let e = process_enum(q);
         assert_eq!(e.variants.len(), 1);
@@ -1393,6 +1407,9 @@ mod tests {
             r#if: None,
             features: None,
             doc: None,
+            malformed: Vec::new(),
+            keys: Vec::new(),
+            text: "",
         };
         let mut names = HashSet::new();
         let (s, extracted) = process_struct(q, &HashMap::new(), &mut names).unwrap();
@@ -1437,6 +1454,9 @@ mod tests {
             r#if: None,
             features: None,
             doc: None,
+            malformed: Vec::new(),
+            keys: Vec::new(),
+            text: "",
         };
         let (s, _) = process_struct(q, &lookup, &mut HashSet::new()).unwrap();
         assert_eq!(s.name, "Child");
@@ -1484,6 +1504,9 @@ mod tests {
             r#if: None,
             features: None,
             doc: None,
+            malformed: Vec::new(),
+            keys: Vec::new(),
+            text: "",
         };
         let (s, extracted) = process_struct(q, &HashMap::new(), &mut HashSet::new()).unwrap();
         assert_eq!(s.name, "VersionInfo");
@@ -1645,11 +1668,11 @@ mod tests {
 
     #[test]
     fn gen_false_commands_get_a_flattened_arguments_map() {
-        for flag in ["false", "'no'"] {
+        for (flag, version) in [("false", (2, 4, 0)), ("'no'", (2, 0, 0))] {
             let input = format!(
                 "{{ 'command': 'device_add', 'data': {{ 'driver': 'str' }}, 'gen': {flag} }}"
             );
-            let value = process_command(command(&input, (2, 0, 0)), &HashMap::new()).unwrap();
+            let value = process_command(command(&input, version), &HashMap::new()).unwrap();
             let [driver, arguments] = &value.fields[..] else {
                 panic!("{flag}: {:?}", value.fields)
             };
@@ -1791,19 +1814,26 @@ mod tests {
             name: "StrOrInt".into(),
             data: QapiAlternatives(vec![
                 QapiAlternative {
+                    malformed: Vec::new(),
                     name: "s".into(),
                     r#type: QapiTypeRef::Ref("str".into()),
                     r#if: None,
+                    keys: None,
                 },
                 QapiAlternative {
+                    malformed: Vec::new(),
                     name: "i".into(),
                     r#type: QapiTypeRef::Ref("int".into()),
                     r#if: None,
+                    keys: None,
                 },
             ]),
             r#if: None,
             features: None,
             doc: None,
+            malformed: Vec::new(),
+            keys: Vec::new(),
+            text: "",
         };
         let e = process_alternate(q).unwrap();
         assert_eq!(e.name, "StrOrInt");

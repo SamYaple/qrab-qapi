@@ -5,8 +5,6 @@ use super::vec_newtype;
 use nom::IResult;
 use nom::Parser;
 use nom::branch::alt;
-use nom::combinator::verify;
-use std::collections::HashSet;
 
 pub fn take_members(input: &str) -> IResult<&str, QapiMembers<'_>> {
     QapiMembers::parse(input)
@@ -16,22 +14,15 @@ pub fn take_members(input: &str) -> IResult<&str, QapiMembers<'_>> {
 pub struct QapiMembers<'i>(pub Vec<QapiMember<'i>>);
 impl<'i> QapiMembers<'i> {
     /// MEMBERS = { MEMBER, ... }
+    ///
+    /// `'a'` and `'*a'` are two keys, so two members of one name parse; the
+    /// lowering and the validation of each release decide about them.
     pub fn parse(input: &'i str) -> IResult<&'i str, Self> {
         Self::parse_v1(input)
     }
 
     pub fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
-        verify(
-            take_dict(QapiMember::parse),
-            |members: &Vec<QapiMember<'i>>| {
-                let mut names = HashSet::new();
-                members
-                    .iter()
-                    .all(|member| names.insert(member.name.as_ref()))
-            },
-        )
-        .map(Self)
-        .parse(input)
+        take_dict(QapiMember::parse).map(Self).parse(input)
     }
 }
 vec_newtype!(QapiMembers, QapiMember<'i>);
@@ -65,10 +56,16 @@ mod tests {
     use crate::parsers::qapi_type_ref::QapiTypeRef;
 
     #[test]
-    fn optional_marker_does_not_hide_empty_or_duplicate_member_names() {
-        for input in ["{ '*': 'str' }", "{ 'name': 'str', '*name': 'int' }"] {
-            assert!(QapiMembers::parse(input).is_err(), "accepted {input}");
-        }
+    fn optional_marker_does_not_hide_an_empty_member_name() {
+        // From 2.4 the validation refuses the empty name.
+        crate::set_parser_version((2, 3, 0));
+        assert!(QapiMembers::parse("{ '*': 'str' }").is_err());
+        crate::set_parser_version((11, 1, 3));
+        let (_, members) = QapiMembers::parse("{ '*': 'str' }").unwrap();
+        assert!(members[0].name.is_empty() && members[0].optional);
+        let (_, members) = QapiMembers::parse("{ 'name': 'str', '*name': 'int' }").unwrap();
+        assert_eq!(members.len(), 2);
+        assert!(members.iter().all(|member| member.name == "name"));
     }
 
     #[test]

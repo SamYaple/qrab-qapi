@@ -1,5 +1,8 @@
 use super::common::QapiString;
-use super::common::{qbool, qstring, take_dict, take_kv};
+use super::common::{Malformed, keep, malformed_key};
+use super::common::{
+    expression_text, other_key, qbool, qstring, read_since, take_keyed_dict, take_kv,
+};
 use super::parser_version;
 use super::qapi_cond::{QapiCond, take_cond};
 use super::qapi_documentation::QapiDocumentation;
@@ -12,6 +15,24 @@ use nom::branch::alt;
 use nom::combinator::opt;
 use nom::error::{Error, ErrorKind};
 
+/// The keys whose `null` QEMU 2.4 to 4.1 take for an absent key.
+const ABSENT: &[&str] = &["data", "returns", "if"];
+
+/// The keys that the parser reads; from 2.4 the others are kept for the
+/// validation.
+const READ: &[&str] = &[
+    "command",
+    "boxed",
+    "if",
+    "features",
+    "returns",
+    "success-response",
+    "gen",
+    "allow-oob",
+    "coroutine",
+    "allow-preconfig",
+    "data",
+];
 pub fn take_command(input: &str) -> IResult<&str, QapiCommand<'_>> {
     QapiCommand::parse(input)
 }
@@ -30,6 +51,13 @@ pub struct QapiCommand<'i> {
     pub allow_preconfig: Option<&'i str>,
     pub coroutine: Option<&'i str>,
     pub doc: Option<QapiDocumentation<'i>>,
+    /// From 2.4, the keys whose values the grammar refused, for the
+    /// validation.
+    pub malformed: Malformed<'i>,
+    /// The keys of the definition's expression, in their order there.
+    pub keys: Vec<QapiString<'i>>,
+    /// The definition's expression in its schema file, from `{` to `}`.
+    pub text: &'i str,
 }
 
 impl<'i> QapiCommand<'i> {
@@ -59,37 +87,36 @@ impl<'i> QapiCommand<'i> {
             ..Default::default()
         };
         let start = input;
-        let (input, _) = take_dict(alt((
+        let flag = move |input: &'i str| -> IResult<&'i str, QapiString<'i>> {
+            if gen_string_as_bool {
+                alt((qbool.map(QapiString::Borrowed), qstring)).parse(input)
+            } else {
+                qbool.map(QapiString::Borrowed).parse(input)
+            }
+        };
+        let (input, (_, keys)) = take_keyed_dict(alt((
             take_kv("command", qstring).map(|v| s.name = v),
-            take_kv("boxed", qbool).map(|v| s.boxed = Some(v)),
-            take_cond.map(|v| s.r#if = Some(v)),
-            take_features.map(|v| s.features = Some(v)),
+            read_since((2, 4, 0), take_kv("boxed", qbool)).map(|v| s.boxed = Some(v)),
+            read_since((2, 4, 0), take_cond).map(|v| s.r#if = Some(v)),
+            read_since((2, 4, 0), take_features).map(|v| s.features = Some(v)),
             take_kv("returns", QapiTypeRef::parse).map(|v| s.returns = Some(v)),
-            take_kv("success-response", move |input| {
-                if gen_string_as_bool {
-                    alt((qbool.map(QapiString::Borrowed), qstring)).parse(input)
-                } else {
-                    qbool.map(QapiString::Borrowed).parse(input)
-                }
-            })
-            .map(|v| s.success_response = Some(v)),
-            take_kv("gen", move |input| {
-                if gen_string_as_bool {
-                    alt((qbool.map(QapiString::Borrowed), qstring)).parse(input)
-                } else {
-                    qbool.map(QapiString::Borrowed).parse(input)
-                }
-            })
-            .map(|v| s.r#gen = Some(v)),
-            take_kv("allow-oob", qbool).map(|v| s.allow_oob = Some(v)),
-            take_kv("coroutine", qbool).map(|v| s.coroutine = Some(v)),
-            take_kv("allow-preconfig", qbool).map(|v| s.allow_preconfig = Some(v)),
+            read_since((1, 1, 0), take_kv("success-response", flag))
+                .map(|v| s.success_response = Some(v)),
+            read_since((1, 1, 0), take_kv("gen", flag)).map(|v| s.r#gen = Some(v)),
+            read_since((2, 4, 0), take_kv("allow-oob", qbool)).map(|v| s.allow_oob = Some(v)),
+            read_since((2, 4, 0), take_kv("coroutine", qbool)).map(|v| s.coroutine = Some(v)),
+            read_since((2, 4, 0), take_kv("allow-preconfig", qbool))
+                .map(|v| s.allow_preconfig = Some(v)),
             take_kv("data", take_members_or_ref).map(|v| s.data = Some(v)),
+            other_key(READ),
+            malformed_key(READ).map(|entry| keep(&mut s.malformed, ABSENT, entry)),
         )))
         .parse(input)?;
-        if s.name.is_empty() {
+        if !super::common::named(&keys, "command", &s.name) {
             return Err(nom::Err::Error(Error::new(start, ErrorKind::Tag)));
         }
+        s.keys = keys;
+        s.text = expression_text(start, input);
         Ok((input, s))
     }
 }
@@ -124,8 +151,15 @@ mod tests {
     fn test_gen_string_rejected_in_v2() {
         set_parser_version((10, 2, 0));
         let input = "{ 'command': 'test', 'gen': 'no' }";
-        let result = QapiCommand::parse(input);
-        assert!(result.is_err(), "'gen': 'no' should be rejected in v2");
+        // Kept for the validation, which refuses the flag's value.
+        let (_, command) = QapiCommand::parse(input).unwrap();
+        assert_eq!(command.r#gen, None);
+        assert_eq!(command.malformed[0].0, "gen");
+        set_parser_version((2, 3, 0));
+        assert_eq!(
+            QapiCommand::parse(input).unwrap().1.r#gen,
+            Some("no".into())
+        );
     }
 
     #[test]

@@ -1,5 +1,7 @@
 use super::common::QapiString;
-use super::common::{qstring, qtag, take_dict};
+use super::common::{
+    Malformed, keep, malformed_key, other_key, qstring, qtag, raw_value, take_keyed_dict,
+};
 use super::qapi_cond::QapiCond;
 use super::qapi_cond::take_cond;
 use super::qapi_type_ref::QapiTypeRef;
@@ -86,6 +88,12 @@ pub struct QapiVariant<'i> {
     pub name: QapiString<'i>,
     pub r#type: QapiTypeRef<'i>,
     pub r#if: Option<QapiCond<'i>>,
+    /// The keys of its dictionary form, in their order in the source;
+    /// `None` for the short form.
+    pub keys: Option<Vec<QapiString<'i>>>,
+    /// From 2.4, the values that the grammar refused, for the validation:
+    /// the type of the short form is its `type`.
+    pub malformed: Malformed<'i>,
 }
 
 impl<'i> QapiVariant<'i> {
@@ -97,8 +105,19 @@ impl<'i> QapiVariant<'i> {
 
     pub fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
         let start = input;
-        let (input, variant) = alt((Self::simple_parser, Self::complex_parser)).parse(input)?;
-        if variant.name.is_empty() || variant.r#type == QapiTypeRef::Unset {
+        let (input, variant) = alt((
+            Self::simple_parser,
+            Self::complex_parser,
+            Self::malformed_parser,
+        ))
+        .parse(input)?;
+        // The validation refuses a dictionary without 'type', and from 2.4
+        // an empty name.
+        if (variant.name.is_empty() && super::parser_version() < (2, 4, 0))
+            || (variant.r#type == QapiTypeRef::Unset
+                && variant.keys.is_none()
+                && variant.malformed.is_empty())
+        {
             return Err(nom::Err::Error(Error::new(start, ErrorKind::Tag)));
         }
         Ok((input, variant))
@@ -113,13 +132,37 @@ impl<'i> QapiVariant<'i> {
         Ok((input, s))
     }
 
-    /// STRING : { 'type': TYPE-REF, '*if': COND }
+    /// From 2.4, STRING : VALUE of another shape, which the validation
+    /// refuses as the branch's type.
+    fn malformed_parser(input: &'i str) -> IResult<&'i str, Self> {
+        let mut s = Self::default();
+        let (input, (name, _, value)) = (qstring, qtag(":"), raw_value).parse(input)?;
+        s.name = name;
+        s.malformed.push(("type".into(), value));
+        Ok((input, s))
+    }
+
+    /// STRING : { 'type': TYPE-REF, '*if': COND }: from 2.4 to 3.1 a
+    /// dictionary is an anonymous struct, which the validation refuses.
     fn complex_parser(input: &'i str) -> IResult<&'i str, Self> {
+        if ((2, 4, 0)..(4, 0, 0)).contains(&super::parser_version()) {
+            return Err(nom::Err::Error(Error::new(input, ErrorKind::Tag)));
+        }
         let mut s = Self::default();
         let name_parser = terminated(qstring, qtag(":")).map(|v| s.name = v);
         let type_parser = take_type_ref.map(|v| s.r#type = v);
         let cond_parser = take_cond.map(|v| s.r#if = Some(v));
-        let (input, _) = (name_parser, take_dict(alt((type_parser, cond_parser)))).parse(input)?;
+        let (input, (_, (_, keys))) = (
+            name_parser,
+            take_keyed_dict(alt((
+                type_parser,
+                cond_parser,
+                other_key(&["type", "if"]),
+                malformed_key(&["type", "if"]).map(|entry| keep(&mut s.malformed, &["if"], entry)),
+            ))),
+        )
+            .parse(input)?;
+        s.keys = Some(keys);
         Ok((input, s))
     }
 }

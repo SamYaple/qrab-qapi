@@ -1,5 +1,7 @@
 use super::common::QapiString;
-use super::common::{qstring, take_dict, take_kv};
+use super::common::{
+    Malformed, keep, malformed_key, other_key, qstring, raw_value, take_keyed_dict, take_kv,
+};
 use super::qapi_cond::QapiCond;
 use super::qapi_cond::take_cond;
 use super::qapi_features::QapiFeatures;
@@ -18,6 +20,14 @@ pub struct QapiEnumValue<'i> {
     pub name: QapiString<'i>,
     pub r#if: Option<QapiCond<'i>>,
     pub features: Option<QapiFeatures<'i>>,
+    /// Written as an object, `{ 'name': ... }`, which QEMU reads from 4.0:
+    /// from 2.4 to 3.1 it requires a string name.
+    pub dictionary: bool,
+    /// The keys of its dictionary form, in their order in the source.
+    pub keys: Vec<QapiString<'i>>,
+    /// From 2.4, the values that the grammar refused, for the validation:
+    /// a value that is neither a string nor an object is its `name`.
+    pub malformed: Malformed<'i>,
 }
 
 impl<'i> QapiEnumValue<'i> {
@@ -34,9 +44,13 @@ impl<'i> QapiEnumValue<'i> {
         let (input, (enumvalue, simple)) = alt((
             Self::simple_parser.map(|value| (value, true)),
             Self::complex_parser.map(|value| (value, false)),
+            Self::malformed_parser.map(|value| (value, false)),
         ))
         .parse(input)?;
-        if enumvalue.name.is_empty() && (!simple || super::parser_version() >= (2, 6, 0)) {
+        // From 2.4 the validation refuses a dictionary without 'name', and
+        // from 2.6 an empty name, on which QEMU fails.
+        let unnamed = !simple && super::parser_version() < (2, 4, 0);
+        if enumvalue.name.is_empty() && unnamed && enumvalue.malformed.is_empty() {
             return Err(nom::Err::Error(Error::new(start, ErrorKind::Tag)));
         }
         Ok((input, enumvalue))
@@ -49,17 +63,34 @@ impl<'i> QapiEnumValue<'i> {
         Ok((input, s))
     }
 
+    /// From 2.4, a value that is neither a string nor an object, which the
+    /// validation refuses as its name.
+    fn malformed_parser(input: &'i str) -> IResult<&'i str, Self> {
+        let (input, value) = raw_value(input)?;
+        if matches!(value.value, super::common::Raw::Object(_)) {
+            return Err(nom::Err::Error(Error::new(input, ErrorKind::Tag)));
+        }
+        let mut s = Self::default();
+        s.malformed.push(("name".into(), value));
+        Ok((input, s))
+    }
+
     /// { 'name': STRING,
     ///   '*if': COND,
     ///   '*features': FEATURES }
     fn complex_parser(input: &'i str) -> IResult<&'i str, Self> {
         let mut s = Self::default();
-        let (input, _) = take_dict(alt((
+        let (input, (_, keys)) = take_keyed_dict(alt((
             take_kv("name", qstring).map(|v| s.name = v),
             take_features.map(|v| s.features = Some(v)),
             take_cond.map(|v| s.r#if = Some(v)),
+            other_key(&["name", "features", "if"]),
+            malformed_key(&["name", "features", "if"])
+                .map(|entry| keep(&mut s.malformed, &["if"], entry)),
         )))
         .parse(input)?;
+        s.dictionary = true;
+        s.keys = keys;
         Ok((input, s))
     }
 }
@@ -115,24 +146,29 @@ mod tests {
     }
 
     #[test]
-    fn test_empty_name_fails() {
+    fn test_empty_name_is_kept_for_the_validation() {
         crate::set_parser_version((11, 1, 3));
-        assert!(QapiEnumValue::parse("''").is_err());
+        assert_eq!(QapiEnumValue::parse("''").unwrap().1.name, "");
     }
 
     #[test]
     fn legacy_empty_enum_values_do_not_allow_missing_dictionary_names() {
         crate::set_parser_version((2, 5, 0));
         assert_eq!(QapiEnumValue::parse("''").unwrap().1.name, "");
-        assert!(QapiEnumValue::parse("{}").is_err());
-        crate::set_parser_version((2, 6, 0));
-        assert!(QapiEnumValue::parse("''").is_err());
+        // The validation refuses a dictionary for its name.
+        assert!(QapiEnumValue::parse("{}").unwrap().1.dictionary);
+        crate::set_parser_version((2, 3, 0));
+        assert!(QapiEnumValue::parse("{ 'if': 'CONFIG_X' }").is_err());
         crate::set_parser_version((11, 1, 3));
     }
 
     #[test]
-    fn test_missing_name_in_dict_fails() {
-        assert!(QapiEnumValue::parse("{ 'if': 'CONFIG_X' }").is_err());
+    fn dictionaries_keep_their_keys_for_the_validation() {
+        let (_, value) = QapiEnumValue::parse("{ 'if': 'CONFIG_X' }").unwrap();
+        assert_eq!(value.name, "");
+        assert_eq!(value.keys, ["if"]);
+        let (_, value) = QapiEnumValue::parse("{ 'name': 'val', 'unknown': 'x' }").unwrap();
+        assert_eq!(value.keys, ["name", "unknown"]);
     }
 
     #[test]
@@ -141,7 +177,13 @@ mod tests {
     }
 
     #[test]
-    fn test_unknown_field_fails() {
-        assert!(QapiEnumValue::parse("{ 'name': 'val', 'unknown': 'x' }").is_err());
+    fn values_of_read_keys_are_kept_from_2_4() {
+        let (_, value) = QapiEnumValue::parse("{ 'name': ['val'] }").unwrap();
+        assert_eq!(value.malformed[0].1.text, "['val']");
+        let (_, value) = QapiEnumValue::parse("true").unwrap();
+        assert_eq!(value.malformed[0].0, "name");
+        crate::set_parser_version((2, 3, 0));
+        assert!(QapiEnumValue::parse("{ 'name': ['val'] }").is_err());
+        crate::set_parser_version((11, 1, 3));
     }
 }

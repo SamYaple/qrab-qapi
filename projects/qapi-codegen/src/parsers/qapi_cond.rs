@@ -27,14 +27,13 @@ impl<'i> QapiCond<'i> {
     ///          | { 'any': [ COND, ... ] }
     ///          | { 'not': COND }
     pub fn parse(input: &'i str) -> IResult<&'i str, Self> {
+        // Before 6.2 a condition is a string or a list of strings; the
+        // validation refuses the empty ones in the releases that do.
         if super::parser_version() < (6, 2, 0) {
             return alt((
-                verify(qstring, |name: &str| !name.trim().is_empty()).map(Self::ConfigName),
-                verify(
-                    take_list(verify(qstring, |name: &str| !name.trim().is_empty())),
-                    |v: &Vec<_>| !v.is_empty(),
-                )
-                .map(|names| Self::All(names.into_iter().map(Self::ConfigName).collect())),
+                qstring.map(Self::ConfigName),
+                take_list(qstring)
+                    .map(|names| Self::All(names.into_iter().map(Self::ConfigName).collect())),
             ))
             .parse(input);
         }

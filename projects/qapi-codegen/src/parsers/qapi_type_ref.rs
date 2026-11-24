@@ -17,22 +17,25 @@ pub enum QapiTypeRef<'i> {
     Unset,
     Ref(QapiString<'i>),
     ArrayRef(QapiString<'i>),
-    /// Inline anonymous struct definition (v1.0–v2.3.0)
+    /// An anonymous struct written out in place: a dictionary before 4.0.
     InlineStruct(QapiMembers<'i>),
 }
 
 impl<'i> QapiTypeRef<'i> {
     /// Dispatches to the correct versioned parser.
     pub fn parse(input: &'i str) -> IResult<&'i str, Self> {
+        // Until 4.0 a dictionary in place of a type is an anonymous
+        // struct, which the validation refuses from 2.4 where QEMU does;
+        // 4.0 made `{ 'type': ... }` the long form of a member.
         let v = parser_version();
-        if v < (2, 4, 0) {
+        if v < (4, 0, 0) {
             Self::parse_v1(input)
         } else {
             Self::parse_v2(input)
         }
     }
 
-    /// v1 (QEMU v1.0–v2.3.0): accepts string, array, or inline struct dict.
+    /// Before 4.0: a string, an array, or an anonymous struct.
     pub fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
         use super::qapi_members::take_members;
         let array_parser = take_list(qstring).map_opt(|items| match items.as_slice() {
@@ -47,7 +50,7 @@ impl<'i> QapiTypeRef<'i> {
         .parse(input)
     }
 
-    /// v2 (QEMU v2.4.0+): only string or array refs.
+    /// From 4.0: only a string or an array.
     pub fn parse_v2(input: &'i str) -> IResult<&'i str, Self> {
         let array_parser = take_list(qstring).map_opt(|items| match items.as_slice() {
             [name] => Some(name.clone()),
@@ -98,7 +101,7 @@ mod tests {
 
     #[test]
     fn test_inline_struct_parsed_in_v1() {
-        set_parser_version((2, 0, 0));
+        set_parser_version((3, 1, 0));
         let input = "{ 'major': 'int', 'minor': 'int' }";
         let result = QapiTypeRef::parse(input);
         assert!(result.is_ok(), "v1 should accept inline structs");

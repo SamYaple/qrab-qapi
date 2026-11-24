@@ -17,12 +17,15 @@ pub(crate) fn c_name(name: &str) -> String {
 /// Whether the release's generator accepts `name`: no checks before 2.4,
 /// letters, digits, `_`, `-` and `.` until 2.5, then QEMU's downstream
 /// `__RFQDN_` prefix before a letter, letters, digits, `-` and `_`. From
-/// 2.5 the `q_` namespace of C names is QEMU's own.
+/// 2.5 the `q_` namespace of C names is QEMU's own. QEMU's pattern ends
+/// in `$`, which also matches before a final newline; only until 4.1 can
+/// a name hold one, through the `\n` escape.
 fn valid(name: &str) -> bool {
     let version = crate::parser_version();
     if version < (2, 4, 0) {
         return true;
     }
+    let name = name.strip_suffix('\n').unwrap_or(name);
     let reserved = version >= (2, 5, 0) && c_name(name).starts_with("q_");
     let valid = if version < (2, 6, 0) {
         name.as_bytes()
@@ -71,14 +74,17 @@ fn reserved_suffixes(command_or_event: bool) -> &'static [&'static str] {
     }
 }
 
-/// Check a definition's name as the release's generator does.
+/// Check a definition's name as the release's generator does, before its
+/// reserved suffixes.
 pub(crate) fn validate_definition(token: &QapiSchemaToken<'_>) -> SchemaResult {
+    token.definition_name().map_or(Ok(()), validate_mandatory)
+}
+
+/// Refuse a definition name with a suffix that the release reserves.
+pub(crate) fn reserved_suffix(token: &QapiSchemaToken<'_>) -> SchemaResult {
     let Some(name) = token.definition_name() else {
         return Ok(());
     };
-    require(valid(name), || SchemaErrorKind::InvalidName {
-        name: name.to_owned(),
-    })?;
     let command_or_event = matches!(
         token,
         QapiSchemaToken::Command(_) | QapiSchemaToken::Event(_)
@@ -94,6 +100,48 @@ pub(crate) fn validate_definition(token: &QapiSchemaToken<'_>) -> SchemaResult {
     Ok(())
 }
 
+/// Check the name of a member, branch or feature.
+pub(crate) fn validate(name: &str) -> SchemaResult {
+    require(valid(name), || SchemaErrorKind::InvalidName {
+        name: name.to_owned(),
+    })
+}
+
+/// Check a name that QEMU 2.4 to 4.1 do not let be optional, a
+/// definition's, branch's, feature's or discriminator: they refuse a `*`
+/// first, and from 4.2 the name is invalid.
+pub(crate) fn validate_mandatory(name: &str) -> SchemaResult {
+    optional(name)?;
+    validate(name)
+}
+
+fn optional(name: &str) -> SchemaResult {
+    let version = crate::parser_version();
+    require(
+        !(name.starts_with('*') && ((2, 4, 0)..(4, 2, 0)).contains(&version)),
+        || SchemaErrorKind::OptionalName {
+            name: name.to_owned(),
+        },
+    )
+}
+
+/// Check the name of an enum member, which may also start with a digit,
+/// since the C name of a member has the enum's name before it: QEMU checks
+/// `_` and the name until 2.5, then a digit prefixed with `D`.
+pub(crate) fn validate_enum_member(name: &str) -> SchemaResult {
+    optional(name)?;
+    let checked = if crate::parser_version() < (2, 6, 0) {
+        format!("_{name}")
+    } else if name.starts_with(|c: char| c.is_ascii_digit()) {
+        format!("D{name}")
+    } else {
+        name.to_owned()
+    };
+    require(valid(&checked), || SchemaErrorKind::InvalidName {
+        name: name.to_owned(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -101,7 +149,7 @@ mod tests {
     fn definition(version: (u32, u32, u32), text: &str) -> SchemaResult {
         crate::set_parser_version(version);
         let schema = crate::parse_schema(text).unwrap();
-        validate_definition(&schema.0[0])
+        validate_definition(&schema.0[0]).and_then(|()| reserved_suffix(&schema.0[0]))
     }
 
     #[test]
@@ -148,7 +196,7 @@ mod tests {
             ((2, 4, 0), "{'enum':'FooList','data':[]}", None),
             ((2, 5, 0), "{'struct':'FooList','data':{}}", Some("List")),
             ((2, 5, 0), "{'event':'FOOList'}", Some("List")),
-            ((6, 0, 0), "{'command':'foo-List'}", Some("List")),
+            ((6, 0, 0), "{'struct':'FooList','data':{}}", Some("List")),
             (
                 (6, 0, 0),
                 "{'union':'FooKind','data':{'a':'str'}}",
@@ -177,5 +225,32 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn enum_members_may_start_with_a_digit() {
+        for (version, name, valid) in [
+            ((2, 4, 0), "1-name", true),
+            ((2, 5, 0), "q-private", true),
+            ((2, 5, 0), "", true),
+            ((2, 6, 0), "q-private", false),
+            ((2, 6, 0), "", false),
+            ((11, 1, 3), "1-name", true),
+            ((11, 1, 3), "__org.qemu_1", false),
+        ] {
+            crate::set_parser_version(version);
+            assert_eq!(
+                validate_enum_member(name).is_ok(),
+                valid,
+                "{version:?} {name}"
+            );
+        }
+        crate::set_parser_version((11, 1, 3));
+        assert_eq!(
+            validate_enum_member("q-x").unwrap_err().kind(),
+            &SchemaErrorKind::InvalidName { name: "q-x".into() }
+        );
+        assert!(validate("1-name").is_err());
+        validate("x-name").unwrap();
     }
 }

@@ -36,10 +36,8 @@ fn initially_deprecated_members_record_their_first_release() {
             kind: EnumVariantKind::Unit,
             array: false,
             meta: Metadata {
-                doc: None,
-                schema_doc: None,
-                schema_item: None,
                 attributes: vec![feature],
+                ..Default::default()
             },
         }],
         meta: Metadata::default(),

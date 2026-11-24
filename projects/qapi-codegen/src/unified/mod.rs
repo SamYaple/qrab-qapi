@@ -14,13 +14,19 @@ use std::path::Path;
 
 mod error;
 mod lower;
+#[cfg(test)]
+pub(crate) use lower::process_version_schema;
 mod merge;
 mod registry;
 
+pub use error::Construct;
+pub use error::Crash;
+pub use error::NameRule;
+pub use error::Shape;
 pub use error::{RegistryError, SchemaError, SchemaErrorKind, Warning, WarningKind};
 pub(crate) use error::{SchemaContext, SchemaResult, definition, require};
 pub(crate) use merge::has_feature;
-pub use registry::{build_qga_registry, build_unified_registry};
+pub use registry::{build_qga_registry, build_qmp_registry};
 
 /// A QEMU release as `(major, minor, micro)`. A four-component tag has the
 /// tuple of its first three components.
@@ -231,6 +237,11 @@ fn merge_returns(existing: &mut UnifiedStruct, new_meta: &Metadata, version: Ver
     if existing.returns_history.last().map(|(_, r)| r.as_str()) != Some(new) {
         existing.returns_history.push((version, new.to_owned()));
     }
+    existing
+        .ir
+        .meta
+        .qapi_returns
+        .clone_from(&new_meta.qapi_returns);
     // A struct first seen as plain data gains `returns` through the
     // ordinary attribute union, keeping attribute order stable.
     for attr in &mut existing.ir.meta.attributes {
@@ -358,6 +369,10 @@ fn merge_command_attrs_onto(source: &Struct, target: &mut Struct) {
                     ) =>
             {
                 target.meta.attributes.push(attr.clone());
+                target
+                    .meta
+                    .qapi_returns
+                    .clone_from(&source.meta.qapi_returns);
             }
             _ => {}
         }
@@ -378,3 +393,5 @@ mod enum_history_tests;
 mod field_history_tests;
 #[cfg(test)]
 mod registry_tests;
+#[cfg(test)]
+mod schema_resolution_tests;

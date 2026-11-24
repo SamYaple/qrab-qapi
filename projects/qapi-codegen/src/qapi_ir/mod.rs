@@ -252,6 +252,10 @@ pub struct Metadata {
     ///   and `union_branch`;
     /// - on fields: `discriminator`, `union` and `flatten`.
     pub attributes: Vec<Attribute>,
+    /// What a command returns as the schema spells it, as fields keep their
+    /// types: a builtin such as `int`, a type, or `[element]` for an array.
+    /// `None` for a command without a return type, and for other items.
+    pub qapi_returns: Option<String>,
 }
 
 #[cfg(test)]
