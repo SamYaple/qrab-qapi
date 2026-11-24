@@ -11,6 +11,7 @@ use heck::{ToPascalCase, ToSnakeCase};
 mod process_qapi;
 pub use process_qapi::*;
 
+mod render;
 mod rust_enum;
 mod rust_struct;
 pub use rust_enum::*;
@@ -170,6 +171,7 @@ pub(crate) fn rustify_field(input: &str) -> String {
 
 /// An item of an IR item's, field's or variant's metadata.
 #[derive(Debug, Eq, PartialEq, Clone)]
+#[non_exhaustive]
 pub enum Attribute {
     /// A key with a value, such as `name = "query-status"`.
     Item { name: String, value: String },
@@ -177,6 +179,8 @@ pub enum Attribute {
     List(Vec<Attribute>),
     /// A key alone, such as `command`.
     Unit(String),
+    /// A key with nested attributes, such as `allow_preconfig(added = "7.1.0")`.
+    Nested { name: String, inner: Vec<Attribute> },
 }
 
 impl Attribute {
@@ -211,6 +215,14 @@ impl Attribute {
             .collect();
         Self::List(attrs)
     }
+
+    /// A key with nested attributes, such as `name(added = "1.0.0", removed = "2.0.0")`.
+    pub fn nested<N: ToString>(name: N, inner: Vec<Attribute>) -> Self {
+        Self::Nested {
+            name: name.to_string(),
+            inner,
+        }
+    }
 }
 
 /// The kind of QAPI definition that an item was lowered from.
@@ -226,6 +238,20 @@ pub enum SchemaItem {
     Union,
     /// An alternate or legacy alternate, lowered to an enum.
     Alternate,
+}
+
+impl SchemaItem {
+    /// The schema keyword of the definition, such as `command`.
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Command => "command",
+            Self::Event => "event",
+            Self::Struct => "struct",
+            Self::Enum => "enum",
+            Self::Union => "union",
+            Self::Alternate => "alternate",
+        }
+    }
 }
 
 /// What the IR keeps about an item, field or variant besides its name and type.

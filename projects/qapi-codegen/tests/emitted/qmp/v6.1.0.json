@@ -1,0 +1,73 @@
+# Commands whose structs data types and events name: Inner and Outer go to
+# mod.rs, next to Top, which names Outer, and to which EVT can refer.
+{ 'struct': 'Inner', 'data': { 'a': 'int' } }
+{ 'command': 'inner', 'data': 'Inner' }
+{ 'struct': 'Outer', 'data': { 'i': 'Inner' } }
+{ 'command': 'outer', 'data': 'Outer' }
+{ 'struct': 'Top', 'data': { 'o': 'Outer' } }
+{ 'command': 'top-query', 'returns': 'Top' }
+{ 'event': 'EVT', 'data': { 'x': 'Inner' } }
+# Bag goes to mod.rs because outer returns it in 6.2 only.
+{ 'struct': 'Bag', 'data': { 'q': 'int' } }
+{ 'command': 'bag', 'data': 'Bag' }
+
+# A type spelled differently from 7.0.
+{ 'struct': 'FOOInfo', 'data': { 'name': 'str' } }
+
+# Deprecated, unstable, removed and later members; other features. Enum
+# members have features from 6.2, and types are no longer unstable there.
+# e is deprecated until 7.0, OLD_EVT in 6.2, before it goes in 7.0.
+{ 'enum': 'Color', 'data': [ 'red', 'blue' ] }
+{ 'struct': 'Thing',
+  'data': { 'a': 'int',
+            '*b': { 'type': 'str', 'features': [ 'deprecated' ] },
+            '*c': { 'type': 'int', 'features': [ 'unstable', 'extra' ] },
+            'color': 'Color',
+            '*e': { 'type': 'int', 'features': [ 'deprecated' ] } },
+  'features': [ 'unstable' ] }
+{ 'struct': 'Old', 'data': { 'v': 'bool' } }
+{ 'event': 'OLD_EVT' }
+# Types are unstable no longer from 6.2: Mode is unstable only in 6.1, and
+# Lab in its only release.
+{ 'enum': 'Mode', 'data': [ 'fast' ], 'features': [ 'unstable' ] }
+{ 'struct': 'Lab', 'data': { 'z': 'int' }, 'features': [ 'unstable' ] }
+# Probe is unstable in its only release.
+{ 'enum': 'Probe', 'data': [ 'on' ], 'features': [ 'unstable' ] }
+# A command whose arguments are a struct of the same name: the command has
+# its own features, and the struct's instability in 6.1 is not the
+# command's. backup is deprecated from 6.2, and unstable in 6.2 only.
+{ 'struct': 'Backup', 'data': { 'target': 'str' }, 'features': [ 'unstable' ] }
+{ 'command': 'backup', 'boxed': true, 'data': 'Backup' }
+
+# Flags that come and go, and a return type that changes. quiet does not
+# reply in 6.2 only. gone allows out-of-band execution and is deprecated
+# from 6.2 until it goes in 7.0.
+{ 'command': 'flip', 'allow-oob': true }
+{ 'command': 'quiet' }
+{ 'command': 'gone', 'allow-oob': true }
+{ 'pragma': { 'command-returns-exceptions': [ 'query-kind' ] } }
+{ 'enum': 'KindInfo', 'data': [ 'one' ] }
+{ 'command': 'query-kind', 'returns': 'KindInfo' }
+
+# Undeclared arguments: 6.2 declares them, 7.0 takes undeclared ones
+# again.
+{ 'command': 'loose', 'gen': false }
+
+# A simple union, flat from 6.2.
+{ 'struct': 'Circle', 'data': { 'radius': 'number' } }
+{ 'struct': 'Square', 'data': { 'side': 'number' } }
+{ 'union': 'Shape', 'data': { 'circle': 'Circle', 'square': 'Square' } }
+
+# A recursive struct, an alternate and a conditional member. From 6.2 a
+# conditional member that the wire requires where it is built, which only
+# some builds have, and a member unstable in some builds.
+{ 'struct': 'Node', 'data': { '*next': 'Node', 'children': [ 'Node' ],
+                              '*label': { 'type': 'str', 'if': 'CONFIG_LABEL' } } }
+{ 'alternate': 'FlagOrCircle', 'data': { 'flag': 'bool', 'circle': 'Circle' } }
+
+# A union whose discriminator is arch in 6.1 and target from 6.2, which
+# keeps arch.
+{ 'enum': 'CpuArch', 'data': [ 'x86', 'other' ] }
+{ 'struct': 'CpuX86', 'data': { 'pc': 'int' } }
+{ 'union': 'Cpu', 'base': { 'arch': 'CpuArch' }, 'discriminator': 'arch',
+  'data': { 'x86': 'CpuX86' } }

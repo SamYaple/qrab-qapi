@@ -1,0 +1,57 @@
+{ 'struct': 'Inner', 'data': { 'a': 'int' } }
+{ 'command': 'inner', 'data': 'Inner' }
+{ 'struct': 'Outer', 'data': { 'i': 'Inner' } }
+{ 'command': 'outer', 'data': 'Outer', 'returns': 'Bag' }
+{ 'struct': 'Top', 'data': { 'o': 'Outer' } }
+{ 'command': 'top-query', 'returns': 'Top' }
+{ 'event': 'EVT', 'data': { 'x': 'Inner' } }
+{ 'struct': 'Bag', 'data': { 'q': 'int' } }
+{ 'command': 'bag', 'data': 'Bag' }
+
+{ 'struct': 'FOOInfo', 'data': { 'name': 'str' } }
+
+{ 'enum': 'Color',
+  'data': [ 'red', { 'name': 'blue', 'features': [ 'deprecated' ] }, 'green' ] }
+{ 'struct': 'Thing',
+  'data': { 'a': 'int',
+            '*b': { 'type': 'str', 'features': [ 'deprecated' ] },
+            '*c': { 'type': 'int', 'features': [ 'unstable', 'extra' ] },
+            'color': 'Color',
+            '*e': { 'type': 'int', 'features': [ 'deprecated' ] } } }
+{ 'struct': 'Old', 'data': { 'v': 'bool' } }
+{ 'event': 'OLD_EVT', 'features': [ 'deprecated' ] }
+{ 'enum': 'Mode', 'data': [ 'fast' ] }
+{ 'struct': 'Backup', 'data': { 'target': 'str' } }
+{ 'command': 'backup', 'boxed': true, 'data': 'Backup',
+  'features': [ 'deprecated', 'unstable' ] }
+
+{ 'command': 'flip', 'allow-preconfig': true }
+{ 'command': 'quiet', 'success-response': false }
+{ 'command': 'gone', 'allow-oob': true, 'features': [ 'deprecated' ] }
+{ 'pragma': { 'command-returns-exceptions': [ 'query-kind' ] } }
+{ 'enum': 'KindInfo', 'data': [ 'one' ] }
+{ 'command': 'query-kind', 'returns': 'KindInfo' }
+
+{ 'command': 'loose', 'data': { 'x': 'int' } }
+
+{ 'struct': 'Circle', 'data': { 'radius': 'number' } }
+{ 'struct': 'Square', 'data': { 'side': 'number' } }
+{ 'enum': 'ShapeKind', 'data': [ 'circle', 'square' ] }
+{ 'struct': 'CircleWrapper', 'data': { 'data': 'Circle' } }
+{ 'struct': 'SquareWrapper', 'data': { 'data': 'Square' } }
+{ 'union': 'Shape', 'base': { 'type': 'ShapeKind' }, 'discriminator': 'type',
+  'data': { 'circle': 'CircleWrapper', 'square': 'SquareWrapper' } }
+
+{ 'struct': 'Node', 'data': { '*next': 'Node', 'children': [ 'Node' ],
+                              '*label': { 'type': 'str', 'if': 'CONFIG_LABEL' },
+                              'tag': { 'type': 'str', 'if': 'CONFIG_TAG' },
+                              '*mark': { 'type': 'int',
+                                         'features': [ { 'name': 'unstable',
+                                                         'if': 'CONFIG_MARK' } ] } } }
+{ 'alternate': 'FlagOrCircle', 'data': { 'flag': 'bool', 'circle': 'Circle' } }
+
+{ 'enum': 'CpuArch', 'data': [ 'x86', 'other' ] }
+{ 'enum': 'CpuTarget', 'data': [ 'x86-64', 'other' ] }
+{ 'struct': 'CpuX86', 'data': { 'pc': 'int' } }
+{ 'union': 'Cpu', 'base': { 'arch': 'CpuArch', 'target': 'CpuTarget' },
+  'discriminator': 'target', 'data': { 'x86-64': 'CpuX86' } }

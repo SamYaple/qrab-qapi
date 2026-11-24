@@ -1,0 +1,6 @@
+{ 'command': 'guest-shutdown', 'data': { '*mode': 'str' },
+  'success-response': false }
+
+# Gone in 7.0, which adds guest-info.
+{ 'pragma': { 'command-returns-exceptions': [ 'guest-sync' ] } }
+{ 'command': 'guest-sync', 'data': { 'id': 'int' }, 'returns': 'int' }

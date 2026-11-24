@@ -2,6 +2,15 @@ use super::lower::process_version_schema;
 use super::merge::has_feature;
 use super::*;
 
+/// Read a fixture under the 11.1.3 grammar or that of an older `version`,
+/// restoring the caller's grammar.
+fn read_fixture(
+    path: &std::path::Path,
+    version: Version,
+) -> Result<Vec<(std::path::PathBuf, String)>, crate::ReadError> {
+    crate::read_schema_with_version(path, Some(version))
+}
+
 #[test]
 fn boxed_union_arguments_lower() {
     let definitions = concat!(
@@ -358,6 +367,100 @@ fn separate_union_branches_can_reuse_member_names() {
     assert!(structs.contains_key("Choice"));
 }
 
+#[test]
+#[ignore = "audits QEMU's negative fixtures under the grammar of every pinned release series"]
+fn upstream_negative_fixtures_never_panic_during_lowering_or_emission() {
+    /// What generating a fixture under the grammar of `version` gives: the
+    /// kind of its error, as the fixture table of the validation tests
+    /// writes it, or `None` when it lowers, merges and emits in both modes.
+    /// A fixture that cannot be read at all panics.
+    fn outcome(path: &Path, version: Version) -> Result<Option<String>, GenerateError> {
+        let kind = crate::schema_validation::tests::kind_name;
+        let sources = match read_fixture(path, version) {
+            Ok(sources) => sources,
+            Err(crate::ReadError::Parse { source, .. }) => {
+                return Ok(Some(match &source.documentation {
+                    Some(fault) => format!("Doc:{}", kind(format!("{fault:?}"))),
+                    None => "Parse".to_owned(),
+                }));
+            }
+            Err(crate::ReadError::Include { kind: fault, .. }) => {
+                return Ok(Some(format!("Include:{}", kind(format!("{fault:?}")))));
+            }
+            Err(error) => panic!("{} cannot be read: {error}", path.display()),
+        };
+        crate::with_parser_version(version, || {
+            let (enums, structs) = match process_version_schema(&sources) {
+                Ok(lowered) => lowered,
+                Err(error) => return Ok(Some(kind(format!("{:?}", error.kind())))),
+            };
+            let release = super::lower::VersionResult {
+                tag: format!("v{}", version_str(version)),
+                version,
+                order: (version.0, version.1, version.2, 0),
+                schema_hash: 0,
+                enums,
+                structs,
+                warnings: Vec::new(),
+            };
+            let registry = super::registry::merge_releases("QMP", vec![release])?;
+            for docs in [Docs::Reference, Docs::Schema] {
+                super::emit::emit_registry(&registry, Protocol::Qmp, docs)?;
+            }
+            Ok(None)
+        })
+    }
+
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../vendor/qemu/tests/qapi-schema");
+    let pins = crate::versions::parse_pinned_versions(crate::versions::PINNED_VERSIONS).unwrap();
+    // The first release of each series: the grammar and the rules change
+    // with the series.
+    let mut versions: Vec<_> = pins
+        .iter()
+        .filter_map(|pin| crate::versions::parse_version_tag(&pin.tag))
+        .collect();
+    let newest = *versions.last().expect("the lockfile pins a release");
+    versions.dedup_by_key(|version| (version.0, version.1));
+    if versions.last() != Some(&newest) {
+        versions.push(newest);
+    }
+    let mut accepted = Vec::new();
+    let mut failed = Vec::new();
+    for (name, expected) in crate::schema_validation::tests::FIXTURES {
+        let path = root.join(format!("{name}.json"));
+        let mut first_accepted = None;
+        for &version in &versions {
+            match std::panic::catch_unwind(|| outcome(&path, version)) {
+                // At the pinned release, the error that the validation
+                // table gives. Older releases have no such table, and their
+                // rules are tested where the validation implements them, so
+                // there any error of the schema will do, and a schema that
+                // they accept must emit.
+                Ok(Ok(kind)) if version == newest => {
+                    if kind.as_deref() != Some(*expected) {
+                        failed.push(format!(
+                            "{name}: {kind:?} at {newest:?}, expected {expected}"
+                        ));
+                    }
+                }
+                Ok(Ok(None)) => {
+                    first_accepted.get_or_insert(version);
+                }
+                Ok(Ok(Some(_))) => {}
+                Ok(Err(error)) => failed.push(format!("{name} at {version:?}: {error}")),
+                Err(_) => failed.push(format!("{name} panics at {version:?}")),
+            }
+        }
+        accepted.extend(first_accepted.map(|version| format!("{name} (from {version:?})")));
+    }
+    eprintln!("Negative fixtures that older releases accept: {accepted:#?}");
+    assert!(failed.is_empty(), "Failed on:\n{}", failed.join("\n"));
+    assert!(
+        !accepted.is_empty(),
+        "no older release accepts a negative fixture"
+    );
+}
+
 fn process(input: &str) -> SchemaResult<(HashMap<String, Enum>, HashMap<String, Struct>)> {
     crate::set_parser_version((11, 1, 3));
     process_version_schema(&[("fixture.json".into(), input.into())])
@@ -532,6 +635,8 @@ fn all_implicit_union_branches_are_preserved_as_branch_enums() {
             .iter()
             .any(|attr| matches!(attr, Attribute::Unit(name) if name == "union_branch"))
     );
+    let code = branches.generate().to_string();
+    assert!(code.contains("union_branch"));
 }
 
 #[test]

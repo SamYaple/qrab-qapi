@@ -1,4 +1,5 @@
 //! Errors of checking release schemas and building registries from them.
+//! [`GenerateError`] says why generating code from a registry failed.
 
 use crate::qapi_ir::LowerError;
 use crate::versions::TreeError;
@@ -1076,4 +1077,80 @@ pub enum RegistryError {
         /// The tag of the release that changes it.
         tag: String,
     },
+}
+
+/// Why generating or writing the modules failed.
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum GenerateError {
+    /// The release pins are invalid.
+    #[error(transparent)]
+    Pins(#[from] crate::versions::PinError),
+    /// The QEMU tree lacks a pinned release or has it at another commit.
+    #[error(transparent)]
+    Tree(#[from] TreeError),
+    /// A registry could not be built.
+    #[error(transparent)]
+    Registry(#[from] RegistryError),
+    /// A field, variant or command return that refers to a type that the
+    /// registry does not define, a generator bug: the lowering refuses an
+    /// undefined type in every release, as
+    /// [`SchemaErrorKind::Unsupported`] before 2.4, where QEMU does not
+    /// check it.
+    #[error("{at} refers to the undefined type '{name}'")]
+    UndefinedType {
+        /// The QAPI name of the type.
+        name: String,
+        /// The reference: the Rust name of the type that makes it and the
+        /// name of its field or variant, such as `Foo.bar`, or `Foo returns`.
+        at: String,
+    },
+    /// Generated code that does not parse as Rust, a generator bug.
+    #[error(
+        "Generated invalid Rust in {file} at line {line}, column {column}: {message} (near {near:?})"
+    )]
+    InvalidRust {
+        /// `mod.rs`, `commands.rs`, `events.rs` or `metadata.rs`.
+        file: &'static str,
+        /// The 1-based line of the unformatted source at which parsing
+        /// failed. The token streams of `mod.rs`, `commands.rs` and
+        /// `events.rs` are a single line after their imports.
+        line: usize,
+        /// The 1-based column on that line, counted in characters.
+        column: usize,
+        /// What syn found wrong there.
+        message: String,
+        /// Up to 80 characters of the source from that position.
+        near: String,
+    },
+    /// An existing output file could not be read to compare it with the
+    /// new one.
+    #[error("Failed to read {}", path.display())]
+    Read {
+        /// The output file.
+        path: PathBuf,
+        /// Why reading it failed.
+        #[source]
+        source: std::io::Error,
+    },
+    /// The output directory could not be created, or an output file could
+    /// not be written to its temporary file or replaced by it.
+    #[error("Failed to write {}{}", path.display(), through(temporary.as_deref()))]
+    Write {
+        /// The output directory or file.
+        path: PathBuf,
+        /// The temporary file that the output file is written to and then
+        /// renamed from, `None` for the directory.
+        temporary: Option<PathBuf>,
+        /// Why writing it failed.
+        #[source]
+        source: std::io::Error,
+    },
+}
+
+/// ` through <temporary>`, for a write through a temporary file.
+fn through(temporary: Option<&Path>) -> String {
+    temporary
+        .map(|temporary| format!(" through {}", temporary.display()))
+        .unwrap_or_default()
 }

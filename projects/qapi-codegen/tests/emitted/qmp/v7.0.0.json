@@ -1,0 +1,103 @@
+##
+# @Inner:
+#
+# Inner data [1], see https://qemu.test/inner, `a[0]` or <b>.
+#
+# @a: a value: ``x[0]
+#     and y[1]`` together.
+#
+# Since: 6.1
+##
+{ 'struct': 'Inner', 'data': { 'a': 'int' } }
+{ 'command': 'inner', 'data': 'Inner' }
+{ 'struct': 'Outer', 'data': { 'i': 'Inner' } }
+{ 'command': 'outer', 'data': 'Outer', 'returns': 'Pod' }
+{ 'struct': 'Top', 'data': { 'o': 'Outer' } }
+{ 'command': 'top-query', 'returns': 'Top' }
+
+# Pod is a command's struct that a command in mod.rs returns. Mid moves to
+# mod.rs because Zed names it, and only then Ant, which Mid names.
+{ 'struct': 'Pod', 'data': { 'p': 'int' } }
+{ 'command': 'pod', 'data': 'Pod' }
+{ 'struct': 'Ant', 'data': { 'v': 'int' } }
+{ 'command': 'ant', 'data': 'Ant' }
+{ 'struct': 'Mid', 'data': { 'a': 'Ant' } }
+{ 'command': 'mid', 'data': 'Mid' }
+{ 'struct': 'Zed', 'data': { 'm': 'Mid' } }
+
+##
+# @EVT:
+#
+# Emitted when something happens.
+#
+# @x: what happened.
+#
+# .. note:: This text is a note
+#    that continues.
+#
+# Example::
+#
+#     <- { "event": "EVT",
+#          "data": { "x": { "a": 1 } } }
+#
+#     More of the example.
+#
+# Since: 6.1
+##
+{ 'event': 'EVT', 'data': { 'x': 'Inner' } }
+{ 'struct': 'Bag', 'data': { 'q': 'int' } }
+{ 'command': 'bag', 'data': 'Bag' }
+
+{ 'struct': 'FooInfo', 'data': { 'name': 'str' } }
+
+{ 'enum': 'Color',
+  'data': [ 'red', { 'name': 'blue', 'features': [ 'deprecated' ] }, 'green' ] }
+{ 'struct': 'Thing',
+  'data': { 'a': 'int', '*c': { 'type': 'int', 'features': [ 'unstable', 'extra' ] },
+            'color': 'Color', 'd': 'int', '*e': 'int' } }
+{ 'struct': 'Old', 'data': { 'v': 'bool' } }
+{ 'enum': 'Mode', 'data': [ 'fast' ] }
+{ 'struct': 'Backup', 'data': { 'target': 'str' } }
+{ 'command': 'backup', 'boxed': true, 'data': 'Backup', 'features': [ 'deprecated' ] }
+
+##
+# @flip:
+#
+# Flip something.
+#
+# Errors:
+#     - If it cannot flip, GenericError
+#       with more text
+#     - Otherwise nothing [x]
+#
+# Since: 6.1
+##
+{ 'command': 'flip', 'allow-oob': true, 'allow-preconfig': true }
+{ 'command': 'quiet' }
+{ 'pragma': { 'command-returns-exceptions': [ 'query-kind' ] } }
+{ 'enum': 'KindInfo', 'data': [ 'one' ] }
+{ 'command': 'query-kind', 'returns': [ 'KindInfo' ] }
+
+{ 'command': 'loose', 'data': { 'x': 'int' }, 'gen': false }
+
+{ 'struct': 'Circle', 'data': { 'radius': 'number' } }
+{ 'struct': 'Square', 'data': { 'side': 'number' } }
+{ 'enum': 'ShapeKind', 'data': [ 'circle', 'square' ] }
+{ 'struct': 'CircleWrapper', 'data': { 'data': 'Circle' } }
+{ 'struct': 'SquareWrapper', 'data': { 'data': 'Square' } }
+{ 'union': 'Shape', 'base': { 'type': 'ShapeKind' }, 'discriminator': 'type',
+  'data': { 'circle': 'CircleWrapper', 'square': 'SquareWrapper' } }
+
+{ 'struct': 'Node', 'data': { '*next': 'Node', 'children': [ 'Node' ],
+                              '*label': { 'type': 'str', 'if': 'CONFIG_LABEL' },
+                              'tag': { 'type': 'str', 'if': 'CONFIG_TAG' },
+                              '*mark': { 'type': 'int',
+                                         'features': [ { 'name': 'unstable',
+                                                         'if': 'CONFIG_MARK' } ] } } }
+{ 'alternate': 'FlagOrCircle', 'data': { 'flag': 'bool', 'circle': 'Circle' } }
+
+{ 'enum': 'CpuArch', 'data': [ 'x86', 'other' ] }
+{ 'enum': 'CpuTarget', 'data': [ 'x86-64', 'other' ] }
+{ 'struct': 'CpuX86', 'data': { 'pc': 'int' } }
+{ 'union': 'Cpu', 'base': { 'arch': 'CpuArch', 'target': 'CpuTarget' },
+  'discriminator': 'target', 'data': { 'x86-64': 'CpuX86' } }

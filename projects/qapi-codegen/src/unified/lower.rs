@@ -1068,7 +1068,7 @@ pub(super) struct VersionSources {
 pub(super) fn extract_version_sources(
     qemu_repo: &Path,
     tag: &str,
-    qga: bool,
+    protocol: Protocol,
 ) -> Result<Option<VersionSources>, RegistryError> {
     let order =
         parse_version_tag_full(tag).ok_or_else(|| RegistryError::Tag { tag: tag.into() })?;
@@ -1078,19 +1078,17 @@ pub(super) fn extract_version_sources(
             tag: tag.into(),
             source,
         })?;
-    let entry = if qga {
-        find_qga_schema_entry(tmpdir.path())
-    } else {
-        find_schema_entry(tmpdir.path())
+    let entry = match protocol {
+        Protocol::Qmp => find_schema_entry(tmpdir.path()),
+        Protocol::Qga => find_qga_schema_entry(tmpdir.path()),
     };
-    let first_schema = if qga { (0, 15, 0) } else { (1, 0, 0) };
     let schema_entry = match entry {
         Some(entry) => entry,
-        None if version < first_schema => return Ok(None),
+        None if version < protocol.first_release() => return Ok(None),
         None => {
             return Err(RegistryError::MissingEntry {
                 tag: tag.into(),
-                protocol: if qga { "QGA" } else { "QMP" },
+                protocol: protocol.name(),
             });
         }
     };
@@ -1109,7 +1107,7 @@ pub(super) fn extract_version_sources(
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         crate::builtins::Builtins::of(version).hash(&mut hasher);
         crate::parsers::common::string_model(version).hash(&mut hasher);
-        if qga {
+        if protocol == Protocol::Qga {
             hasher.write(b"qga");
         }
         for (path, content) in &sources {
@@ -1133,9 +1131,11 @@ pub(super) fn extract_version_sources(
 pub(super) fn load_versions(
     qemu_repo: &Path,
     tags: &[&str],
-    qga: bool,
+    protocol: Protocol,
 ) -> Result<Vec<VersionResult>, RegistryError> {
-    let extracted = parse_versions(tags, |tag| extract_version_sources(qemu_repo, tag, qga))?;
+    let extracted = parse_versions(tags, |tag| {
+        extract_version_sources(qemu_repo, tag, protocol)
+    })?;
     lower_versions(tags, extracted.into_iter().flatten().collect())
 }
 

@@ -12,6 +12,7 @@ use crate::versions::{
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::Path;
 
+mod emit;
 mod error;
 mod lower;
 #[cfg(test)]
@@ -19,8 +20,10 @@ pub(crate) use lower::process_version_schema;
 mod merge;
 mod registry;
 
+pub use emit::{Docs, GeneratedOutput, Protocol, Releases, emit_registry, generate};
 pub use error::Construct;
 pub use error::Crash;
+pub use error::GenerateError;
 pub use error::NameRule;
 pub use error::Shape;
 pub use error::{RegistryError, SchemaError, SchemaErrorKind, Warning, WarningKind};
@@ -31,6 +34,34 @@ pub use registry::{build_qga_registry, build_qmp_registry};
 /// A QEMU release as `(major, minor, micro)`. A four-component tag has the
 /// tuple of its first three components.
 pub type Version = (u32, u32, u32);
+
+fn version_str(v: Version) -> String {
+    format!("{}.{}.{}", v.0, v.1, v.2)
+}
+
+/// Classify a unified type as a command, event, or plain data type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum TypeCategory {
+    Command,
+    Event,
+    DataType,
+}
+
+/// Determine the category of a unified type by inspecting its IR attributes.
+pub(crate) fn classify_type(ut: &UnifiedType) -> TypeCategory {
+    let attrs = match ut {
+        UnifiedType::Struct(us) => &us.ir.meta.attributes,
+        UnifiedType::Enum(_) => return TypeCategory::DataType,
+    };
+    for attr in attrs {
+        match attr {
+            Attribute::Unit(n) if n == "command" => return TypeCategory::Command,
+            Attribute::Unit(n) if n == "event" => return TypeCategory::Event,
+            _ => {}
+        }
+    }
+    TypeCategory::DataType
+}
 
 fn clean_doc(doc: &str) -> Option<String> {
     let doc = doc.trim_matches('\n');
@@ -88,6 +119,10 @@ pub struct VersionRange {
     /// Each run of releases that marks the item unstable, as `since` and
     /// exclusive `until`.
     pub unstable_ranges: Vec<(Version, Option<Version>)>,
+    /// Each run of releases in which a field is its union's discriminator,
+    /// as `since` and exclusive `until`: `CpuInfoFast.arch` is in 2.12, and
+    /// `target` from 3.0, while `arch` lasts until 6.0.
+    pub discriminator_ranges: Vec<(Version, Option<Version>)>,
 }
 
 /// Whether `ranges` cover `version`.
@@ -123,6 +158,7 @@ impl VersionRange {
             deprecated_ranges: Vec::new(),
             unstable: None,
             unstable_ranges: Vec::new(),
+            discriminator_ranges: Vec::new(),
         }
     }
 
@@ -136,7 +172,21 @@ impl VersionRange {
         in_ranges(&self.unstable_ranges, version)
     }
 
+    /// Whether a field is its union's discriminator in a particular release.
+    pub fn is_discriminator(&self, version: Version) -> bool {
+        in_ranges(&self.discriminator_ranges, version)
+    }
+
+    /// Record the features of `version`, the next merged release, and
+    /// whether it makes the field its union's discriminator.
     fn track_features(&mut self, meta: &Metadata, version: Version) {
+        let discriminator = meta.attributes.contains(&Attribute::new("discriminator"));
+        track_feature(
+            &mut None,
+            &mut self.discriminator_ranges,
+            discriminator,
+            version,
+        );
         let deprecated = has_feature(meta, "deprecated");
         track_feature(
             &mut self.deprecated,
@@ -321,6 +371,12 @@ fn refresh_current_attributes(existing: &mut Metadata, latest: &Metadata) {
     }
 }
 
+/// A QAPI feature, as a list of `feature` and its own `condition`.
+fn feature(attr: &Attribute) -> bool {
+    matches!(attr, Attribute::List(items)
+        if matches!(items.first(), Some(Attribute::Item { name, .. }) if name == "feature"))
+}
+
 /// A `deprecated` or `unstable` feature, whose ranges the merge tracks.
 fn lifecycle_feature(attr: &Attribute) -> bool {
     match attr {
@@ -332,9 +388,30 @@ fn lifecycle_feature(attr: &Attribute) -> bool {
     }
 }
 
+fn unstable_attributes(versions: &VersionRange) -> impl Iterator<Item = Attribute> + '_ {
+    versions.unstable_ranges.iter().map(|(since, until)| {
+        let mut attrs = vec![Attribute::with_value("added", version_str(*since))];
+        if let Some(until) = until {
+            attrs.push(Attribute::with_value("removed", version_str(*until)));
+        }
+        Attribute::nested("unstable", attrs)
+    })
+}
+
 /// Merge command-specific attributes (command, returns, allow_oob, etc.) from
-/// a processed command struct onto an existing data struct.
+/// a processed command struct onto an existing data struct. The single
+/// entry is the command's, so its features are the command's: those of the
+/// data struct, which describe the type, do not carry over.
 fn merge_command_attrs_onto(source: &Struct, target: &mut Struct) {
+    target.meta.attributes.retain(|attr| !feature(attr));
+    target.meta.attributes.extend(
+        source
+            .meta
+            .attributes
+            .iter()
+            .filter(|attr| feature(attr))
+            .cloned(),
+    );
     // The argument struct's QAPI name is not the command's wire name.
     // Preserve the command spelling when the two share a Rust identifier.
     target
@@ -391,6 +468,8 @@ fn merge_command_attrs_onto(source: &Struct, target: &mut Struct) {
 mod enum_history_tests;
 #[cfg(test)]
 mod field_history_tests;
+#[cfg(test)]
+mod flag_timeline_tests;
 #[cfg(test)]
 mod registry_tests;
 #[cfg(test)]

@@ -1,0 +1,14 @@
+##
+# @guest-shutdown:
+#
+# Shut the guest down; there is no reply.
+#
+# @mode: how.
+#
+# Since: 0.15
+##
+{ 'command': 'guest-shutdown', 'data': { '*mode': 'str' },
+  'success-response': false }
+
+{ 'struct': 'GuestInfo', 'data': { 'version': 'str' } }
+{ 'command': 'guest-info', 'returns': 'GuestInfo' }

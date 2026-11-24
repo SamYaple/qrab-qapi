@@ -20,4 +20,7 @@ license = "Apache-2.0"
 
 [workspace.dependencies]
 thiserror = "2"
+proc-macro2 = "1"
+quote = "1"
+syn = { version = "3.0.10", features = ["full"] }
 tempfile = "3"

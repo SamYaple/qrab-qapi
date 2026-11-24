@@ -3,6 +3,7 @@
 
 mod arrays;
 mod builtins;
+mod metadata_emit;
 pub mod parsers;
 pub mod qapi_ir;
 mod schema_docs;

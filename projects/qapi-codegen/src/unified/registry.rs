@@ -15,7 +15,7 @@ pub fn build_qmp_registry(
     qemu_repo: &Path,
     version_tags: &[&str],
 ) -> Result<UnifiedRegistry, RegistryError> {
-    build_registry(qemu_repo, version_tags, false)
+    build_registry(qemu_repo, version_tags, Protocol::Qmp)
 }
 
 /// Build the registry of the QGA schemas of the given release tags.
@@ -24,16 +24,18 @@ pub fn build_qga_registry(
     qemu_repo: &Path,
     version_tags: &[&str],
 ) -> Result<UnifiedRegistry, RegistryError> {
-    build_registry(qemu_repo, version_tags, true)
+    build_registry(qemu_repo, version_tags, Protocol::Qga)
 }
 
 fn build_registry(
     qemu_repo: &Path,
     version_tags: &[&str],
-    qga: bool,
+    protocol: Protocol,
 ) -> Result<UnifiedRegistry, RegistryError> {
-    let protocol = if qga { "QGA" } else { "QMP" };
-    merge_releases(protocol, load_versions(qemu_repo, version_tags, qga)?)
+    merge_releases(
+        protocol.name(),
+        load_versions(qemu_repo, version_tags, protocol)?,
+    )
 }
 
 /// Merge lowered releases of `protocol` in release order.
