@@ -1,8 +1,13 @@
 #![doc = include_str!("../README.md")]
 #![forbid(unsafe_code)]
 
+mod arrays;
+mod builtins;
 pub mod parsers;
 pub mod qapi_ir;
+mod schema_names;
+mod symbols;
+pub mod unified;
 pub mod versions;
 
 pub use parsers::{

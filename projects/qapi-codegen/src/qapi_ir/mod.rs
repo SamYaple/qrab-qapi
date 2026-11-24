@@ -50,6 +50,10 @@ pub(crate) fn rustify_type(qapi_type: &str) -> String {
     if let Some(rust_type) = builtin_type(qapi_type) {
         return rust_type.into();
     }
+    // The `arguments` member of a gen:false command has a Rust type already.
+    if qapi_type == ARGUMENTS_TYPE {
+        return qapi_type.into();
+    }
     rustify_name(qapi_type)
 }
 
@@ -140,6 +144,27 @@ fn rustify_field_name(input: &str) -> String {
         "" => "qapi_unnamed".into(),
         "self" | "super" | "crate" => format!("{name}_"),
         _ => name,
+    }
+}
+
+/// The Rust field identifier of a QAPI name: its [`rustify_field_name`], as
+/// a raw identifier where that is a keyword of Rust 2024.
+pub(crate) fn rustify_field(input: &str) -> String {
+    /// The strict, reserved and edition 2024 keywords that a snake_case name
+    /// can spell and that can be raw: `self`, `super` and `crate` cannot, and
+    /// [`rustify_field_name`] renames them, as it does an empty name.
+    const KEYWORDS: &[&str] = &[
+        "abstract", "as", "async", "await", "become", "box", "break", "const", "continue", "do",
+        "dyn", "else", "enum", "extern", "false", "final", "fn", "for", "gen", "if", "impl", "in",
+        "let", "loop", "macro", "match", "mod", "move", "mut", "override", "priv", "pub", "ref",
+        "return", "static", "struct", "trait", "true", "try", "type", "typeof", "unsafe",
+        "unsized", "use", "virtual", "where", "while", "yield",
+    ];
+    let snake = rustify_field_name(input);
+    if KEYWORDS.contains(&snake.as_str()) {
+        format!("r#{snake}")
+    } else {
+        snake
     }
 }
 
@@ -258,6 +283,27 @@ mod tests {
     }
 
     #[test]
+    fn field_keywords_become_raw_identifiers_or_get_an_underscore() {
+        for (qapi_name, field) in [
+            ("type", "r#type"),
+            ("gen", "r#gen"),
+            ("async", "r#async"),
+            ("try", "r#try"),
+            ("Box", "r#box"),
+            ("self", "self_"),
+            ("Self", "self_"),
+            ("super", "super_"),
+            ("crate", "crate_"),
+            ("_", "qapi_unnamed"),
+            ("union", "union"),
+            ("raw", "raw"),
+            ("type-id", "type_id"),
+        ] {
+            assert_eq!(rustify_field(qapi_name), field, "{qapi_name}");
+        }
+    }
+
+    #[test]
     fn builtin_types_map_to_rust_types_and_other_names_to_rust_names() {
         for (qapi_type, rust_type) in [
             ("str", "String"),
@@ -273,6 +319,7 @@ mod tests {
             ("Dict", "Dict"),
             ("query-status", "QueryStatus"),
             ("1Thing", "_1thing"),
+            (ARGUMENTS_TYPE, ARGUMENTS_TYPE),
         ] {
             assert_eq!(rustify_type(qapi_type), rust_type, "{qapi_type}");
         }
