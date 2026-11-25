@@ -643,3 +643,11 @@ Serde macro expansions allocate helper names against user fields, referenced
 types and other generated helpers. Fields such as `map` and internal-looking
 identifiers cannot capture JSON storage, visitors or serde generic parameters.
 These cases have compile-and-round-trip regressions.
+
+## Compiled checks
+
+The generator tests also compile what they generate against `qrab-qapi`.
+QEMU's positive schema fixtures, its schema stress test included, compile as
+complete generated Rust modules. A QEMU-validated naming fixture is generated,
+compiled offline and round-tripped to check declarations, references, commands
+and metadata together.

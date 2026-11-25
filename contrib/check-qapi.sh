@@ -4,6 +4,9 @@ cd "$(dirname "$0")/.."
 
 # This check owns its bounded builds; start with the complete API surface.
 unset QEMU_MIN_VERSION QEMU_MAX_VERSION
+# The generator tests build fixture crates with --offline from the registry
+# cache, so a fresh checkout (CI) needs every locked package downloaded first.
+cargo fetch --locked
 
 # The crates built on the macros, one per line:
 qapi_crates=(
