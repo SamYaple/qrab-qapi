@@ -14,8 +14,8 @@ pub use process_qapi::*;
 mod render;
 mod rust_enum;
 mod rust_struct;
-pub use rust_enum::*;
-pub use rust_struct::*;
+pub(crate) use rust_enum::*;
+pub(crate) use rust_struct::*;
 
 /// The Rust type of a QAPI builtin type, `None` for any other name.
 fn builtin_type(qapi_type: &str) -> Option<&'static str> {
@@ -104,13 +104,16 @@ fn pascal_identifier(input: &str) -> String {
 
 /// The Rust type name of a QAPI name, in PascalCase and ASCII. A name that
 /// would shadow `Self`, `HashMap` or a type, trait or variant of the Rust
-/// prelude gets the prefix `Qapi`.
+/// prelude gets the prefix `Qapi`, as does the name of a type or trait at
+/// the root of `qrab-qapi`, which would shadow a generated type of that name
+/// in the glob re-export of the QMP types there.
 ///
 /// ```
 /// use qapi_codegen::qapi_ir::rustify_name;
 ///
 /// assert_eq!(rustify_name("query-status"), "QueryStatus");
 /// assert_eq!(rustify_name("String"), "QapiString");
+/// assert_eq!(rustify_name("EncodeError"), "QapiEncodeError");
 /// ```
 pub fn rustify_name(input: &str) -> String {
     let name = pascal_identifier(input);
@@ -120,9 +123,24 @@ pub fn rustify_name(input: &str) -> String {
         | "Sized" | "Drop" | "Fn" | "FnMut" | "FnOnce" | "Some" | "None" | "Ok" | "Err" => {
             format!("Qapi{name}")
         }
+        runtime if RUNTIME_ITEMS.contains(&runtime) => format!("Qapi{runtime}"),
         _ => name,
     }
 }
+
+/// The types and traits that `qrab-qapi` defines at its root, where a
+/// generated type of the same name, re-exported by glob, would be shadowed.
+const RUNTIME_ITEMS: &[&str] = &[
+    "EncodeError",
+    "PreconfigSafe",
+    "QapiCommand",
+    "QapiEvent",
+    "QapiFlatUnion",
+    "VersionAlreadySet",
+    "VersionComponent",
+    "VersionParseError",
+    "VersionParseErrorKind",
+];
 
 /// The Rust variant name of a QAPI name. Variants have a namespace of their
 /// own, so only `Self` is renamed.
@@ -185,12 +203,12 @@ pub enum Attribute {
 
 impl Attribute {
     /// A key alone.
-    pub fn new<N: ToString>(name: N) -> Self {
+    pub(crate) fn new<N: ToString>(name: N) -> Self {
         Self::Unit(name.to_string())
     }
 
     /// A key with a value.
-    pub fn with_value<N: ToString, V: ToString>(name: N, value: V) -> Self {
+    pub(crate) fn with_value<N: ToString, V: ToString>(name: N, value: V) -> Self {
         Self::Item {
             name: name.to_string(),
             value: value.to_string(),
@@ -198,7 +216,7 @@ impl Attribute {
     }
 
     /// Keys that belong together, each with its value if it has one.
-    pub fn with_values<N: ToString, V: ToString>(values: Vec<(N, Option<V>)>) -> Self {
+    pub(crate) fn with_values<N: ToString, V: ToString>(values: Vec<(N, Option<V>)>) -> Self {
         let attrs = values
             .iter()
             .map(|i| {
@@ -217,7 +235,7 @@ impl Attribute {
     }
 
     /// A key with nested attributes, such as `name(added = "1.0.0", removed = "2.0.0")`.
-    pub fn nested<N: ToString>(name: N, inner: Vec<Attribute>) -> Self {
+    pub(crate) fn nested<N: ToString>(name: N, inner: Vec<Attribute>) -> Self {
         Self::Nested {
             name: name.to_string(),
             inner,
@@ -310,6 +328,56 @@ mod tests {
         assert_ne!(rustify_name("É"), rustify_name("E\u{301}"));
         assert_ne!(rustify_field_name("É"), rustify_field_name("E\u{301}"));
         assert_ne!(rustify_variant("É"), rustify_variant("E\u{301}"));
+    }
+
+    /// A QAPI type named like a type or trait at the root of `qrab-qapi`
+    /// gets the prefix `Qapi`, so that the glob re-export of the generated
+    /// types cannot be shadowed by that item.
+    #[test]
+    fn names_of_runtime_items_get_a_prefix() {
+        for name in RUNTIME_ITEMS {
+            assert_eq!(rustify_name(name), format!("Qapi{name}"), "{name}");
+        }
+        for (qapi_name, rust_name) in [
+            ("encode-error", "QapiEncodeError"),
+            ("version_parse_error_kind", "QapiVersionParseErrorKind"),
+            ("qapi-command", "QapiQapiCommand"),
+            ("QapiEvent", "QapiQapiEvent"),
+            ("EncodeErrors", "EncodeErrors"),
+            ("Command", "Command"),
+        ] {
+            assert_eq!(rustify_name(qapi_name), rust_name, "{qapi_name}");
+        }
+    }
+
+    /// The reserved runtime names are those of the types and traits that
+    /// `qrab-qapi` declares at its root.
+    #[test]
+    fn runtime_items_are_the_root_types_and_traits_of_qrab_qapi() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../qapi/src/lib.rs");
+        let source = std::fs::read_to_string(path).unwrap();
+        let mut declared: Vec<_> = source
+            .lines()
+            .filter_map(|line| {
+                [
+                    "pub struct ",
+                    "pub enum ",
+                    "pub trait ",
+                    "pub type ",
+                    "pub union ",
+                ]
+                .iter()
+                .find_map(|keyword| line.strip_prefix(keyword))
+            })
+            .map(|rest| {
+                let end = rest
+                    .find(|c: char| !c.is_alphanumeric() && c != '_')
+                    .unwrap_or(rest.len());
+                &rest[..end]
+            })
+            .collect();
+        declared.sort_unstable();
+        assert_eq!(declared, RUNTIME_ITEMS);
     }
 
     #[test]

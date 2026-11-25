@@ -7,7 +7,7 @@ use nom::combinator::verify;
 use nom::sequence::delimited;
 
 /// Parse an `if` key and its nested configuration expression.
-pub fn take_cond(input: &str) -> IResult<&str, QapiCond<'_>> {
+pub(crate) fn take_cond(input: &str) -> IResult<&str, QapiCond<'_>> {
     take_kv("if", QapiCond::parse).parse(input)
 }
 
@@ -26,7 +26,7 @@ impl<'i> QapiCond<'i> {
     ///          | { 'all': [ COND, ... ] }
     ///          | { 'any': [ COND, ... ] }
     ///          | { 'not': COND }
-    pub fn parse(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse(input: &'i str) -> IResult<&'i str, Self> {
         // Before 6.2 a condition is a string or a list of strings; the
         // validation refuses the empty ones in the releases that do.
         if super::parser_version() < (6, 2, 0) {
@@ -40,7 +40,7 @@ impl<'i> QapiCond<'i> {
         Self::parse_v1(input)
     }
 
-    pub fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
         let not_parser = take_kv("not", Self::parse);
         let any_parser = take_kv(
             "any",

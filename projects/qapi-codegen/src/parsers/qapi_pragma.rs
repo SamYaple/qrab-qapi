@@ -5,10 +5,6 @@ use nom::IResult;
 use nom::Parser;
 use nom::branch::alt;
 
-pub fn take_pragma(input: &str) -> IResult<&str, QapiPragma<'_>> {
-    QapiPragma::parse(input)
-}
-
 enum ParserToken<'i> {
     DocRequired(&'i str),
     CommandReturnsExceptions(Vec<QapiString<'i>>),
@@ -37,7 +33,7 @@ pub struct QapiPragma<'i> {
 }
 
 impl<'i> QapiPragma<'i> {
-    pub fn parse(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse(input: &'i str) -> IResult<&'i str, Self> {
         let v = parser_version();
         if v < (2, 9, 0) {
             Err(nom::Err::Error(nom::error::Error::new(
@@ -53,14 +49,14 @@ impl<'i> QapiPragma<'i> {
 
     /// v1 (QEMU v2.9.0–v5.2.0): `doc-required`, `returns-whitelist` and
     /// `name-case-whitelist`.
-    pub fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
         Self::parse_common(input, true)
     }
 
     /// v2 (QEMU v6.0.0+): `doc-required`, `command-name-exceptions`,
     /// `command-returns-exceptions`, `member-name-exceptions` and, from 9.0,
     /// `documentation-exceptions`.
-    pub fn parse_v2(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse_v2(input: &'i str) -> IResult<&'i str, Self> {
         Self::parse_common(input, false)
     }
 

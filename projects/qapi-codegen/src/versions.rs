@@ -1,3 +1,5 @@
+//! The audited QEMU releases, and the checks of a QEMU git tree against them.
+
 use crate::{IncludeError, ReadError};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
@@ -7,9 +9,13 @@ use std::process::{Command, Output};
 /// independent of the tags a local tree happens to have.
 pub const PINNED_VERSIONS: &str = include_str!("../qemu-versions.lock");
 
+/// A release pin of a lockfile, as [`parse_pinned_versions`] reads it.
 #[derive(Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct PinnedVersion {
+    /// The stable release tag, such as `v11.1.3`.
     pub tag: String,
+    /// The commit that the tag peels to, as 40 lowercase hexadecimal digits.
     pub commit: String,
 }
 
@@ -97,6 +103,7 @@ pub enum TreeError {
 
 /// The schema files of one release, extracted into a temporary directory that
 /// is removed when this value is dropped.
+#[doc(hidden)]
 #[derive(Debug)]
 pub struct ExtractedSchemas {
     dir: tempfile::TempDir,
@@ -114,7 +121,7 @@ impl ExtractedSchemas {
     /// Name a file of the release as git names a file of its tag,
     /// `<tag>:<path>`, such as `v11.1.3:qga/qapi-schema.json`. A path outside
     /// the extracted schemas is returned unchanged.
-    pub fn label(&self, path: &Path) -> PathBuf {
+    pub(crate) fn label(&self, path: &Path) -> PathBuf {
         let Ok(relative) = path.strip_prefix(&self.root) else {
             return path.to_path_buf();
         };
@@ -310,6 +317,7 @@ pub fn verify_pinned_versions(repo: &Path, versions: &[PinnedVersion]) -> Result
 
 /// Given a QEMU source root, or the schemas extracted from a release, find
 /// the QMP schema entry point.
+#[doc(hidden)]
 pub fn find_schema_entry(qemu_root: &Path) -> Option<PathBuf> {
     let qapi_dir = qemu_root.join("qapi").join("qapi-schema.json");
     if qapi_dir.exists() {
@@ -324,6 +332,7 @@ pub fn find_schema_entry(qemu_root: &Path) -> Option<PathBuf> {
 
 /// Parse a stable release tag, retaining its historical fourth component for
 /// ordering. Components are decimal numbers without leading zeros.
+#[doc(hidden)]
 pub fn parse_version_tag_full(tag: &str) -> Option<(u32, u32, u32, u32)> {
     let tag = tag.strip_prefix('v').unwrap_or(tag);
     let parts: Vec<_> = tag.split('.').collect();
@@ -353,6 +362,7 @@ pub fn parse_version_tag(tag: &str) -> Option<(u32, u32, u32)> {
 /// directory, without touching the tree's working copy. The tag is resolved
 /// once, and the schema roots it has are archived in one operation. A release
 /// without schema files gives an empty directory.
+#[doc(hidden)]
 pub fn extract_schema_from_tag(qemu_repo: &Path, tag: &str) -> Result<ExtractedSchemas, TreeError> {
     let tree = resolve_release(qemu_repo, tag, "tree")?;
     let dir = tempfile::tempdir().map_err(TreeError::TempDir)?;
@@ -415,6 +425,7 @@ pub fn extract_schema_from_tag(qemu_repo: &Path, tag: &str) -> Result<ExtractedS
 
 /// Given a QEMU source root, or the schemas extracted from a release, find
 /// the guest agent's schema entry point.
+#[doc(hidden)]
 pub fn find_qga_schema_entry(qemu_root: &Path) -> Option<PathBuf> {
     let qga = qemu_root.join("qga").join("qapi-schema.json");
     if qga.exists() {
@@ -425,11 +436,13 @@ pub fn find_qga_schema_entry(qemu_root: &Path) -> Option<PathBuf> {
 }
 
 /// Discover release tags from the QMP schema era (1.0 onward).
+#[doc(hidden)]
 pub fn discover_version_tags(qemu_repo: &Path) -> Result<Vec<String>, TreeError> {
     discover_schema_era_tags(qemu_repo, (1, 0, 0))
 }
 
 /// Discover release tags from the guest-agent schema era (0.15 onward).
+#[doc(hidden)]
 pub fn discover_qga_version_tags(qemu_repo: &Path) -> Result<Vec<String>, TreeError> {
     discover_schema_era_tags(qemu_repo, (0, 15, 0))
 }

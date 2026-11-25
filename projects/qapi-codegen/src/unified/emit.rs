@@ -24,7 +24,7 @@ impl Protocol {
     }
 
     /// The first QEMU release with the protocol's schema: 1.0 for QMP,
-    /// 0.15 for QGA. The registries leave out the releases before it.
+    /// 0.15 for QGA. [`generate`] leaves out the releases before it.
     pub fn first_release(self) -> Version {
         match self {
             Self::Qmp => (1, 0, 0),

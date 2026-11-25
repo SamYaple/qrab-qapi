@@ -22,10 +22,6 @@ const ABSENT: &[&str] = &["prefix", "if"];
 /// The keys that the parser reads; from 2.4 the others are kept for the
 /// validation.
 const READ: &[&str] = &["enum", "prefix", "data", "if", "features"];
-pub fn take_enum(input: &str) -> IResult<&str, QapiEnum<'_>> {
-    QapiEnum::parse(input)
-}
-
 #[derive(Debug, Clone, Default)]
 pub struct QapiEnum<'i> {
     pub name: QapiString<'i>,
@@ -49,11 +45,11 @@ impl<'i> QapiEnum<'i> {
     ///          '*prefix': STRING,
     ///          '*if': COND,
     ///          '*features': FEATURES }
-    pub fn parse(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse(input: &'i str) -> IResult<&'i str, Self> {
         Self::parse_v1(input)
     }
 
-    pub fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
         let (input, doc) = opt(QapiDocumentation::parse).parse(input)?;
         let mut s = Self {
             doc,

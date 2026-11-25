@@ -5,7 +5,7 @@ use super::vec_newtype;
 use nom::IResult;
 use nom::Parser;
 
-pub fn take_alternatives(input: &str) -> IResult<&str, QapiAlternatives<'_>> {
+pub(crate) fn take_alternatives(input: &str) -> IResult<&str, QapiAlternatives<'_>> {
     take_kv("data", QapiAlternatives::parse).parse(input)
 }
 
@@ -13,11 +13,11 @@ pub fn take_alternatives(input: &str) -> IResult<&str, QapiAlternatives<'_>> {
 pub struct QapiAlternatives<'i>(pub Vec<QapiAlternative<'i>>);
 impl<'i> QapiAlternatives<'i> {
     /// ALTERNATIVES = { ALTERNATIVE, ... }
-    pub fn parse(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse(input: &'i str) -> IResult<&'i str, Self> {
         Self::parse_v1(input)
     }
 
-    pub fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
         take_dict(take_alternative).map(Self).parse(input)
     }
 }

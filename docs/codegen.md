@@ -18,12 +18,12 @@ default output. Missing or moved pins fail generation. The library's
 `unified::generate` takes the protocol (`Protocol::Qmp` or `Protocol::Qga`),
 the documentation (`Docs::Reference` or `Docs::Schema`) and the releases:
 `Releases::Pinned` with a lockfile, which it checks against the tree, or
-`Releases::Tags` with an explicit list of tags, as the registry builders
-(`build_qmp_registry`, `build_qga_registry`) take them; the command line
-always reads a lockfile. Stable release tags may have two, three or
-four numeric components. Historical fourth-component releases retain their
-full ordering in discovery and pins, while lifecycle metadata and peer versions
-use the three components carried by QMP greetings. The four subpatch
+`Releases::Tags` with an explicit list of tags, which it reads without a
+lockfile; the command line always reads a lockfile. Stable release tags may
+have two, three or four numeric components. Historical fourth-component
+releases retain their full ordering in discovery and pins, while lifecycle
+metadata and peer versions use the three components carried by QMP
+greetings. The four subpatch
 releases have schema-equivalence regression checks against their base tags.
 
 `vendor/qemu` is the only submodule. Initialize it and fetch the release tags:
@@ -54,9 +54,9 @@ the original line and column. A differential lexical corpus checks
 acceptance against the parser in the pinned QEMU tree.
 Documentation markers allow Python whitespace before `#`, including Unicode,
 but formal opening and closing `##` markers must end the line exactly.
-Library callers can use `parse_schema_with_version` for one file or
-`with_parser_version` around synchronous parsing and lowering. Both restore
-the caller's grammar, including when the operation fails or unwinds.
+The generator parses and lowers each release under that release's grammar
+on worker threads of its own, so no release reads another's grammar and the
+calling thread's grammar is left as it was, also when generation fails.
 Legacy comments naming a later definition in the same file follow that
 definition across intervening helpers; existing attached documentation wins.
 Formal symbol checks begin in 2.9; global member/feature links follow the 4.2
@@ -327,7 +327,7 @@ follows three eras: permissive escaped characters before 2.4, JSON-style escapes
 and nonzero ASCII Unicode escapes through 4.1, then printable ASCII with escaped
 backslashes from 4.2. Include paths are decoded once; names and references use
 the same decoded identity. Literal grammar versions participate in schema hashes.
-String-valued AST fields use `QapiString` (`Cow`); use `as_ref()`/`as_deref()` to borrow them.
+The string-valued fields of the generator's internal AST are `Cow<str>`.
 Conditions before 6.2 retain C expressions and lists of expressions; newer
 conditions require configuration identifiers and nonempty boolean expressions.
 Empty conditions, `''` or `[]` and from 4.2 blank strings, fail where QEMU
@@ -526,12 +526,16 @@ untagged alternate, not a simple tagged union. It lowers to the same bare-value
 Rust enum as modern `alternate` syntax, preserving the original introduction
 version and feature metadata.
 
-Rust identifiers are escaped by role. Reserved type names use a `Qapi` prefix;
-enum variants keep ordinary names such as `String` and `None`, with `Self`
-escaped. Fields `self`, `crate` and `super` receive a trailing underscore and
-retain their wire-name attributes. Type declarations use type-name mapping,
-not builtin-value mapping: a declared `Visitor` remains a real struct, while
-the historical lowercase `visitor` opaque reference remains a JSON value.
+Rust identifiers are escaped by role. Reserved type names use a `Qapi` prefix:
+`Self`, `HashMap`, prelude names such as `String` and `Option`, and the
+types and traits at the root of `qrab-qapi`, such as `EncodeError` and
+`QapiCommand`, which would shadow a generated type in its glob re-export of
+the QMP types. Enum variants keep ordinary names such as `String` and
+`None`, with `Self` escaped. Fields `self`, `crate` and `super` receive a
+trailing underscore and retain their wire-name attributes. Type
+declarations use type-name mapping, not builtin-value mapping: a declared
+`Visitor` remains a real struct, while the historical lowercase `visitor`
+opaque reference remains a JSON value.
 A simple union's tag enum is `{Union}Kind`, the name QEMU gives it, in the
 namespace QEMU reserved for it; the flat unions that replaced simple unions in
 6.2 declare that enum by the same name, and both are one Rust type. Generated

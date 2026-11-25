@@ -14,10 +14,6 @@ use nom::branch::alt;
 use nom::error::{Error, ErrorKind};
 use nom::sequence::terminated;
 
-pub fn take_member(input: &str) -> IResult<&str, QapiMember<'_>> {
-    QapiMember::parse(input)
-}
-
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct QapiMember<'i> {
     pub name: QapiString<'i>,
@@ -38,11 +34,11 @@ impl<'i> QapiMember<'i> {
     ///        | STRING : { 'type': TYPE-REF,
     ///                     '*if': COND,
     ///                     '*features': FEATURES }
-    pub fn parse(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse(input: &'i str) -> IResult<&'i str, Self> {
         Self::parse_v1(input)
     }
 
-    pub fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
         let start = input;
         let (input, mut member) = alt((
             Self::simple_parser,

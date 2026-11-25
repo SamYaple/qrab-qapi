@@ -1,11 +1,6 @@
 use super::qapi_variant::QapiVariant;
-use nom::IResult;
 
-pub type QapiBranch<'i> = QapiVariant<'i>;
-
-pub fn take_branch(input: &str) -> IResult<&str, QapiBranch<'_>> {
-    QapiVariant::parse(input)
-}
+pub(crate) type QapiBranch<'i> = QapiVariant<'i>;
 
 #[cfg(test)]
 mod tests {

@@ -15,14 +15,14 @@ use crate::{
 };
 use std::collections::{HashMap, HashSet};
 
-/// A definition that the IR cannot represent, or a union passed to the
-/// function for the other kind of union.
+/// A definition that the IR cannot represent, in
+/// [`SchemaErrorKind::Lower`](crate::unified::SchemaErrorKind::Lower), or a
+/// union lowered as the other kind of union.
 ///
 /// QEMU's generator checks schemas from 2.4 on (before, an anonymous struct
 /// could stand anywhere), and the parser also accepts what it rejects. The
-/// lowering functions are public, so they report a definition that the IR
-/// cannot represent instead of assuming a well-formed schema; no pinned
-/// QEMU schema contains one.
+/// lowering reports a definition that the IR cannot represent instead of
+/// assuming a well-formed schema; no pinned QEMU schema contains one.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum LowerError {
@@ -50,12 +50,13 @@ pub enum LowerError {
     /// or the IR name, `r-type`, of the discriminator that the lowering adds.
     #[error("QAPI union {union}: member '{member}' clashes with the discriminator 'type'")]
     DiscriminatorClash { union: String, member: String },
-    /// A legacy alternate (`'discriminator': {}`) passed to
-    /// [`process_union`]; [`process_legacy_alternate`] lowers it.
+    /// A legacy alternate (`'discriminator': {}`) lowered as a union, a
+    /// generator bug: the lowering of a schema lowers it as an alternate.
     #[error("QAPI union {union} is a legacy alternate")]
     LegacyAlternate { union: String },
-    /// A union passed to [`process_legacy_alternate`] that is not a legacy
-    /// alternate, or one with a base.
+    /// A union lowered as a legacy alternate that is not one, or one with a
+    /// base, a generator bug: the lowering of a schema drops the base of a
+    /// legacy alternate, which its QEMU generators ignore.
     #[error("QAPI union {union} is not a legacy alternate")]
     NotLegacyAlternate { union: String },
 }
@@ -250,7 +251,7 @@ fn process_alternative(q: QapiAlternative, definition: &str) -> Result<EnumVaria
 }
 
 /// Lower an alternate into an enum with a variant for each alternative.
-pub fn process_alternate(q: QapiAlternate) -> Result<Enum, LowerError> {
+pub(crate) fn process_alternate(q: QapiAlternate) -> Result<Enum, LowerError> {
     let mut variants = Vec::new();
     for v in q.data {
         variants.push(process_alternative(v, &q.name)?);
@@ -276,7 +277,7 @@ pub fn process_alternate(q: QapiAlternate) -> Result<Enum, LowerError> {
 
 /// Lower a legacy alternate, the union with an empty discriminator
 /// (`'discriminator': {}`) of QEMU 1.7 to 2.3, as the alternate it is.
-pub fn process_legacy_alternate(q: QapiUnion) -> Result<Enum, LowerError> {
+pub(crate) fn process_legacy_alternate(q: QapiUnion) -> Result<Enum, LowerError> {
     if !q.legacy_alternate || q.discriminator.is_some() || q.base != MembersOrRef::Unset {
         return Err(LowerError::NotLegacyAlternate {
             union: q.name.to_string(),
@@ -314,7 +315,7 @@ fn process_enum_value(q: QapiEnumValue) -> EnumVariant {
 }
 
 /// Lower an enum.
-pub fn process_enum(q: QapiEnum) -> Enum {
+pub(crate) fn process_enum(q: QapiEnum) -> Enum {
     let mut variants = Vec::new();
     for v in q.data {
         let variant = process_enum_value(v);
@@ -340,7 +341,7 @@ pub fn process_enum(q: QapiEnum) -> Enum {
 }
 
 /// Lower a member of `definition`, which must have a named or array type.
-pub fn process_member(q: QapiMember, definition: &str) -> Result<StructField, LowerError> {
+pub(crate) fn process_member(q: QapiMember, definition: &str) -> Result<StructField, LowerError> {
     let (r#type, array) = process_type_ref(&q.r#type, definition, &q.name)?;
 
     let mut meta = Metadata::default();
@@ -448,7 +449,7 @@ fn process_member_with_inline(
 /// struct's own name and the extracted names join `names`.
 ///
 /// Return the struct and the extracted structs, inner ones first.
-pub fn process_struct(
+pub(crate) fn process_struct(
     q: QapiStruct,
     structs_lookup: &HashMap<String, Struct>,
     names: &mut HashSet<String>,
@@ -520,7 +521,7 @@ fn lookup_struct<'a>(
 /// discriminator's type is an enum of `enums_lookup` or a builtin type (the
 /// `str` of QEMU 1.7's BlockdevOptions). A legacy alternate is an error:
 /// [`process_legacy_alternate`] lowers it.
-pub fn process_union(
+pub(crate) fn process_union(
     q: QapiUnion,
     structs_lookup: &HashMap<String, Struct>,
     enums_lookup: &HashMap<String, Enum>,
@@ -710,7 +711,7 @@ fn process_members_or_ref(
 /// The data are members, or a struct of `structs_lookup` whose fields the
 /// event takes: with boxed data, a union, so `structs_lookup` holds the
 /// lowered unions too.
-pub fn process_event(
+pub(crate) fn process_event(
     q: QapiEvent,
     structs_lookup: &HashMap<String, Struct>,
 ) -> Result<Struct, LowerError> {
@@ -746,7 +747,7 @@ pub fn process_event(
 /// arguments beyond those it declares, and gets the flattened optional
 /// member `arguments` for them, which `flatten` tells apart from a declared
 /// argument of that name.
-pub fn process_command(
+pub(crate) fn process_command(
     q: QapiCommand,
     structs_lookup: &HashMap<String, Struct>,
 ) -> Result<Struct, LowerError> {
@@ -817,9 +818,10 @@ pub fn process_command(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::parsers::qapi_documentation::QapiDocumentation;
     use crate::{
-        QapiCond, QapiDocumentation, QapiEnumValue, QapiFeature, QapiFeatures, QapiMembers,
-        QapiSchemaToken, QapiTypeRef,
+        QapiCond, QapiEnumValue, QapiFeature, QapiFeatures, QapiMembers, QapiSchemaToken,
+        QapiTypeRef,
     };
 
     fn make_enum_value(name: &str) -> QapiEnumValue<'_> {

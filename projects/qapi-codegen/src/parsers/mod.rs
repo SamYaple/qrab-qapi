@@ -1,27 +1,27 @@
 pub mod common;
 pub(crate) mod doc_comment;
-pub mod qapi_alternate;
-pub mod qapi_alternative;
-pub mod qapi_alternatives;
-pub mod qapi_branch;
-pub mod qapi_branches;
-pub mod qapi_command;
-pub mod qapi_cond;
-pub mod qapi_documentation;
-pub mod qapi_enum;
-pub mod qapi_enum_value;
-pub mod qapi_event;
-pub mod qapi_feature;
-pub mod qapi_features;
-pub mod qapi_include;
-pub mod qapi_member;
-pub mod qapi_members;
-pub mod qapi_pragma;
-pub mod qapi_schema;
-pub mod qapi_struct;
-pub mod qapi_type_ref;
-pub mod qapi_union;
-pub mod qapi_variant;
+pub(crate) mod qapi_alternate;
+pub(crate) mod qapi_alternative;
+pub(crate) mod qapi_alternatives;
+pub(crate) mod qapi_branch;
+pub(crate) mod qapi_branches;
+pub(crate) mod qapi_command;
+pub(crate) mod qapi_cond;
+pub(crate) mod qapi_documentation;
+pub(crate) mod qapi_enum;
+pub(crate) mod qapi_enum_value;
+pub(crate) mod qapi_event;
+pub(crate) mod qapi_feature;
+pub(crate) mod qapi_features;
+pub(crate) mod qapi_include;
+pub(crate) mod qapi_member;
+pub(crate) mod qapi_members;
+pub(crate) mod qapi_pragma;
+pub(crate) mod qapi_schema;
+pub(crate) mod qapi_struct;
+pub(crate) mod qapi_type_ref;
+pub(crate) mod qapi_union;
+pub(crate) mod qapi_variant;
 
 use std::cell::Cell;
 
@@ -31,7 +31,7 @@ thread_local! {
 
 /// Set the QEMU schema version for parser dispatch.
 /// Each parser's `parse()` uses this to select the correct versioned parser.
-/// Prefer [`with_parser_version`] for operations that should restore the caller's grammar.
+/// Prefer `with_parser_version` for operations that should restore the caller's grammar.
 pub fn set_parser_version(v: (u32, u32, u32)) {
     PARSER_VERSION.with(|c| c.set(v));
 }

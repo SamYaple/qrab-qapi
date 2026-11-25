@@ -56,7 +56,7 @@ fn take_multiline_text(input: &str) -> IResult<&str, &str> {
     recognize(many1(take_line_continuation)).parse(input)
 }
 
-pub fn extract_since_from_comment(desc: &Vec<&str>) -> Option<String> {
+pub(crate) fn extract_since_from_comment(desc: &Vec<&str>) -> Option<String> {
     for line in desc.iter().rev() {
         let trimmed = line.trim();
         let lower = trimmed.to_lowercase();
@@ -139,7 +139,7 @@ fn documentation_start(input: &str) -> IResult<&str, &str> {
 }
 
 impl<'i> QapiDocumentation<'i> {
-    pub fn parse(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse(input: &'i str) -> IResult<&'i str, Self> {
         if parser_version() < (2, 9, 0) {
             Self::parse_v1(input)
         } else if parser_version() < (5, 0, 0) {
@@ -150,15 +150,15 @@ impl<'i> QapiDocumentation<'i> {
     }
 
     /// Legacy headers permit an omitted colon and `## @Name` shorthand.
-    pub fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
         Self::parse_common(input, true)
     }
 
-    pub fn parse_v2(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse_v2(input: &'i str) -> IResult<&'i str, Self> {
         Self::parse_common(input, false)
     }
 
-    pub fn parse_v3(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse_v3(input: &'i str) -> IResult<&'i str, Self> {
         Self::parse_common(input, false)
     }
 
@@ -397,7 +397,7 @@ pub struct QapiSectionDocumentation<'i> {
 }
 
 impl<'i> QapiSectionDocumentation<'i> {
-    pub fn parse(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse(input: &'i str) -> IResult<&'i str, Self> {
         let v = parser_version();
         if v < (2, 9, 0) {
             Self::parse_v1(input)
@@ -409,17 +409,17 @@ impl<'i> QapiSectionDocumentation<'i> {
     }
 
     /// v1 (QEMU v1.0–v2.8.0)
-    pub fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
         Self::parse_common(input, false)
     }
 
     /// v2 (QEMU v2.9.0–v4.2.0)
-    pub fn parse_v2(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse_v2(input: &'i str) -> IResult<&'i str, Self> {
         Self::parse_common(input, false)
     }
 
     /// v3 (QEMU v5.0.0+)
-    pub fn parse_v3(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse_v3(input: &'i str) -> IResult<&'i str, Self> {
         Self::parse_common(input, true)
     }
 
@@ -464,7 +464,7 @@ pub struct QapiFreeformDoc<'i> {
 }
 
 impl<'i> QapiFreeformDoc<'i> {
-    pub fn parse(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse(input: &'i str) -> IResult<&'i str, Self> {
         let v = parser_version();
         if v < (2, 9, 0) {
             Self::parse_v1(input)
@@ -476,17 +476,17 @@ impl<'i> QapiFreeformDoc<'i> {
     }
 
     /// v1 (QEMU v1.0–v2.8.0)
-    pub fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
         Self::parse_common(input, false)
     }
 
     /// v2 (QEMU v2.9.0–v4.2.0)
-    pub fn parse_v2(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse_v2(input: &'i str) -> IResult<&'i str, Self> {
         Self::parse_common(input, false)
     }
 
     /// v3 (QEMU v5.0.0+)
-    pub fn parse_v3(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse_v3(input: &'i str) -> IResult<&'i str, Self> {
         Self::parse_common(input, true)
     }
 

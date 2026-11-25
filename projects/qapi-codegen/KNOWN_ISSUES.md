@@ -2,8 +2,9 @@
 
 The pinned history parses and generates both protocols. A few old schemas
 have quirks that the generator tolerates with a warning, which
-`qapi-codegen` prints and the registries return as `Warning`s. They are
-quirks of old source, not a minimum supported QEMU release.
+`qapi-codegen` prints and `unified::generate` returns as the `Warning`s of
+its output. They are quirks of old source, not a minimum supported QEMU
+release.
 
 ## Mislabeled legacy documentation
 

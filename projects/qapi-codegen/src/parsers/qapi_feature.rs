@@ -8,11 +8,6 @@ use nom::Parser;
 use nom::branch::alt;
 use nom::error::{Error, ErrorKind};
 
-/// Convenience wrapper around the QapiFeature parser
-pub fn take_feature(input: &str) -> IResult<&str, QapiFeature<'_>> {
-    QapiFeature::parse(input)
-}
-
 /// Holds information on a specific Feature in a single option
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct QapiFeature<'i> {
@@ -30,11 +25,11 @@ impl<'i> QapiFeature<'i> {
     /// Parses a `FEATURE` as defined in the QAPI spec
     ///     FEATURE = STRING
     ///             | { 'name': STRING, '*if': COND }
-    pub fn parse(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse(input: &'i str) -> IResult<&'i str, Self> {
         Self::parse_v1(input)
     }
 
-    pub fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
         let start = input;
         let (input, feature) = alt((
             Self::string_parser,

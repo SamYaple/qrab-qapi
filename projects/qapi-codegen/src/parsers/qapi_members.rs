@@ -6,7 +6,7 @@ use nom::IResult;
 use nom::Parser;
 use nom::branch::alt;
 
-pub fn take_members(input: &str) -> IResult<&str, QapiMembers<'_>> {
+pub(crate) fn take_members(input: &str) -> IResult<&str, QapiMembers<'_>> {
     QapiMembers::parse(input)
 }
 
@@ -17,17 +17,17 @@ impl<'i> QapiMembers<'i> {
     ///
     /// `'a'` and `'*a'` are two keys, so two members of one name parse; the
     /// lowering and the validation of each release decide about them.
-    pub fn parse(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse(input: &'i str) -> IResult<&'i str, Self> {
         Self::parse_v1(input)
     }
 
-    pub fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
         take_dict(QapiMember::parse).map(Self).parse(input)
     }
 }
 vec_newtype!(QapiMembers, QapiMember<'i>);
 
-pub fn take_members_or_ref(input: &str) -> IResult<&str, MembersOrRef<'_>> {
+pub(crate) fn take_members_or_ref(input: &str) -> IResult<&str, MembersOrRef<'_>> {
     MembersOrRef::parse(input)
 }
 
@@ -41,11 +41,11 @@ pub enum MembersOrRef<'i> {
 
 impl<'i> MembersOrRef<'i> {
     /// STRING | MEMBERS
-    pub fn parse(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse(input: &'i str) -> IResult<&'i str, Self> {
         Self::parse_v1(input)
     }
 
-    pub fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
         alt((qstring.map(Self::Ref), take_members.map(Self::Members))).parse(input)
     }
 }

@@ -12,10 +12,6 @@ use nom::branch::alt;
 use nom::error::{Error, ErrorKind};
 use nom::sequence::terminated;
 
-pub fn take_variant(input: &str) -> IResult<&str, QapiVariant<'_>> {
-    QapiVariant::parse(input)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -99,11 +95,11 @@ pub struct QapiVariant<'i> {
 impl<'i> QapiVariant<'i> {
     /// STRING : TYPE-REF
     /// | STRING : { 'type': TYPE-REF, '*if': COND }
-    pub fn parse(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse(input: &'i str) -> IResult<&'i str, Self> {
         Self::parse_v1(input)
     }
 
-    pub fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
         let start = input;
         let (input, variant) = alt((
             Self::simple_parser,

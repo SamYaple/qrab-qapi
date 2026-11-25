@@ -1,8 +1,9 @@
 //! Multi-version QAPI schema merge.
 //!
-//! Parses schemas from multiple QEMU version tags, merges them into a single
-//! unified type registry where each type, field, and variant has version range
-//! annotations (since/until).
+//! [`generate`] parses the schemas of multiple QEMU release tags, merges them
+//! into a single registry in which each type, field and variant has the
+//! range of releases that have it, and emits the Rust modules of that
+//! registry as a [`GeneratedOutput`].
 
 use crate::QapiSchemaToken;
 use crate::qapi_ir::*;
@@ -20,15 +21,17 @@ pub(crate) use lower::process_version_schema;
 mod merge;
 mod registry;
 
-pub use emit::{Docs, GeneratedOutput, Protocol, Releases, emit_registry, generate};
-pub use error::Construct;
-pub use error::Crash;
-pub use error::GenerateError;
-pub use error::NameRule;
-pub use error::Shape;
-pub use error::{RegistryError, SchemaError, SchemaErrorKind, Warning, WarningKind};
+pub use crate::qapi_ir::LowerError;
+#[doc(hidden)]
+pub use emit::emit_registry;
+pub use emit::{Docs, GeneratedOutput, Protocol, Releases, generate};
+pub use error::{
+    Construct, Crash, GenerateError, NameRule, RegistryError, SchemaError, SchemaErrorKind, Shape,
+    Warning, WarningKind,
+};
 pub(crate) use error::{SchemaContext, SchemaResult, definition, require};
 pub(crate) use merge::has_feature;
+#[doc(hidden)]
 pub use registry::{build_qga_registry, build_qmp_registry};
 
 /// A QEMU release as `(major, minor, micro)`. A four-component tag has the
@@ -100,6 +103,7 @@ fn merge_docs_from(dst: &mut Metadata, src: &Metadata) {
 /// The merged releases that have a type, field, variant or flag, and those
 /// that mark it deprecated or unstable. A range is a first release and an
 /// exclusive end, the first release without it.
+#[doc(hidden)]
 #[derive(Debug, Clone)]
 pub struct VersionRange {
     /// The first merged release that has the item.
@@ -126,6 +130,7 @@ pub struct VersionRange {
 }
 
 /// Whether `ranges` cover `version`.
+#[cfg(test)]
 fn in_ranges(ranges: &[(Version, Option<Version>)], version: Version) -> bool {
     ranges
         .iter()
@@ -163,17 +168,20 @@ impl VersionRange {
     }
 
     /// Whether the deprecated feature applies in a particular release.
-    pub fn is_deprecated(&self, version: Version) -> bool {
+    #[cfg(test)]
+    pub(crate) fn is_deprecated(&self, version: Version) -> bool {
         in_ranges(&self.deprecated_ranges, version)
     }
 
     /// Whether the unstable feature applies in a particular release.
-    pub fn is_unstable(&self, version: Version) -> bool {
+    #[cfg(test)]
+    pub(crate) fn is_unstable(&self, version: Version) -> bool {
         in_ranges(&self.unstable_ranges, version)
     }
 
     /// Whether a field is its union's discriminator in a particular release.
-    pub fn is_discriminator(&self, version: Version) -> bool {
+    #[cfg(test)]
+    pub(crate) fn is_discriminator(&self, version: Version) -> bool {
         in_ranges(&self.discriminator_ranges, version)
     }
 
@@ -206,6 +214,7 @@ impl VersionRange {
 
 /// An enum, alternate or union branch enum, with the releases of each of its
 /// variants.
+#[doc(hidden)]
 #[derive(Debug, Clone)]
 pub struct UnifiedEnum {
     /// The enum as the newest merged release declares it, with the variants
@@ -224,6 +233,7 @@ pub struct UnifiedEnum {
 
 /// A struct, union, command or event, with the releases of each of its
 /// fields and flags.
+#[doc(hidden)]
 #[derive(Debug, Clone)]
 pub struct UnifiedStruct {
     /// The struct as the newest merged release declares it, with the fields
@@ -253,7 +263,8 @@ pub struct UnifiedStruct {
 impl UnifiedStruct {
     /// Whether a flag of `attr_versions` is set in `version`, in its newest
     /// run or an earlier one.
-    pub fn flag_enabled(&self, name: &str, version: Version) -> bool {
+    #[cfg(test)]
+    pub(crate) fn flag_enabled(&self, name: &str, version: Version) -> bool {
         self.attr_versions
             .get(name)
             .into_iter()
@@ -304,6 +315,7 @@ fn merge_returns(existing: &mut UnifiedStruct, new_meta: &Metadata, version: Ver
 }
 
 /// A merged type.
+#[doc(hidden)]
 #[derive(Debug, Clone)]
 pub enum UnifiedType {
     /// An enum, alternate or union branch enum.
@@ -313,6 +325,7 @@ pub enum UnifiedType {
 }
 
 /// The types of every merged release.
+#[doc(hidden)]
 #[derive(Debug, Default)]
 pub struct UnifiedRegistry {
     /// Every type, by its Rust name.

@@ -21,10 +21,6 @@ const ABSENT: &[&str] = &["base", "discriminator", "if"];
 /// The keys that the parser reads; from 2.4 the others are kept for the
 /// validation.
 const READ: &[&str] = &["union", "data", "discriminator", "if", "features", "base"];
-pub fn take_union(input: &str) -> IResult<&str, QapiUnion<'_>> {
-    QapiUnion::parse(input)
-}
-
 #[derive(Debug, Clone, Default)]
 pub struct QapiUnion<'i> {
     pub name: QapiString<'i>,
@@ -47,7 +43,7 @@ pub struct QapiUnion<'i> {
 }
 
 impl<'i> QapiUnion<'i> {
-    pub fn parse(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse(input: &'i str) -> IResult<&'i str, Self> {
         let v = parser_version();
         if v < (1, 6, 0) {
             Self::parse_v1(input)
@@ -61,7 +57,7 @@ impl<'i> QapiUnion<'i> {
     /// v1 (QEMU v0.15–v1.5): simple unions only. Their generators read
     /// nothing but `'union'` and `'data'`, so a `'base'` or `'discriminator'`
     /// of later releases is ignored.
-    pub fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
         let (input, doc) = opt(QapiDocumentation::parse).parse(input)?;
         let mut s = Self {
             doc,
@@ -88,7 +84,7 @@ impl<'i> QapiUnion<'i> {
     }
 
     /// v2 (QEMU v1.6.0–v6.1.0): simple unions + discriminated unions coexist.
-    pub fn parse_v2(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse_v2(input: &'i str) -> IResult<&'i str, Self> {
         let (input, doc) = opt(QapiDocumentation::parse).parse(input)?;
         let mut s = Self {
             doc,
@@ -129,7 +125,7 @@ impl<'i> QapiUnion<'i> {
     }
 
     /// v3 (QEMU v6.2.0+): discriminated (flat) unions only — base + discriminator required.
-    pub fn parse_v3(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse_v3(input: &'i str) -> IResult<&'i str, Self> {
         let (input, doc) = opt(QapiDocumentation::parse).parse(input)?;
         let mut s = Self {
             doc,

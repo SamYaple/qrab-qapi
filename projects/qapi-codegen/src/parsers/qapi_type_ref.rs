@@ -6,7 +6,7 @@ use nom::IResult;
 use nom::Parser;
 use nom::branch::alt;
 
-pub fn take_type_ref(input: &str) -> IResult<&str, QapiTypeRef<'_>> {
+pub(crate) fn take_type_ref(input: &str) -> IResult<&str, QapiTypeRef<'_>> {
     use super::common::take_kv;
     take_kv("type", QapiTypeRef::parse).parse(input)
 }
@@ -23,7 +23,7 @@ pub enum QapiTypeRef<'i> {
 
 impl<'i> QapiTypeRef<'i> {
     /// Dispatches to the correct versioned parser.
-    pub fn parse(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse(input: &'i str) -> IResult<&'i str, Self> {
         // Until 4.0 a dictionary in place of a type is an anonymous
         // struct, which the validation refuses from 2.4 where QEMU does;
         // 4.0 made `{ 'type': ... }` the long form of a member.
@@ -36,7 +36,7 @@ impl<'i> QapiTypeRef<'i> {
     }
 
     /// Before 4.0: a string, an array, or an anonymous struct.
-    pub fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
         use super::qapi_members::take_members;
         let array_parser = take_list(qstring).map_opt(|items| match items.as_slice() {
             [name] => Some(name.clone()),
@@ -51,7 +51,7 @@ impl<'i> QapiTypeRef<'i> {
     }
 
     /// From 4.0: only a string or an array.
-    pub fn parse_v2(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse_v2(input: &'i str) -> IResult<&'i str, Self> {
         let array_parser = take_list(qstring).map_opt(|items| match items.as_slice() {
             [name] => Some(name.clone()),
             _ => None,

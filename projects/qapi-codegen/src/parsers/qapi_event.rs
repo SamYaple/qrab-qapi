@@ -22,10 +22,6 @@ const ABSENT: &[&str] = &["data", "if"];
 /// The keys that the parser reads; from 2.4 the others are kept for the
 /// validation.
 const READ: &[&str] = &["event", "boxed", "if", "features", "data"];
-pub fn take_event(input: &str) -> IResult<&str, QapiEvent<'_>> {
-    QapiEvent::parse(input)
-}
-
 #[derive(Debug, Clone, Default)]
 pub struct QapiEvent<'i> {
     pub name: QapiString<'i>,
@@ -55,14 +51,14 @@ impl<'i> QapiEvent<'i> {
     ///           '*features': FEATURES }
     ///
     /// The generators of releases before 2.1 have no events and skip them.
-    pub fn parse(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse(input: &'i str) -> IResult<&'i str, Self> {
         if super::parser_version() < (2, 1, 0) {
             return Err(nom::Err::Error(Error::new(input, ErrorKind::Tag)));
         }
         Self::parse_v1(input)
     }
 
-    pub fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
         let (input, doc) = opt(QapiDocumentation::parse).parse(input)?;
         let mut s = Self {
             doc,

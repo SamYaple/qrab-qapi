@@ -212,9 +212,12 @@ fn pins_are_checked_in_the_named_tree_only() {
         ],
     );
     git(&repo, &["update-ref", "refs/tags/v11.1.3", &commit]);
-    let pin = |tag: &str, commit: &str| PinnedVersion {
-        tag: tag.into(),
-        commit: commit.into(),
+    let pin = |tag: &str, commit: &str| {
+        let [pin]: [PinnedVersion; 1] = parse_pinned_versions(&format!("{tag} {commit}"))
+            .unwrap()
+            .try_into()
+            .unwrap();
+        pin
     };
     verify_pinned_versions(&repo, &[pin("v11.1.3", &commit)]).unwrap();
     assert!(matches!(

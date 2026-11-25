@@ -6,12 +6,21 @@
 //! never in the generated files, and regenerate them. The repository's
 //! `docs/codegen.md` describes how to run the generator, the pipeline and its
 //! correctness boundaries.
+//!
+//! ## API
+//!
+//! The API is the generator, [`unified::generate`] with the release pins of
+//! [`versions`] and the errors they report; items hidden from the
+//! documentation are internal to the generator and its tests and not part
+//! of the API.
 #![forbid(unsafe_code)]
 
 mod arrays;
 mod builtins;
 mod metadata_emit;
+#[doc(hidden)]
 pub mod parsers;
+#[doc(hidden)]
 pub mod qapi_ir;
 mod schema_docs;
 mod schema_names;
@@ -22,56 +31,43 @@ pub mod unified;
 mod union_layout;
 pub mod versions;
 
+#[doc(hidden)]
 pub use parsers::{
-    parser_version,
-    qapi_alternate::{QapiAlternate, take_alternate},
-    qapi_alternative::{QapiAlternative, take_alternative},
-    qapi_alternatives::{QapiAlternatives, take_alternatives},
-    qapi_branch::{QapiBranch, take_branch},
-    qapi_branches::{QapiBranches, take_branches},
-    qapi_command::{QapiCommand, take_command},
-    qapi_cond::{QapiCond, take_cond},
-    qapi_documentation::{
-        QapiDocumentation, QapiFreeformDoc, QapiSectionDocumentation, extract_since_from_comment,
-    },
-    qapi_enum::{QapiEnum, take_enum},
-    qapi_enum_value::{QapiEnumValue, take_enum_value},
-    qapi_event::{QapiEvent, take_event},
-    qapi_feature::{QapiFeature, take_feature},
-    qapi_features::{QapiFeatures, take_features},
-    qapi_include::{QapiInclude, take_include},
-    qapi_member::{QapiMember, take_member},
-    qapi_members::{MembersOrRef, QapiMembers, take_members, take_members_or_ref},
-    qapi_pragma::{QapiPragma, take_pragma},
-    qapi_schema::{QapiSchema, QapiSchemaToken, take_schema},
-    qapi_struct::{QapiStruct, take_struct},
-    qapi_type_ref::{QapiTypeRef, take_type_ref},
-    qapi_union::{QapiUnion, take_union},
-    qapi_variant::{QapiVariant, take_variant},
-    set_parser_version, with_parser_version,
+    parser_version, qapi_schema::QapiSchemaToken, set_parser_version, with_parser_version,
+};
+pub(crate) use parsers::{
+    qapi_alternate::QapiAlternate,
+    qapi_alternative::QapiAlternative,
+    qapi_alternatives::QapiAlternatives,
+    qapi_command::QapiCommand,
+    qapi_cond::QapiCond,
+    qapi_documentation::extract_since_from_comment,
+    qapi_enum::QapiEnum,
+    qapi_enum_value::QapiEnumValue,
+    qapi_event::QapiEvent,
+    qapi_feature::QapiFeature,
+    qapi_features::QapiFeatures,
+    qapi_include::QapiInclude,
+    qapi_member::QapiMember,
+    qapi_members::{MembersOrRef, QapiMembers},
+    qapi_pragma::QapiPragma,
+    qapi_schema::{QapiSchema, take_schema},
+    qapi_struct::QapiStruct,
+    qapi_type_ref::QapiTypeRef,
+    qapi_union::QapiUnion,
+    qapi_variant::QapiVariant,
 };
 
-pub use parsers::common::QapiString;
+pub(crate) use parsers::common::QapiString;
 pub use parsers::doc_comment::DocumentationError;
 
 use nom::{Finish, Parser, combinator::all_consuming, error::ErrorKind};
 use std::path::{Path, PathBuf};
 
-/// Schema text that the QAPI grammar of the current [`parser_version`] rejects.
+/// Schema text that the QAPI grammar of its release rejects, in
+/// [`ReadError::Parse`] and [`SchemaErrorKind::Parse`].
 ///
-/// ```
-/// use qapi_codegen::ParseErrorKind;
-///
-/// let schema = "{ 'enum': 'E', 'data': ['a'] }\n  { 'enum': 'F' 'data': [] }";
-/// let error = qapi_codegen::parse_schema_with_version(schema, (11, 1, 3)).unwrap_err();
-/// assert_eq!((error.line, error.column), (2, 17));
-/// assert_eq!(error.kind, ParseErrorKind::UnexpectedCharacter);
-/// assert_eq!(error.near, "'data': [] }");
-/// assert_eq!(
-///     error.to_string(),
-///     r#"QAPI parse error at line 2, column 17: unexpected character: "'data': [] }""#
-/// );
-/// ```
+/// [`SchemaErrorKind::Parse`]: crate::unified::SchemaErrorKind::Parse
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("{}", describe(self))]
 #[non_exhaustive]
@@ -274,6 +270,7 @@ pub enum IncludeError {
 }
 
 /// Parse one file with an explicit grammar, restoring the caller's parser version.
+#[doc(hidden)]
 pub fn parse_schema_with_version(
     input: &str,
     version: (u32, u32, u32),
@@ -286,6 +283,7 @@ pub fn parse_schema_with_version(
 /// Documentation comments must follow the rules of the release's own
 /// parser, which reports the first fault in the file, in an expression or
 /// in documentation.
+#[doc(hidden)]
 pub fn parse_schema(input: &str) -> Result<QapiSchema<'_>, ParseError> {
     if let Some((at, crash)) = parsers::common::unreadable_line(input) {
         return Err(parse_error(input, at, ParseErrorKind::Crash(crash)));
@@ -371,6 +369,7 @@ pub(crate) fn position(input: &str, offset: usize) -> (usize, usize) {
 /// The parser handles the format of each release directly, except that from
 /// 1.2 to 1.5 an expression with characters outside strings that QEMU's
 /// tokenizer drops, such as `true`, is read as that tokenizer reads it.
+#[doc(hidden)]
 pub fn read_schema_with_version(
     schema_file: &Path,
     version: Option<(u32, u32, u32)>,
@@ -460,6 +459,21 @@ fn read_schema_file(
 #[cfg(test)]
 mod tests {
     use super::{ParseErrorKind, ParserCrash, parse_schema_with_version};
+
+    /// A parse error gives the line and column where the grammar stops, and
+    /// the input from there, which its message quotes.
+    #[test]
+    fn a_parse_error_locates_its_fault_and_quotes_the_input_there() {
+        let schema = "{ 'enum': 'E', 'data': ['a'] }\n  { 'enum': 'F' 'data': [] }";
+        let error = parse_schema_with_version(schema, (11, 1, 3)).unwrap_err();
+        assert_eq!((error.line, error.column), (2, 17));
+        assert_eq!(error.kind, ParseErrorKind::UnexpectedCharacter);
+        assert_eq!(error.near, "'data': [] }");
+        assert_eq!(
+            error.to_string(),
+            r#"QAPI parse error at line 2, column 17: unexpected character: "'data': [] }""#
+        );
+    }
 
     /// Each kind of parse error where it arises, with its message.
     #[test]

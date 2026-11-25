@@ -5,7 +5,7 @@ use nom::IResult;
 use nom::Parser;
 
 /// Convenience wrapper for taking a list of features
-pub fn take_features(input: &str) -> IResult<&str, QapiFeatures<'_>> {
+pub(crate) fn take_features(input: &str) -> IResult<&str, QapiFeatures<'_>> {
     take_kv("features", QapiFeatures::parse).parse(input)
 }
 
@@ -15,11 +15,11 @@ pub struct QapiFeatures<'i>(pub Vec<QapiFeature<'i>>);
 impl<'i> QapiFeatures<'i> {
     /// Parses a `FEATURES` as defined in the QAPI spec:
     ///     FEATURES = [ FEATURE, ... ]
-    pub fn parse(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse(input: &'i str) -> IResult<&'i str, Self> {
         Self::parse_v1(input)
     }
 
-    pub fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
         take_list(QapiFeature::parse).map(Self).parse(input)
     }
 }

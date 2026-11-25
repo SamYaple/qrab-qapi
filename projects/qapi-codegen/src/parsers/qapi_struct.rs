@@ -18,10 +18,6 @@ const ABSENT: &[&str] = &["base", "if"];
 /// The keys that the parser reads; from 2.4 the others are kept for the
 /// validation.
 const READ: &[&str] = &["type", "struct", "base", "if", "features", "data"];
-pub fn take_struct(input: &str) -> IResult<&str, QapiStruct<'_>> {
-    QapiStruct::parse(input)
-}
-
 #[derive(Debug, Clone, Default)]
 pub struct QapiStruct<'i> {
     pub name: QapiString<'i>,
@@ -41,7 +37,7 @@ pub struct QapiStruct<'i> {
 
 impl<'i> QapiStruct<'i> {
     /// Dispatches to the correct versioned parser.
-    pub fn parse(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse(input: &'i str) -> IResult<&'i str, Self> {
         let v = parser_version();
         if v < (2, 4, 0) {
             Self::parse_v1(input)
@@ -53,7 +49,7 @@ impl<'i> QapiStruct<'i> {
     /// v1 (QEMU v1.0–v2.3.0): the `'type'` keyword. Their generators ignore
     /// an expression with the later `'struct'` keyword, and the keys they do
     /// not read: `'base'` before 1.7.
-    pub fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
         let (input, doc) = opt(QapiDocumentation::parse).parse(input)?;
         let mut s = Self {
             doc,
@@ -84,7 +80,7 @@ impl<'i> QapiStruct<'i> {
     }
 
     /// v2 (QEMU v2.4.0+): only `'struct'` keyword.
-    pub fn parse_v2(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse_v2(input: &'i str) -> IResult<&'i str, Self> {
         let (input, doc) = opt(QapiDocumentation::parse).parse(input)?;
         let mut s = Self {
             doc,

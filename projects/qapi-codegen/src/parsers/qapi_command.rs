@@ -33,10 +33,6 @@ const READ: &[&str] = &[
     "allow-preconfig",
     "data",
 ];
-pub fn take_command(input: &str) -> IResult<&str, QapiCommand<'_>> {
-    QapiCommand::parse(input)
-}
-
 #[derive(Debug, Clone, Default)]
 pub struct QapiCommand<'i> {
     pub name: QapiString<'i>,
@@ -61,7 +57,7 @@ pub struct QapiCommand<'i> {
 }
 
 impl<'i> QapiCommand<'i> {
-    pub fn parse(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse(input: &'i str) -> IResult<&'i str, Self> {
         let v = parser_version();
         if v < (2, 4, 0) {
             Self::parse_v1(input)
@@ -71,12 +67,12 @@ impl<'i> QapiCommand<'i> {
     }
 
     /// v1 (QEMU v1.0–v2.3.0): accepts `'gen': 'no'`/`'gen': 'yes'` (string booleans).
-    pub fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
         Self::parse_common(input, true)
     }
 
     /// v2 (QEMU v2.4.0+): only `'gen': false`/`'gen': true` (real booleans).
-    pub fn parse_v2(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse_v2(input: &'i str) -> IResult<&'i str, Self> {
         Self::parse_common(input, false)
     }
 

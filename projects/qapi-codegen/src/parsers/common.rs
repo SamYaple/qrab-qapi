@@ -13,9 +13,9 @@ use nom::sequence::{delimited, preceded};
 use std::{borrow::Cow, collections::HashSet};
 
 /// Decoded schema text; ordinary literals borrow their source.
-pub type QapiString<'i> = Cow<'i, str>;
+pub(crate) type QapiString<'i> = Cow<'i, str>;
 
-pub fn qcomment(input: &str) -> IResult<&str, &str> {
+pub(crate) fn qcomment(input: &str) -> IResult<&str, &str> {
     delimited(
         (tag("#"), not(peek(tag("#"))), space0),
         not_line_ending,
@@ -34,11 +34,11 @@ pub(crate) fn is_whitespace(c: char) -> bool {
 }
 
 /// QEMU reads schema files with Python's universal newline handling.
-pub fn line_ending(input: &str) -> IResult<&str, &str> {
+pub(crate) fn line_ending(input: &str) -> IResult<&str, &str> {
     alt((tag("\r\n"), tag("\n"), tag("\r"))).parse(input)
 }
 
-pub fn not_line_ending(input: &str) -> IResult<&str, &str> {
+pub(crate) fn not_line_ending(input: &str) -> IResult<&str, &str> {
     take_till(|c| c == '\r' || c == '\n').parse(input)
 }
 
@@ -59,11 +59,11 @@ pub(crate) fn lines(mut input: &str) -> impl Iterator<Item = &str> {
     })
 }
 
-pub fn whitespace0(input: &str) -> IResult<&str, &str> {
+pub(crate) fn whitespace0(input: &str) -> IResult<&str, &str> {
     take_while(is_whitespace).parse(input)
 }
 
-pub fn whitespace1(input: &str) -> IResult<&str, &str> {
+pub(crate) fn whitespace1(input: &str) -> IResult<&str, &str> {
     take_while1(is_whitespace).parse(input)
 }
 
@@ -72,7 +72,7 @@ pub(crate) fn line_space0(input: &str) -> IResult<&str, &str> {
     take_while(|c| is_whitespace(c) && !matches!(c, '\r' | '\n')).parse(input)
 }
 
-pub fn clean_lines(input: &str) -> IResult<&str, &str> {
+pub(crate) fn clean_lines(input: &str) -> IResult<&str, &str> {
     let comment = if super::parser_version() < (2, 9, 0) {
         any_comment
     } else {
@@ -92,7 +92,9 @@ pub(crate) fn expression_text<'i>(start: &'i str, rest: &'i str) -> &'i str {
     &start[..start.len() - rest.len()]
 }
 
-pub fn qtag<'i>(t: &'static str) -> impl Parser<&'i str, Output = &'i str, Error = Error<&'i str>> {
+pub(crate) fn qtag<'i>(
+    t: &'static str,
+) -> impl Parser<&'i str, Output = &'i str, Error = Error<&'i str>> {
     preceded(clean_lines, tag(t))
 }
 
@@ -185,7 +187,7 @@ pub fn qstring(input: &str) -> IResult<&str, QapiString<'_>> {
 
 /// `true` or `false`, which QEMU's lexer reads from 2.4: before, either is
 /// a stray character.
-pub fn qbool(input: &str) -> IResult<&str, &str> {
+pub(crate) fn qbool(input: &str) -> IResult<&str, &str> {
     let (rest, literal) = alt((qtag("true"), qtag("false"))).parse(input)?;
     if super::parser_version() < (2, 4, 0) {
         let at = input.trim_start_matches(is_whitespace);
@@ -196,7 +198,7 @@ pub fn qbool(input: &str) -> IResult<&str, &str> {
 
 /// Modern QAPI uses JSON separators. Retain the permissive legacy grammar
 /// only when parsing pre-1.6 schemas.
-pub fn take_list<'i, I, O>(
+pub(crate) fn take_list<'i, I, O>(
     item_parser: I,
 ) -> impl Parser<&'i str, Output = Vec<O>, Error = Error<&'i str>>
 where
@@ -207,7 +209,7 @@ where
 
 /// Parse a dict, refusing a duplicate key from QEMU 2.0. Before, the last
 /// value of a key replaces the earlier one, in the earlier one's place.
-pub fn take_dict<'i, I, O>(
+pub(crate) fn take_dict<'i, I, O>(
     item_parser: I,
 ) -> impl Parser<&'i str, Output = Vec<O>, Error = Error<&'i str>>
 where
@@ -330,7 +332,7 @@ where
     }
 }
 
-pub fn take_kv<'i, I, O>(
+pub(crate) fn take_kv<'i, I, O>(
     key: &'static str,
     value_parser: I,
 ) -> impl Parser<&'i str, Output = O, Error = Error<&'i str>>
@@ -734,7 +736,7 @@ pub enum Raw<'i> {
 
 impl<'i> RawValue<'i> {
     /// Whether Python takes the value for true.
-    pub fn truthy(&self) -> bool {
+    pub(crate) fn truthy(&self) -> bool {
         match &self.value {
             Raw::String(value) => !value.is_empty(),
             Raw::Bool(value) => *value,
@@ -747,10 +749,13 @@ impl<'i> RawValue<'i> {
 
 /// The key/value entries of a dict that the typed grammar refused, kept
 /// for the validation.
-pub type Malformed<'i> = Vec<(QapiString<'i>, RawValue<'i>)>;
+pub(crate) type Malformed<'i> = Vec<(QapiString<'i>, RawValue<'i>)>;
 
 /// The value of `key` among `malformed` ones.
-pub fn malformed<'t, 'i>(malformed: &'t Malformed<'i>, key: &str) -> Option<&'t RawValue<'i>> {
+pub(crate) fn malformed<'t, 'i>(
+    malformed: &'t Malformed<'i>,
+    key: &str,
+) -> Option<&'t RawValue<'i>> {
     malformed
         .iter()
         .find(|(name, _)| name.as_ref() == key)

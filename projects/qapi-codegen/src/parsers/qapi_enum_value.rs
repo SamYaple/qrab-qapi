@@ -11,7 +11,7 @@ use nom::Parser;
 use nom::branch::alt;
 use nom::error::{Error, ErrorKind};
 
-pub fn take_enum_value(input: &str) -> IResult<&str, QapiEnumValue<'_>> {
+pub(crate) fn take_enum_value(input: &str) -> IResult<&str, QapiEnumValue<'_>> {
     QapiEnumValue::parse(input)
 }
 
@@ -35,11 +35,11 @@ impl<'i> QapiEnumValue<'i> {
     ///            | { 'name': STRING,
     ///                '*if': COND,
     ///                '*features': FEATURES }
-    pub fn parse(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse(input: &'i str) -> IResult<&'i str, Self> {
         Self::parse_v1(input)
     }
 
-    pub fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
         let start = input;
         let (input, (enumvalue, simple)) = alt((
             Self::simple_parser.map(|value| (value, true)),

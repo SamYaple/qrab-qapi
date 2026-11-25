@@ -20,10 +20,6 @@ const ABSENT: &[&str] = &["if"];
 /// The keys that the parser reads; from 2.4 the others are kept for the
 /// validation.
 const READ: &[&str] = &["alternate", "data", "if", "features"];
-pub fn take_alternate(input: &str) -> IResult<&str, QapiAlternate<'_>> {
-    QapiAlternate::parse(input)
-}
-
 #[derive(Debug, Clone, Default)]
 pub struct QapiAlternate<'i> {
     pub name: QapiString<'i>,
@@ -47,7 +43,7 @@ impl<'i> QapiAlternate<'i> {
     ///               '*features': FEATURES }
     ///
     /// From 2.4: the generators of earlier releases skip it.
-    pub fn parse(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse(input: &'i str) -> IResult<&'i str, Self> {
         if super::parser_version() < (2, 4, 0) {
             let error = nom::error::Error::new(input, nom::error::ErrorKind::Tag);
             return Err(nom::Err::Error(error));
@@ -55,7 +51,7 @@ impl<'i> QapiAlternate<'i> {
         Self::parse_v1(input)
     }
 
-    pub fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
         let (input, doc) = opt(QapiDocumentation::parse).parse(input)?;
         let mut s = Self {
             doc,

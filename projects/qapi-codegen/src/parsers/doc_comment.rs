@@ -12,21 +12,7 @@ use super::parser_version;
 use crate::ParseErrorKind;
 
 /// A rule of documentation comments, as QEMU's parser applies it in the
-/// release being read.
-///
-/// ```
-/// use qapi_codegen::{DocumentationError, ParseErrorKind};
-///
-/// let schema = "##\n# @Example:\n#\n# @member:\n##\n{ 'struct': 'Example', 'data': { 'member': 'int' } }\n";
-/// let error = qapi_codegen::parse_schema_with_version(schema, (11, 1, 3)).unwrap_err();
-/// assert_eq!(error.line, 4);
-/// assert_eq!(
-///     error.kind,
-///     ParseErrorKind::Documentation(Box::new(DocumentationError::EmptySection {
-///         section: "Member".into()
-///     }))
-/// );
-/// ```
+/// release being read, in [`ParseErrorKind::Documentation`].
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum DocumentationError {

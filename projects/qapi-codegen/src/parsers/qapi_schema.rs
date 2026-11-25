@@ -19,7 +19,7 @@ use nom::combinator::recognize;
 use nom::multi::many0;
 use nom::sequence::terminated;
 
-pub fn take_schema(input: &str) -> IResult<&str, QapiSchema<'_>> {
+pub(crate) fn take_schema(input: &str) -> IResult<&str, QapiSchema<'_>> {
     QapiSchema::parse(input)
 }
 
@@ -105,11 +105,11 @@ impl<'i> QapiSchemaToken<'i> {
 #[derive(Debug, Clone)]
 pub struct QapiSchema<'i>(pub Vec<QapiSchemaToken<'i>>);
 impl<'i> QapiSchema<'i> {
-    pub fn parse(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse(input: &'i str) -> IResult<&'i str, Self> {
         Self::parse_v1(input)
     }
 
-    pub fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
         let mut token_parser = alt((
             whitespace1.map(|_| QapiSchemaToken::EmptyLines),
             QapiSectionDocumentation::parse.map(QapiSchemaToken::Doc),

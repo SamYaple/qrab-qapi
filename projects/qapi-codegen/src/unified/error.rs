@@ -958,8 +958,8 @@ impl<T, E: Into<SchemaError>> SchemaContext<T> for Result<T, E> {
 
 /// A quirk of an old schema that the generator tolerates.
 ///
-/// The registry builders collect them in
-/// [`UnifiedRegistry::warnings`](super::UnifiedRegistry::warnings); the
+/// [`generate`](super::generate) collects them in
+/// [`GeneratedOutput::warnings`](super::GeneratedOutput::warnings); the
 /// library never prints them.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("{tag}: {kind}")]
@@ -999,7 +999,8 @@ pub enum WarningKind {
     },
 }
 
-/// Why building a registry from a QEMU git tree failed.
+/// Why reading the releases of a QEMU git tree and merging them into one
+/// registry failed, in [`GenerateError::Registry`].
 ///
 /// The errors name a schema file of a release as git names a file of its tag,
 /// such as `v11.1.3:qga/qapi-schema.json`.

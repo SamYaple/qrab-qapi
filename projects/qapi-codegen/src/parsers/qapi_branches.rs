@@ -4,7 +4,7 @@ use super::vec_newtype;
 use nom::IResult;
 use nom::Parser;
 
-pub fn take_branches(input: &str) -> IResult<&str, QapiBranches<'_>> {
+pub(crate) fn take_branches(input: &str) -> IResult<&str, QapiBranches<'_>> {
     QapiBranches::parse(input)
 }
 
@@ -12,11 +12,11 @@ pub fn take_branches(input: &str) -> IResult<&str, QapiBranches<'_>> {
 pub struct QapiBranches<'i>(pub Vec<QapiBranch<'i>>);
 impl<'i> QapiBranches<'i> {
     /// BRANCHES = { BRANCH, ... }
-    pub fn parse(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse(input: &'i str) -> IResult<&'i str, Self> {
         Self::parse_v1(input)
     }
 
-    pub fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
+    pub(crate) fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
         take_dict(QapiBranch::parse).map(Self).parse(input)
     }
 }
