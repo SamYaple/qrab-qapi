@@ -19,6 +19,7 @@ QEMU (https://gitlab.com/qemu-project/qemu)
             needed for the wire protocol and no QEMU schema prose.
             projects/qapi-codegen/qemu-versions.lock lists QEMU release tag
             names and commit IDs. Building qrab-qapi with the opt-in
-            `schema-docs` feature copies QEMU's GPL-2.0-or-later schema
-            documentation into the build output for local reading; such
-            output must not be published or shipped.
+            `schema-docs` feature and QRAB_QAPI_SCHEMA_DOCS set to a QEMU
+            tree copies QEMU's GPL-2.0-or-later schema documentation into
+            the build output for local reading; such output must not be
+            published or shipped. The feature alone does not.

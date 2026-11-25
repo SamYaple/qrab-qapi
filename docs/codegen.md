@@ -151,11 +151,13 @@ cargo run --release --locked -p qrab-qapi-codegen -- vendor/qemu --qga \
 ```
 
 Normal builds consume these files directly and perform no network access or
-code generation; only the opt-in `schema-docs` feature generates at build
+code generation; only the opt-in `schema-docs` build generates at build
 time. `contrib/check-qapi.sh` regenerates both trees and requires them to
 match byte for byte. It also generates both with `--schema-docs`, diffs both
 modes with their `///` lines removed, and builds the API docs of the
-`schema-docs` build with warnings treated as errors.
+`schema-docs` build with warnings treated as errors. It checks that the
+rendered docs carry schema prose with both the feature and
+`QRAB_QAPI_SCHEMA_DOCS`, and none with only one of them.
 
 When advancing the QEMU baseline, regenerate both trees once the new release
 is pinned, and commit them with the pins. A release that starts a new series
@@ -164,34 +166,56 @@ compiles the generated code for.
 
 ## Reading the full QEMU docs locally
 
-The `qapi` crate's opt-in `schema-docs` feature regenerates the QMP and QGA
-modules during the build with the schema documentation included. Its output
-contains QEMU's GPL-2.0-or-later text, which must not be published, so build
-it into a target directory of its own rather than the `target/doc` that
-ordinary documentation builds use, as `contrib/check-qapi.sh` does:
+The `qapi` crate can regenerate the QMP and QGA modules during the build with
+the schema documentation included. That takes two settings:
+
+- the opt-in `schema-docs` feature, which adds `qapi-codegen` as a build
+  dependency;
+- `QRAB_QAPI_SCHEMA_DOCS`, the absolute path of a QEMU git tree that holds
+  the pinned release tags, which switches generation on. A relative path is
+  an error, since a build script runs in its package directory; an empty
+  value counts as unset.
+
+A dependency can enable a feature but cannot set the variable, so only the
+person running cargo turns the mode on. With the feature alone, as under
+`--all-features`, on docs.rs or when a dependent enables it, the build
+compiles the generator, uses the checked-in sources and prints a warning. The
+variable alone also builds the checked-in sources, with a warning. Cargo shows
+build script warnings only for local packages, so a registry dependency gives
+no sign of either. Default builds neither need a QEMU tree nor build
+`qapi-codegen`.
+
+With both, the build script writes both trees to the build's `OUT_DIR` and
+sets `cfg(qrab_qapi_schema_docs)`, and the crate compiles them in place of
+`src/generated` and `src/qga` under the same module paths. The crate's front
+page then says that it contains QEMU's GPL text. Its output must not be
+published, so build it into a target directory of its own rather than the
+`target/doc` that ordinary documentation builds use, as
+`contrib/schema-docs.sh` and `contrib/check-qapi.sh` do:
 
 ```sh
-cargo doc -p qrab-qapi --features schema-docs --target-dir target/schema-docs --open
+contrib/schema-docs.sh vendor/qemu --open
+# or by hand:
+QRAB_QAPI_SCHEMA_DOCS="$PWD/vendor/qemu" \
+  cargo doc -p qrab-qapi --features schema-docs --target-dir target/schema-docs --open
 ```
 
-Its build script reads the QEMU tree named by `QRAB_QAPI_QEMU_SRC`, defaulting
-to the workspace `vendor/qemu`, which must hold the pinned release tags. It
-writes both trees to the build's `OUT_DIR` and compiles them in place of
-`src/generated` and `src/qga` under the same module paths. Default builds
-neither need a QEMU tree nor build `qapi-codegen`. The feature adds roughly
-half a minute to a clean build, mostly generation across every pinned release.
-For hover docs in an editor, enable it in rust-analyzer, with its build in
-that target directory too:
+The mode adds roughly half a minute to a clean build in this workspace, mostly
+generation across every pinned release; a project that depends on `qrab-qapi`
+builds the generator unoptimized, so it takes longer there. For hover docs in
+an editor, enable it in rust-analyzer, with its build in that target directory
+too:
 
 ```json
 {
   "rust-analyzer.cargo.features": ["qrab-qapi/schema-docs"],
+  "rust-analyzer.cargo.extraEnv": { "QRAB_QAPI_SCHEMA_DOCS": "/absolute/path/to/qemu" },
   "rust-analyzer.cargo.targetDir": "target/schema-docs"
 }
 ```
 
 The docs-enabled build is for local reading. The QEMU text in it is
-GPL-2.0-or-later; do not publish or ship artifacts built with the feature.
+GPL-2.0-or-later; do not publish or ship artifacts built with it.
 
 ## Validation
 

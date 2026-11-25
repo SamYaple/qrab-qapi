@@ -101,22 +101,32 @@ checked-in generated code keeps the facts needed for the wire protocol
 (names, types and version information) and no schema prose; each generated
 item points to QEMU's own QMP or guest agent reference instead.
 
-The opt-in `schema-docs` feature of `qrab-qapi`, and the generator's
-`--schema-docs` flag, render QEMU's schema prose as rustdoc so you can read
-the full documentation locally. Build it into a target directory of its own,
-so that the GPL-2.0-or-later text never mixes with the documentation in
-`target/doc`, which may be published:
+The generator's `--schema-docs` flag, and the `qrab-qapi` build with both the
+opt-in `schema-docs` feature and the `QRAB_QAPI_SCHEMA_DOCS` environment
+variable, render QEMU's schema prose as rustdoc so you can read the full
+documentation locally. The feature only compiles the generator into the build
+script; the variable, the absolute path of a QEMU git tree with the pinned
+release tags, switches generation on. A dependency can enable the feature but
+cannot set the variable, so `--all-features`, docs.rs and dependents that
+enable the feature get the ordinary, prose-free build; so does the variable
+without the feature. Either half alone makes cargo print a warning, for local
+packages only. Build the documentation into a target directory of its own, so
+that the GPL-2.0-or-later text never mixes with the documentation in
+`target/doc`, which may be published.
+[`contrib/schema-docs.sh`](contrib/schema-docs.sh) sets all three:
 
 ```sh
-cargo doc -p qrab-qapi --features schema-docs --target-dir target/schema-docs --open
+contrib/schema-docs.sh vendor/qemu --open
+# or by hand:
+QRAB_QAPI_SCHEMA_DOCS="$PWD/vendor/qemu" \
+  cargo doc -p qrab-qapi --features schema-docs --target-dir target/schema-docs --open
 ```
 
-**Output built with `schema-docs` or `--schema-docs` includes QEMU's
-GPL-2.0-or-later documentation text. It is for local reading only: do not
-publish or ship it.** That includes generated sources, built crates and
-binaries, and rendered documentation. The feature needs a QEMU git tree with
-the pinned release tags, named by `QRAB_QAPI_QEMU_SRC` or found at
-`vendor/qemu`. See [NOTICE](NOTICE).
+**Output built with `schema-docs` and `QRAB_QAPI_SCHEMA_DOCS`, or with
+`--schema-docs`, includes QEMU's GPL-2.0-or-later documentation text. It is
+for local reading only: do not publish or ship it.** That includes generated
+sources, built crates and binaries, and rendered documentation, whose front
+page says so. See [NOTICE](NOTICE).
 
 ## Building, testing and regenerating
 
@@ -149,7 +159,7 @@ four crates, tests the generator against QEMU's own parser, regenerates QMP
 and QGA and compares the output byte for byte with the checked-in sources,
 compiles `qrab-qapi` for each maintained QEMU series and builds the API
 documentation with warnings treated as errors. The submodule is used only by
-the generator, its tests and the `schema-docs` feature; the published crates
+the generator, its tests and the `schema-docs` build; the published crates
 do not include it.
 
 Tests against real QEMU binaries are explicit and opt-in.

@@ -32,15 +32,21 @@ that range of QEMU releases. Without them the complete history is available.
 
 ## The `schema-docs` feature
 
-The generated sources carry no QEMU schema documentation. The opt-in
-`schema-docs` feature regenerates them during the build with QEMU's schema
-prose as rustdoc, for reading the full documentation locally. It needs a QEMU
-git tree with the pinned release tags, named by `QRAB_QAPI_QEMU_SRC`.
+The generated sources carry no QEMU schema documentation. To read the full
+documentation locally, enable the opt-in `schema-docs` feature and set
+`QRAB_QAPI_SCHEMA_DOCS` to the absolute path of a QEMU git tree with the
+pinned release tags: the build then regenerates the modules with QEMU's schema
+prose as rustdoc. The feature alone only compiles the generator and builds the
+checked-in sources, with a warning, so it is safe under `--all-features` and
+for a dependent that enables it. The variable alone does nothing; cargo shows
+the build script's warning about it only for local packages, not for
+registry dependencies.
 
 ## License
 
 Apache-2.0. QEMU's QAPI schemas and their documentation comments are
 GPL-2.0-or-later; the generated code keeps only the names, types and version
 facts needed for the wire protocol. Output built with the `schema-docs`
-feature includes QEMU's GPL-2.0-or-later documentation text: it is for local
-reading, so do not publish or ship artifacts built with it.
+feature and `QRAB_QAPI_SCHEMA_DOCS` includes QEMU's GPL-2.0-or-later
+documentation text: it is for local reading, so do not publish or ship
+artifacts built with it.

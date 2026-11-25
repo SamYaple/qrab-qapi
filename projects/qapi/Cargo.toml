@@ -14,8 +14,9 @@ categories = ["api-bindings", "virtualization", "emulators"]
 include = ["/src/**", "/tests/**", "/build.rs", "/README.md", "/LICENSE", "/NOTICE"]
 
 [package.metadata.docs.rs]
-# docs.rs builds the default features only. Never enable `schema-docs`
-# there: its output carries QEMU's GPL-2.0-or-later schema documentation.
+# docs.rs builds the default features only. Keep `schema-docs` off there:
+# without QRAB_QAPI_SCHEMA_DOCS it renders no QEMU schema documentation, but
+# the release checks refuse it all the same.
 targets = ["x86_64-unknown-linux-gnu"]
 
 [lib]
@@ -28,9 +29,11 @@ thiserror = { workspace = true }
 qapi-macros = { workspace = true }
 
 [features]
-# Opt-in local reading build: regenerate the QMP/QGA types from a QEMU tree
-# with QEMU's GPL-2.0-or-later schema documentation as rustdoc. The checked-in
-# generated sources carry no schema documentation.
+# Opt-in local reading build. The feature only compiles the generator into
+# build.rs; setting QRAB_QAPI_SCHEMA_DOCS to the absolute path of a QEMU tree
+# as well regenerates the QMP/QGA types with QEMU's GPL-2.0-or-later schema
+# documentation as rustdoc. Without the variable the build uses the checked-in
+# generated sources, which carry no schema documentation.
 schema-docs = ["dep:qapi-codegen"]
 
 [build-dependencies]

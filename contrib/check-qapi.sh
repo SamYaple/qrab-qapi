@@ -50,12 +50,37 @@ for qapi_tree in qmp qga; do
             "$qapi_check_dir/code" "$qapi_check_dir/code-docs"
     done <"$qapi_plain.files"
 done
-# Its rustdoc carries the GPL prose, so it never goes to the ordinary target/doc.
+# The schema-docs build needs both the feature and QRAB_QAPI_SCHEMA_DOCS. Its
+# rustdoc carries the GPL prose, so it never goes to the ordinary target/doc.
 qapi_schema_docs_target=${CARGO_TARGET_DIR:-target}/schema-docs
-QRAB_QAPI_QEMU_SRC="$PWD/vendor/qemu" \
-    cargo check --locked -p qrab-qapi --features schema-docs --target-dir "$qapi_schema_docs_target"
-QRAB_QAPI_QEMU_SRC="$PWD/vendor/qemu" RUSTDOCFLAGS="${RUSTDOCFLAGS:+$RUSTDOCFLAGS }-D warnings" \
+qapi_schema_docs_probes=(
+    'Allow client connections for VNC'
+    'Get some information about the guest agent'
+)
+qapi_has_schema_docs() {  # target dir
+    local qapi_probe
+    for qapi_probe in "${qapi_schema_docs_probes[@]}"; do
+        grep -rqF "$qapi_probe" "$1/doc/qapi" ||
+            { echo "no schema documentation in $1/doc/qapi: \"$qapi_probe\"" >&2; return 1; }
+    done
+}
+qapi_no_schema_docs() {  # target dir
+    local qapi_probe
+    [[ -f $1/doc/qapi/index.html ]] || { echo "no documentation in $1/doc/qapi" >&2; return 1; }
+    for qapi_probe in "${qapi_schema_docs_probes[@]}"; do
+        ! grep -rqF "$qapi_probe" "$1/doc/qapi" ||
+            { echo "schema documentation in $1/doc/qapi: \"$qapi_probe\"" >&2; return 1; }
+    done
+}
+# The feature alone builds the checked-in modules.
+env -u QRAB_QAPI_SCHEMA_DOCS \
     cargo doc --locked --no-deps -p qrab-qapi --features schema-docs --target-dir "$qapi_schema_docs_target"
+qapi_no_schema_docs "$qapi_schema_docs_target"
+QRAB_QAPI_SCHEMA_DOCS="$PWD/vendor/qemu" \
+    cargo check --locked -p qrab-qapi --features schema-docs --target-dir "$qapi_schema_docs_target"
+QRAB_QAPI_SCHEMA_DOCS="$PWD/vendor/qemu" RUSTDOCFLAGS="${RUSTDOCFLAGS:+$RUSTDOCFLAGS }-D warnings" \
+    cargo doc --locked --no-deps -p qrab-qapi --features schema-docs --target-dir "$qapi_schema_docs_target"
+qapi_has_schema_docs "$qapi_schema_docs_target"
 
 # Compile each maintained series using its latest pinned patch.
 for qapi_series in 9.2 10.0 10.1 10.2 11.0 11.1; do
@@ -85,5 +110,8 @@ fi
 # Leave the ordinary development build with the complete API surface.
 env -u QEMU_MIN_VERSION -u QEMU_MAX_VERSION cargo check --locked -p qrab-qapi
 
-RUSTDOCFLAGS="${RUSTDOCFLAGS:+$RUSTDOCFLAGS }-D warnings" \
+# The variable alone changes nothing either: the ordinary documentation, built
+# with it set, carries no schema prose.
+QRAB_QAPI_SCHEMA_DOCS="$PWD/vendor/qemu" RUSTDOCFLAGS="${RUSTDOCFLAGS:+$RUSTDOCFLAGS }-D warnings" \
     cargo doc --locked --no-deps -p qrab-qapi-codegen -p qrab-qapi-macros "${qapi_crates[@]}"
+qapi_no_schema_docs "${CARGO_TARGET_DIR:-target}"

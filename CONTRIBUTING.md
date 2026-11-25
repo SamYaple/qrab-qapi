@@ -57,7 +57,9 @@ bash contrib/check-qapi.sh
 - the regeneration of QMP and QGA, compared byte for byte with the
   checked-in sources
 - a `--schema-docs` regeneration, which may differ only in documentation
-  lines, and the documentation of `qrab-qapi` built with it
+  lines, and the documentation of `qrab-qapi` built with it, which carries
+  schema prose only with both the `schema-docs` feature and
+  `QRAB_QAPI_SCHEMA_DOCS`
 - builds of `qrab-qapi` with `QEMU_MIN_VERSION` and `QEMU_MAX_VERSION`
   bounds for each maintained QEMU series
 - strict Clippy on all four crates, the generated sources included, and
@@ -130,9 +132,10 @@ cargo run --release --locked -p qrab-qapi-codegen -- vendor/qemu --qga \
 Commit the regenerated output together with the change that produced it, so
 every commit passes the byte-for-byte check in `contrib/check-qapi.sh`.
 Never commit output generated with `--schema-docs` or built with the
-`schema-docs` feature: it contains QEMU's GPL-2.0-or-later documentation
-text (see [NOTICE](NOTICE)). Generator internals, the compatibility policy
-and the correctness rules are in [docs/codegen.md](docs/codegen.md).
+`schema-docs` feature and `QRAB_QAPI_SCHEMA_DOCS`: it contains QEMU's
+GPL-2.0-or-later documentation text (see [NOTICE](NOTICE)). Generator
+internals, the compatibility policy and the correctness rules are in
+[docs/codegen.md](docs/codegen.md).
 
 ### Advancing the QEMU baseline
 
