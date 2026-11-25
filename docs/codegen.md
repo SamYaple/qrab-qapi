@@ -612,7 +612,10 @@ Generated command constants describe the newest schema flags. The
 query their added/removed ranges for a particular peer release, and repeated
 macro ranges combine independently of order. Command `is_unstable(version)`
 queries the peer release; reflection and the `UNSTABLE` constant describe the
-newest declaration.
+newest declaration. The macro sets every constant; a command implemented by
+hand sets only `Returns`, `NAME` and `AVAILABLE_SINCE`, and the others default
+to a stable, still available command that replies and runs neither out of band
+nor in preconfig.
 
 A command whose return type changed across the releases that a build
 supports has an enum as its `Returns`, with a variant per return type named

@@ -86,13 +86,13 @@ pub trait QapiFlatUnion: Sized {
 pub trait QapiCommand: serde::Serialize {
     type Returns: serde::de::DeserializeOwned + 'static;
     const NAME: &'static str;
-    const ALLOW_OOB: bool;
-    const ALLOW_PRECONFIG: bool;
-    const SUCCESS_RESPONSE: bool;
-    const UNSTABLE: bool;
+    const ALLOW_OOB: bool = false;
+    const ALLOW_PRECONFIG: bool = false;
+    const SUCCESS_RESPONSE: bool = true;
+    const UNSTABLE: bool = false;
     const AVAILABLE_SINCE: (u32, u32, u32);
-    const REMOVED_IN: Option<(u32, u32, u32)>;
-    const PRECONFIG_SINCE: Option<(u32, u32, u32)>;
+    const REMOVED_IN: Option<(u32, u32, u32)> = None;
+    const PRECONFIG_SINCE: Option<(u32, u32, u32)> = None;
 
     fn allows_oob(_version: (u32, u32, u32)) -> bool {
         Self::ALLOW_OOB

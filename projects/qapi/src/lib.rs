@@ -60,27 +60,58 @@ pub mod __private {
 }
 
 /// Trait implemented by QAPI command types.
+///
+/// `#[qapi]` implements it for the generated commands, and a crate may
+/// implement it by hand for a command of its own, such as one that its guest
+/// agent adds. Such an implementation needs only [`Returns`](Self::Returns),
+/// [`NAME`](Self::NAME) and [`AVAILABLE_SINCE`](Self::AVAILABLE_SINCE): the
+/// flag constants default to a stable command that is still available, runs
+/// neither out of band nor before the machine is configured and replies when
+/// it succeeds, and the per-release methods default to those constants.
+/// Items added to the trait later will have defaults too, so such an
+/// implementation keeps compiling.
+///
+/// ```
+/// use qapi::QapiCommand;
+///
+/// #[derive(serde::Serialize)]
+/// struct QrabPing {}
+///
+/// impl QapiCommand for QrabPing {
+///     type Returns = ();
+///     const NAME: &'static str = "qrab-ping";
+///     const AVAILABLE_SINCE: (u32, u32, u32) = (1, 0, 0);
+/// }
+///
+/// assert!(QrabPing::SUCCESS_RESPONSE && !QrabPing::allows_oob((11, 1, 3)));
+/// assert_eq!((QrabPing::REMOVED_IN, QrabPing::PRECONFIG_SINCE), (None, None));
+/// ```
 pub trait QapiCommand: serde::Serialize {
     /// The type of a successful reply. For a command whose return type
     /// changed across the releases of the build, an enum with a variant per
     /// return type, named by the release that introduced it, which decodes
     /// into the variant of the peer's release in a [`with_version`] scope.
     type Returns: serde::de::DeserializeOwned + 'static;
+    /// The command's name on the wire.
     const NAME: &'static str;
     /// OOB flag in the newest represented schema; use `allows_oob` for a peer.
-    const ALLOW_OOB: bool;
-    /// Preconfig flag in the newest represented schema.
-    const ALLOW_PRECONFIG: bool;
-    /// Reply flag in the newest represented schema.
-    const SUCCESS_RESPONSE: bool;
-    /// Unstable marker in the newest represented schema.
-    const UNSTABLE: bool;
+    /// `false` by default.
+    const ALLOW_OOB: bool = false;
+    /// Preconfig flag in the newest represented schema. `false` by default.
+    const ALLOW_PRECONFIG: bool = false;
+    /// Reply flag in the newest represented schema. `true` by default.
+    const SUCCESS_RESPONSE: bool = true;
+    /// Unstable marker in the newest represented schema. `false` by default.
+    const UNSTABLE: bool = false;
+    /// The first QEMU release with the command.
     const AVAILABLE_SINCE: (u32, u32, u32);
-    const REMOVED_IN: Option<(u32, u32, u32)>;
+    /// The first QEMU release without the command, `None` while the newest
+    /// has it, as by default.
+    const REMOVED_IN: Option<(u32, u32, u32)> = None;
     /// The QEMU version when `allow-preconfig` was added for this command,
     /// in its first run of releases that the build supports. `None` if no
-    /// release of the build supports preconfig for it.
-    const PRECONFIG_SINCE: Option<(u32, u32, u32)>;
+    /// release of the build supports preconfig for it, as by default.
+    const PRECONFIG_SINCE: Option<(u32, u32, u32)> = None;
 
     /// Whether this command permits out-of-band execution on a peer release.
     fn allows_oob(_version: (u32, u32, u32)) -> bool {

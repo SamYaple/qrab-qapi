@@ -117,16 +117,18 @@ An older agent, or one started with the command disabled (`--block-rpcs`,
 the handshake fails at once with `Error::SyncUnsupported` holding that reply,
 instead of waiting for its deadline.
 
-QGA calls use `&mut self` and `qapi::qga::commands`. The session is taken out of
-the client before socket I/O and restored only after a complete valid response,
-or after a timeout before any byte of the request was written. A timeout after
-that, cancellation, malformed JSON or I/O failure therefore closes the socket
-instead of letting a late reply satisfy the next command. Reconnect to perform
-synchronization again. Closing a socket does not roll back guest-side
-resources or effects; a known file handle may require explicit cleanup through
-a newly synchronized connection. A valid agent error or a typed payload decoding
-error leaves an aligned session usable. `is_closed()` and `shutdown()` expose
-this state explicitly.
+QGA calls use `&mut self` and `qapi::qga::commands`, or a command that a crate
+implements `QapiCommand` for by hand, as for one that its own agent adds. The
+trait gives defaults to all but `Returns`, `NAME` and `AVAILABLE_SINCE`. The
+session is taken out of the client before socket I/O and restored only after a
+complete valid response, or after a timeout before any byte of the request was
+written. A timeout after that, cancellation, malformed JSON or I/O failure
+therefore closes the socket instead of letting a late reply satisfy the next
+command. Reconnect to perform synchronization again. Closing a socket does not
+roll back guest-side resources or effects; a known file handle may require
+explicit cleanup through a newly synchronized connection. A valid agent error or
+a typed payload decoding error leaves an aligned session usable. `is_closed()`
+and `shutdown()` expose this state explicitly.
 
 The guest agent runs inside the guest and is not trusted. Its replies are
 limited to `max_message_bytes` and decoded straight into their return type.
