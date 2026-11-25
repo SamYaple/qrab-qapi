@@ -958,3 +958,81 @@ fn undefined_types_are_unsupported_where_qemu_accepts_them() {
         }
     );
 }
+
+#[test]
+fn a_declared_member_does_not_take_a_same_named_catch_all() {
+    // A gen:false command's flattened catch-all `arguments` and a declared
+    // member of that name are different fields, also across releases.
+    let catch_all = "{'command':'c','data':{'driver':'str'},'gen':false}";
+    let declared = "##\n# @c:\n#\n# @driver: the driver\n#\n# @arguments: declared\n##\n\
+                    {'command':'c','data':{'driver':'str','arguments':'str'}}";
+    let both = "##\n# @c:\n#\n# @driver: the driver\n#\n# @arguments: declared\n##\n\
+                {'command':'c','data':{'driver':'str','arguments':'str'},'gen':false}";
+    let range = |since: u32, until: Option<u32>| ((9, since, 0), until.map(|until| (9, until, 0)));
+    for (releases, expected) in [
+        (
+            [("v9.0.0", both), ("v9.1.0", both), ("v9.2.0", both)],
+            vec![(false, range(0, None)), (true, range(0, None))],
+        ),
+        (
+            [
+                ("v9.0.0", catch_all),
+                ("v9.1.0", declared),
+                ("v9.2.0", catch_all),
+            ],
+            vec![
+                (true, range(2, None)),
+                (true, range(0, Some(1))),
+                (false, range(1, Some(2))),
+            ],
+        ),
+        (
+            [
+                ("v9.0.0", declared),
+                ("v9.1.0", catch_all),
+                ("v9.2.0", declared),
+            ],
+            vec![
+                (false, range(2, None)),
+                (false, range(0, Some(1))),
+                (true, range(1, Some(2))),
+            ],
+        ),
+    ] {
+        let registry = registry(&releases).unwrap();
+        let UnifiedType::Struct(command) = &registry.types["C"] else {
+            panic!("the command is a struct")
+        };
+        let arguments: Vec<_> = command
+            .ir
+            .fields
+            .iter()
+            .filter(|field| field.name != "driver")
+            .collect();
+        let found: Vec<_> = arguments
+            .iter()
+            .map(|field| {
+                let versions = &command.field_versions[&field.name];
+                (
+                    field.meta.attributes.contains(&Attribute::new("flatten")),
+                    (versions.since, versions.until),
+                )
+            })
+            .collect();
+        assert_eq!(found, expected, "{releases:?}");
+        for field in arguments {
+            if field.meta.attributes.contains(&Attribute::new("flatten")) {
+                assert_eq!(field.r#type, "HashMap<String, serde_json::Value>");
+                assert_eq!(
+                    field.meta.doc.as_deref(),
+                    Some("Additional command arguments not modeled by this schema.")
+                );
+                assert_eq!(field.meta.schema_doc, None);
+            } else {
+                assert_eq!(field.r#type, "str");
+                assert_eq!(field.meta.doc, None);
+                assert_eq!(field.meta.schema_doc.as_deref(), Some("declared"));
+            }
+        }
+    }
+}

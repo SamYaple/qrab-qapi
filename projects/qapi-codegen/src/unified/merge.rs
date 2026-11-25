@@ -341,8 +341,20 @@ pub(super) fn field_rust_name(f: &StructField) -> String {
     crate::qapi_ir::rustify_field(&f.name)
 }
 
+fn flattened(field: &StructField) -> bool {
+    field.meta.attributes.contains(&Attribute::new("flatten"))
+}
+
+/// A flattened field, such as a gen:false command's catch-all `arguments`,
+/// and a declared member of the same name are different fields: neither
+/// takes the other's attributes or documentation.
+fn same_field_kind(left: &StructField, right: &StructField) -> bool {
+    flattened(left) == flattened(right)
+}
+
 fn same_field_shape(left: &StructField, right: &StructField) -> bool {
-    rustify_type(&left.r#type) == rustify_type(&right.r#type)
+    same_field_kind(left, right)
+        && rustify_type(&left.r#type) == rustify_type(&right.r#type)
         && left.array == right.array
         && left.optional == right.optional
         && (left.optional || condition(&left.meta).is_some() == condition(&right.meta).is_some())
@@ -465,6 +477,13 @@ pub(super) fn merge_struct(
                     .iter_mut()
                     .find(|f| f.name == field.name)
                     .expect("every field with a range is in the IR");
+                if !same_field_kind(existing_field, field) {
+                    // The other kind was retired into the history above.
+                    let mut value = field.clone();
+                    clean_docs(&mut value.meta);
+                    *existing_field = value;
+                    continue;
+                }
                 existing_field.r#type = field.r#type.clone();
                 existing_field.optional = field.optional;
                 existing_field.array = field.array;
