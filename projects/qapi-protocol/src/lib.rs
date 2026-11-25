@@ -25,6 +25,10 @@ use std::{fmt, sync::Arc, time::Duration};
 /// [`Encode`](Error::Encode), [`InvalidRequest`](Error::InvalidRequest) and
 /// a [`Timeout`](Error::Timeout) in [`TimeoutPhase::BeforeDispatch`]) leave
 /// the connection usable. Every other failure closes it.
+///
+/// The clients and mock sessions of this crate create these errors; match
+/// on them, but do not build them. Variants with named fields cannot be
+/// built outside the crate, and new variants and fields may be added.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum Error {
@@ -34,6 +38,7 @@ pub enum Error {
     /// The command, or a type, variant or field it uses, does not exist in
     /// the peer's release. Nothing was sent.
     #[error("{name} is not available in QEMU {}.{}.{}", .version.0, .version.1, .version.2)]
+    #[non_exhaustive]
     Unavailable {
         /// The QAPI command name, or the Rust name of the type, variant or
         /// field, as [`qapi::EncodeError::Unavailable`] names it.
@@ -54,13 +59,15 @@ pub enum Error {
     /// The peer sent a message larger than the limit in effect. The client
     /// stops reading it at the limit.
     #[error("message from the peer exceeds {limit} bytes")]
+    #[non_exhaustive]
     MessageTooLarge {
         /// The limit, in JSON bytes.
         limit: usize,
     },
-    /// The peer sent valid JSON that breaks the protocol.
+    /// The peer sent valid JSON that breaks the protocol, or a mock session
+    /// received a request that breaks it. The violation names the rule.
     #[error("protocol violation: {0}")]
-    Protocol(String),
+    Protocol(#[source] ProtocolViolation),
     /// The guest agent's `guest-info` reports a version that is not a
     /// release number, so no client was returned.
     #[error(transparent)]
@@ -76,13 +83,19 @@ pub enum Error {
     SyncUnsupported(#[source] RemoteError),
     /// A deadline elapsed; the phase says whether the request reached the peer.
     #[error("timed out {phase}")]
+    #[non_exhaustive]
     Timeout { phase: TimeoutPhase },
     /// Connecting, reading or writing failed.
     #[error(transparent)]
     Io(#[from] std::io::Error),
-    /// The request or the options are invalid. Nothing was sent.
+    /// The operating system could not supply the random nonce that the
+    /// guest agent handshake synchronizes with. No client was returned.
+    #[error("cannot generate the guest agent sync nonce: {0}")]
+    SyncNonce(#[source] std::io::Error),
+    /// The request or the options are invalid. Nothing was sent. The kind
+    /// names the rule it breaks.
     #[error("invalid request: {0}")]
-    InvalidRequest(String),
+    InvalidRequest(#[source] InvalidRequestKind),
     /// The connection was already closed.
     #[error("connection closed")]
     Closed,
@@ -93,6 +106,178 @@ pub enum Error {
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+/// Why [`Error::InvalidRequest`] refused a request or the client options.
+/// Nothing was sent.
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum InvalidRequestKind {
+    /// A [`ClientOptions`] field is zero or out of range: a timeout that
+    /// cannot be added to the current time, or an event capacity above
+    /// Tokio's semaphore limit.
+    #[error("the {option} option must be nonzero and in range")]
+    #[non_exhaustive]
+    Options {
+        /// The field's name, such as `"command_timeout"`.
+        option: &'static str,
+    },
+    /// A raw command has an empty name.
+    #[error("the command name is empty")]
+    EmptyCommandName,
+    /// A raw command's arguments are not a JSON object.
+    #[error("the arguments of {command} must be a JSON object")]
+    #[non_exhaustive]
+    ArgumentsNotObject {
+        /// The command name.
+        command: String,
+    },
+    /// A raw QMP request is not a JSON object.
+    #[error("QMP request must be an object")]
+    RequestNotObject,
+    /// A raw QMP request lacks the execution verb the call expects, or has
+    /// another member than that verb and `arguments`, such as an ID, or
+    /// arguments that are not an object.
+    #[error("expected {verb} and optional object arguments; IDs are owned by the connection")]
+    #[non_exhaustive]
+    RequestEnvelope {
+        /// The verb the call expects, `execute` or `exec-oob`.
+        verb: &'static str,
+    },
+    /// The encoded request exceeds
+    /// [`ClientOptions::max_message_bytes`].
+    #[error("JSON request of {size} bytes exceeds {limit} bytes")]
+    #[non_exhaustive]
+    RequestTooLarge {
+        /// The request's JSON bytes, excluding the line terminator.
+        size: usize,
+        /// The limit in effect.
+        limit: usize,
+    },
+    /// The command sends no success response in the peer's release, so
+    /// waiting for one would never end. A guest agent sends such a command
+    /// with [`Qga::send_no_response`](qga::Qga::send_no_response).
+    #[error("{command} does not send a success response; send it with send_no_response")]
+    #[non_exhaustive]
+    NoSuccessResponse {
+        /// The command name.
+        command: String,
+    },
+    /// [`Qga::send_no_response`](qga::Qga::send_no_response) was given a
+    /// command that sends a response in the agent's release.
+    #[error("{command} has a response; use execute")]
+    #[non_exhaustive]
+    HasResponse {
+        /// The command name.
+        command: String,
+    },
+    /// The command does not allow out-of-band execution in the peer's
+    /// release.
+    #[error("{command} does not allow OOB execution")]
+    #[non_exhaustive]
+    OobNotAllowed {
+        /// The command name.
+        command: String,
+    },
+    /// An out-of-band call on a connection whose peer did not advertise
+    /// the `oob` capability.
+    #[error("OOB was not negotiated")]
+    OobNotNegotiated,
+    /// More file descriptors than one message carries.
+    #[error("at most {max} file descriptors fit in one message, not {count}")]
+    #[non_exhaustive]
+    TooManyFds {
+        /// The descriptors passed.
+        count: usize,
+        /// Linux's `SCM_MAX_FD`.
+        max: usize,
+    },
+    /// The call's timeout cannot be added to the current time.
+    #[error("the timeout of {timeout:?} is too large")]
+    #[non_exhaustive]
+    TimeoutTooLarge {
+        /// The timeout passed.
+        timeout: Duration,
+    },
+    /// A per-call reply limit of zero.
+    #[error("the reply limit must be nonzero")]
+    ZeroReplyLimit,
+}
+
+/// The protocol rule an [`Error::Protocol`] broke.
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum ProtocolViolation {
+    /// A message is valid JSON but not an object. For a scalar, the source
+    /// says what was found instead.
+    #[error("message must be a JSON object{}", .0.as_ref().map(|error| format!(": {error}")).unwrap_or_default())]
+    NotAnObject(#[source] Option<serde_json::Error>),
+    /// The input ended inside a message.
+    #[error("truncated JSON message at EOF")]
+    Truncated,
+    /// A response has both or neither of `return` and `error`, or also
+    /// event or greeting members.
+    #[error("response must contain exactly one of return or error")]
+    ResponseShape,
+    /// A response's `error` is not an object of string `class` and `desc`.
+    #[error("invalid error response: {0}")]
+    InvalidErrorResponse(#[source] serde_json::Error),
+    /// A QMP response without an ID that is not an error reply; an ID-less
+    /// error reply is returned as [`Error::Remote`] instead.
+    #[error("QMP response has no ID")]
+    MissingResponseId,
+    /// A QMP reply arrived before the client finished writing its request.
+    #[error("response preceded completion of its request")]
+    EarlyResponse,
+    /// The connection used up its request IDs.
+    #[error("QMP request ID space exhausted")]
+    IdsExhausted,
+    /// The first QMP message is not the greeting.
+    #[error("expected the QMP greeting")]
+    MissingGreeting,
+    /// The QMP greeting does not have the expected members.
+    #[error("invalid QMP greeting: {0}")]
+    InvalidGreeting(#[source] serde_json::Error),
+    /// The reply to `qmp_capabilities` has another ID than the request's.
+    #[error("capabilities reply has wrong or missing ID")]
+    CapabilitiesReplyId,
+    /// The reply to `qmp_capabilities` is not an empty object.
+    #[error("capabilities reply must return an empty object")]
+    CapabilitiesReply,
+    /// An event also has response members (`return`, `error` or `id`).
+    #[error("event mixed with response fields")]
+    EventWithResponseFields,
+    /// An event's `data` is not an object.
+    #[error("event data must be an object")]
+    EventDataNotObject,
+    /// An event does not have the expected members.
+    #[error("invalid event: {0}")]
+    InvalidEvent(#[source] serde_json::Error),
+    /// A mock session received `exec-oob` before the client enabled OOB.
+    #[error("exec-oob before the client enabled OOB")]
+    OobNotEnabled,
+    /// A mock session expected one command and received another.
+    #[error("expected in-band {expected}, got {}{found}", if *.oob { "exec-oob " } else { "" })]
+    #[non_exhaustive]
+    UnexpectedCommand {
+        /// The command the session expected, in-band.
+        expected: &'static str,
+        /// The command it received.
+        found: String,
+        /// Whether that command was out-of-band.
+        oob: bool,
+    },
+    /// A mock QMP session received `qmp_capabilities` enabling another
+    /// capability than `oob`.
+    #[error("unsupported capabilities")]
+    UnsupportedCapabilities,
+    /// A mock guest agent session received `guest-sync-delimited` without
+    /// an integer `id`.
+    #[error("missing sync nonce")]
+    MissingSyncNonce,
+    /// A mock guest agent session received `exec-oob`.
+    #[error("QGA does not support OOB")]
+    GuestAgentOob,
+}
 
 /// Where an [`Error::Timeout`] happened.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -191,26 +376,30 @@ impl ClientOptions {
     }
 
     pub(crate) fn validate(&self) -> Result<()> {
-        if self.connect_timeout.is_zero()
-            || self.handshake_timeout.is_zero()
-            || self.command_timeout.is_zero()
-            || self.max_message_bytes == 0
-            || self.max_event_bytes == 0
-            || self.event_capacity == 0
-            || self.event_capacity > tokio::sync::Semaphore::MAX_PERMITS
-            || [
-                self.connect_timeout,
-                self.handshake_timeout,
-                self.command_timeout,
-            ]
-            .iter()
-            .any(|duration| tokio::time::Instant::now().checked_add(*duration).is_none())
+        let now = tokio::time::Instant::now();
+        let bad_timeout =
+            |timeout: Duration| timeout.is_zero() || now.checked_add(timeout).is_none();
+        let invalid = [
+            ("connect_timeout", bad_timeout(self.connect_timeout)),
+            ("handshake_timeout", bad_timeout(self.handshake_timeout)),
+            ("command_timeout", bad_timeout(self.command_timeout)),
+            ("max_message_bytes", self.max_message_bytes == 0),
+            ("max_event_bytes", self.max_event_bytes == 0),
+            (
+                "event_capacity",
+                self.event_capacity == 0
+                    || self.event_capacity > tokio::sync::Semaphore::MAX_PERMITS,
+            ),
+        ];
+        match invalid
+            .into_iter()
+            .find_map(|(option, bad)| bad.then_some(option))
         {
-            return Err(Error::InvalidRequest(
-                "limits and timeouts must be nonzero and capacities valid".into(),
-            ));
+            Some(option) => Err(Error::InvalidRequest(InvalidRequestKind::Options {
+                option,
+            })),
+            None => Ok(()),
         }
-        Ok(())
     }
 }
 

@@ -136,7 +136,8 @@ async fn command_deadline_includes_waiting_for_admission() {
     assert!(matches!(
         result,
         Err(Error::Timeout {
-            phase: TimeoutPhase::BeforeDispatch
+            phase: TimeoutPhase::BeforeDispatch,
+            ..
         })
     ));
     assert!(
@@ -159,13 +160,15 @@ async fn timing_out_after_dispatch_says_so_and_closes_the_session() {
     assert!(matches!(
         result,
         Err(Error::Timeout {
-            phase: TimeoutPhase::AfterDispatch
+            phase: TimeoutPhase::AfterDispatch,
+            ..
         })
     ));
     assert!(matches!(
         &*client.closed().await,
         Error::Timeout {
-            phase: TimeoutPhase::AfterDispatch
+            phase: TimeoutPhase::AfterDispatch,
+            ..
         }
     ));
 }
@@ -218,7 +221,8 @@ async fn every_call_kind_takes_a_deadline_of_its_own() {
             matches!(
                 result,
                 Err(Error::Timeout {
-                    phase: TimeoutPhase::AfterDispatch
+                    phase: TimeoutPhase::AfterDispatch,
+                    ..
                 })
             ),
             "{name}: {result:?}"
@@ -245,7 +249,8 @@ async fn an_expired_call_reports_its_own_timeout_on_any_worker() {
             matches!(
                 result,
                 Err(Error::Timeout {
-                    phase: TimeoutPhase::AfterDispatch
+                    phase: TimeoutPhase::AfterDispatch,
+                    ..
                 })
             ),
             "{result:?}"
@@ -269,7 +274,8 @@ async fn cancelled_unanswered_request_still_has_a_background_deadline() {
     assert!(matches!(
         &*reason,
         Error::Timeout {
-            phase: TimeoutPhase::AfterDispatch
+            phase: TimeoutPhase::AfterDispatch,
+            ..
         }
     ));
     assert_eq!(client.queue_depth(), 0);
@@ -377,7 +383,8 @@ async fn no_request_is_sent_after_a_dispatched_one_expired() {
         assert!(matches!(
             expiring.await.unwrap(),
             Err(Error::Timeout {
-                phase: TimeoutPhase::AfterDispatch
+                phase: TimeoutPhase::AfterDispatch,
+                ..
             })
         ));
         assert!(late.await.unwrap().is_err());

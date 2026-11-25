@@ -52,7 +52,7 @@ async fn multiple_qmp_versions_serialize_independently() {
                         assert!(refused.unwrap());
                     } else {
                         assert!(
-                            matches!(refused, Err(Error::Unavailable { ref name, version: (10, 1, 0) }) if name == "TestVersion.new_field"),
+                            matches!(refused, Err(Error::Unavailable { ref name, version: (10, 1, 0), .. }) if name == "TestVersion.new_field"),
                             "{refused:?}"
                         );
                         assert!(
@@ -193,14 +193,14 @@ struct TestNestedCommand {
 async fn commands_types_variants_and_fields_the_peer_lacks_are_unavailable() {
     let (client, _, mut peer) = support::qmp_version(ClientOptions::default(), (10, 1, 0)).await;
     match client.execute(&TestNewCommand {}).await {
-        Err(Error::Unavailable { name, version }) => {
+        Err(Error::Unavailable { name, version, .. }) => {
             assert_eq!(name, "test-new-command");
             assert_eq!(version, (10, 1, 0));
         }
         other => panic!("{other:?}"),
     }
     match client.execute(&TestOldCommand {}).await {
-        Err(Error::Unavailable { name, version }) => {
+        Err(Error::Unavailable { name, version, .. }) => {
             assert_eq!(name, "test-old-command");
             assert_eq!(version, (10, 1, 0));
         }
@@ -212,7 +212,7 @@ async fn commands_types_variants_and_fields_the_peer_lacks_are_unavailable() {
         })
         .await
     {
-        Err(Error::Unavailable { name, version }) => {
+        Err(Error::Unavailable { name, version, .. }) => {
             assert_eq!(name, "TestMode::New");
             assert_eq!(version, (10, 1, 0));
         }
@@ -239,7 +239,7 @@ async fn commands_types_variants_and_fields_the_peer_lacks_are_unavailable() {
     ];
     for (command, expected) in nested {
         match client.execute(&command).await {
-            Err(Error::Unavailable { name, version }) => {
+            Err(Error::Unavailable { name, version, .. }) => {
                 assert_eq!(name, expected);
                 assert_eq!(version, (10, 1, 0));
             }

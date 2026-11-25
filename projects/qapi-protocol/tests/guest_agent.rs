@@ -1,5 +1,7 @@
 mod support;
-use qapi_protocol::{ClientOptions, Error, TimeoutPhase, qga::Qga};
+use qapi_protocol::{
+    ClientOptions, Error, InvalidRequestKind, ProtocolViolation, TimeoutPhase, qga::Qga,
+};
 use serde_json::{Value, json};
 use std::time::Duration;
 use tokio::{
@@ -18,7 +20,8 @@ async fn timed_out_response_closes_session_and_cannot_be_reused() {
     assert!(matches!(
         result,
         Err(Error::Timeout {
-            phase: TimeoutPhase::AfterDispatch
+            phase: TimeoutPhase::AfterDispatch,
+            ..
         })
     ));
     assert!(client.is_closed());
@@ -161,7 +164,8 @@ async fn malformed_reply_is_not_success_and_invalid_arguments_are_not_sent() {
     let (mut client, mut peer) = support::qga(ClientOptions::default()).await;
     assert!(matches!(
         client.execute_raw::<Value>("guest-ping", json!([])).await,
-        Err(Error::InvalidRequest(_))
+        Err(Error::InvalidRequest(InvalidRequestKind::ArgumentsNotObject { ref command, .. }))
+            if command == "guest-ping"
     ));
     assert!(!client.is_closed());
     // Empty object cannot be silently converted into Option<Required> = None.
@@ -189,7 +193,8 @@ async fn response_less_shutdown_is_an_explicit_delivery_only_operation() {
     let command = qapi::qga::commands::GuestShutdown { mode: None };
     assert!(matches!(
         client.execute(&command).await,
-        Err(Error::InvalidRequest(_))
+        Err(Error::InvalidRequest(InvalidRequestKind::NoSuccessResponse { ref command, .. }))
+            if command == "guest-shutdown"
     ));
     client.send_no_response(&command).await.unwrap();
     assert!(client.is_closed());
@@ -207,7 +212,8 @@ async fn write_backpressure_is_inside_the_command_deadline() {
     assert!(matches!(
         result,
         Err(Error::Timeout {
-            phase: TimeoutPhase::AfterDispatch
+            phase: TimeoutPhase::AfterDispatch,
+            ..
         })
     ));
     assert!(client.is_closed());
@@ -229,7 +235,7 @@ async fn a_reply_over_the_limit_is_refused_at_the_limit_and_closes_the_session()
     });
     assert!(matches!(
         result,
-        Err(Error::MessageTooLarge { limit: 4096 })
+        Err(Error::MessageTooLarge { limit: 4096, .. })
     ));
     assert!(client.is_closed());
 }
@@ -273,7 +279,7 @@ async fn a_per_call_reply_limit_admits_a_large_file_read_only_for_that_call() {
     });
     assert!(matches!(
         result,
-        Err(Error::MessageTooLarge { limit: 4096 })
+        Err(Error::MessageTooLarge { limit: 4096, .. })
     ));
     assert!(qapi_protocol::qga::FILE_READ_REPLY_BYTES > ClientOptions::default().max_message_bytes);
 }
@@ -300,7 +306,8 @@ async fn a_file_write_chunk_must_fit_the_request_limit() {
     assert_eq!(result.unwrap().count, chunk as i64);
     assert!(matches!(
         client.execute(&write(6 * 1024 * 1024)).await,
-        Err(Error::InvalidRequest(_))
+        Err(Error::InvalidRequest(InvalidRequestKind::RequestTooLarge { limit, .. }))
+            if limit == ClientOptions::default().max_message_bytes
     ));
     assert!(!client.is_closed(), "nothing was sent");
 }
@@ -376,7 +383,7 @@ async fn arrays_are_not_replies_during_the_handshake() {
     });
     assert!(matches!(
         Qga::from_stream(client).await,
-        Err(Error::Protocol(_))
+        Err(Error::Protocol(ProtocolViolation::NotAnObject(None)))
     ));
     server.await.unwrap();
 }
@@ -410,7 +417,8 @@ async fn a_timeout_before_any_byte_is_written_keeps_the_session() {
     assert!(matches!(
         client.execute(&qapi::qga::commands::GuestPing {}).await,
         Err(Error::Timeout {
-            phase: TimeoutPhase::BeforeDispatch
+            phase: TimeoutPhase::BeforeDispatch,
+            ..
         })
     ));
     assert!(!client.is_closed());

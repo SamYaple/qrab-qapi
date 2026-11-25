@@ -6,7 +6,7 @@
 //! qapi-protocol = { package = "qrab-qapi-protocol", version = "0.1", features = ["mock"] }
 //! ```
 use crate::{
-    Error, Result,
+    Error, ProtocolViolation, Result,
     framing::{self, JsonReader},
     wire,
 };
@@ -23,6 +23,18 @@ pub struct ParsedCommand {
     pub arguments: Value,
     pub oob: bool,
     pub id: Option<Value>,
+}
+
+/// Refuse any other command than an in-band `expected`.
+fn expect(command: &ParsedCommand, expected: &'static str) -> Result<()> {
+    if command.name != expected || command.oob {
+        return Err(Error::Protocol(ProtocolViolation::UnexpectedCommand {
+            expected,
+            found: command.name.clone(),
+            oob: command.oob,
+        }));
+    }
+    Ok(())
 }
 
 /// The largest message a mock session reads or writes.
@@ -45,9 +57,7 @@ impl QmpReader {
         let oob = value.get("exec-oob").is_some();
         wire::validate_request(&value, oob)?;
         if oob && !self.oob {
-            return Err(Error::Protocol(
-                "exec-oob before the client enabled OOB".into(),
-            ));
+            return Err(Error::Protocol(ProtocolViolation::OobNotEnabled));
         }
         let verb = if oob { "exec-oob" } else { "execute" };
         Ok(ParsedCommand {
@@ -121,13 +131,13 @@ impl QmpSession {
     /// client may enable; later `exec-oob` commands are refused unless it did.
     pub async fn negotiate(&mut self) -> Result<()> {
         let command = self.recv_command_full().await?;
-        if command.name != "qmp_capabilities" || command.oob {
-            return Err(Error::Protocol("expected in-band qmp_capabilities".into()));
-        }
+        expect(&command, "qmp_capabilities")?;
         match command.arguments.get("enable") {
             None => {}
             Some(enable) if enable == &json!(["oob"]) => self.reader.oob = true,
-            Some(_) => return Err(Error::Protocol("unsupported capabilities".into())),
+            Some(_) => {
+                return Err(Error::Protocol(ProtocolViolation::UnsupportedCapabilities));
+            }
         }
         self.send_return(json!({})).await
     }
@@ -178,12 +188,10 @@ impl QgaSession {
     pub async fn handle_sync(&mut self) -> Result<i64> {
         self.reader.reader.reset_at_sentinel().await?;
         let command = self.reader.recv_command_full().await?;
-        if command.name != "guest-sync-delimited" || command.oob {
-            return Err(Error::Protocol("expected guest-sync-delimited".into()));
-        }
+        expect(&command, "guest-sync-delimited")?;
         let nonce = command.arguments["id"]
             .as_i64()
-            .ok_or_else(|| Error::Protocol("missing sync nonce".into()))?;
+            .ok_or(Error::Protocol(ProtocolViolation::MissingSyncNonce))?;
         let mut bytes = vec![0xff];
         bytes.extend(framing::encode(&json!({"return": nonce}), LIMIT)?);
         self.writer.writer.write_all(&bytes).await?;
@@ -192,7 +200,7 @@ impl QgaSession {
     pub async fn recv_command(&mut self) -> Result<(String, Value)> {
         let command = self.reader.recv_command_full().await?;
         if command.oob {
-            return Err(Error::Protocol("QGA does not support OOB".into()));
+            return Err(Error::Protocol(ProtocolViolation::GuestAgentOob));
         }
         Ok((command.name, command.arguments))
     }

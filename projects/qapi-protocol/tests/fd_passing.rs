@@ -143,7 +143,13 @@ async fn more_descriptors_than_one_message_carries_are_refused_before_sending() 
     assert!(matches!(
         qmp.execute_raw_with_fds(json!({"execute":"getfd","arguments":{"fdname":"x"}}), fds)
             .await,
-        Err(qapi_protocol::Error::InvalidRequest(_))
+        Err(qapi_protocol::Error::InvalidRequest(
+            qapi_protocol::InvalidRequestKind::TooManyFds {
+                count: 254,
+                max: 253,
+                ..
+            }
+        ))
     ));
     assert!(!qmp.is_closed(), "the refusal does not end the connection");
     assert_eq!(qmp.queue_depth(), 0);

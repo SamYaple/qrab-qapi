@@ -10,7 +10,7 @@
 //! Requests are limited to it too, so write a large file in `guest-file-write`
 //! chunks: under the default limit, a chunk of up to 6 MiB less 1 KiB fits.
 use crate::{
-    ClientOptions, Error, RemoteError, Result, TimeoutPhase,
+    ClientOptions, Error, InvalidRequestKind, RemoteError, Result, TimeoutPhase,
     framing::{self, JsonReader, SyncLine},
     wire,
 };
@@ -97,8 +97,12 @@ impl Qga {
         };
         let version = timeout(options.handshake_timeout, async {
             let mut nonce = [0_u8; 8];
-            getrandom::fill(&mut nonce)
-                .map_err(|error| std::io::Error::other(format!("QGA sync nonce: {error}")))?;
+            getrandom::fill(&mut nonce).map_err(|error| {
+                Error::SyncNonce(error.raw_os_error().map_or_else(
+                    || std::io::Error::other(error.to_string()),
+                    std::io::Error::from_raw_os_error,
+                ))
+            })?;
             let nonce = i64::from_ne_bytes(nonce);
             let command = wire::request("guest-sync-delimited", json!({"id": nonce}), false)?;
             let mut bytes = vec![0xff];
@@ -169,10 +173,7 @@ impl Qga {
         max_reply_bytes: usize,
     ) -> Result<C::Returns> {
         if !C::sends_success_response(self.version) {
-            return Err(Error::InvalidRequest(format!(
-                "{} does not send a success response; use send_no_response",
-                C::NAME
-            )));
+            return Err(crate::qmp::no_success_response::<C>());
         }
         let request = wire::command(cmd, self.version, false)?;
         self.call(request, max_reply_bytes).await
@@ -193,9 +194,7 @@ impl Qga {
         max_reply_bytes: usize,
     ) -> Result<T> {
         if max_reply_bytes == 0 {
-            return Err(Error::InvalidRequest(
-                "the reply limit must be nonzero".into(),
-            ));
+            return Err(Error::InvalidRequest(InvalidRequestKind::ZeroReplyLimit));
         }
         let bytes = framing::encode(&request, self.options.max_message_bytes)?;
         // Ownership leaves self before any I/O await. Cancellation drops the
@@ -236,9 +235,9 @@ impl Qga {
     /// command or shut down later, and no remote success acknowledgement exists.
     pub async fn send_no_response<C: QapiCommand<Returns = ()>>(&mut self, cmd: &C) -> Result<()> {
         if C::sends_success_response(self.version) {
-            return Err(Error::InvalidRequest(
-                "command has a response; use execute".into(),
-            ));
+            return Err(Error::InvalidRequest(InvalidRequestKind::HasResponse {
+                command: C::NAME.into(),
+            }));
         }
         let request = wire::command(cmd, self.version, false)?;
         let bytes = framing::encode(&request, self.options.max_message_bytes)?;

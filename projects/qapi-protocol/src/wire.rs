@@ -1,13 +1,18 @@
-use crate::{Error, RemoteError, Result};
+use crate::{Error, InvalidRequestKind, ProtocolViolation, RemoteError, Result};
 use qapi::QapiCommand;
 use serde::{Deserialize, Deserializer, de::DeserializeOwned};
 use serde_json::{Value, json, value::RawValue};
 use std::any::TypeId;
 
 pub(crate) fn request(name: &str, args: Value, oob: bool) -> Result<Value> {
-    if name.is_empty() || !args.is_object() {
+    if name.is_empty() {
+        return Err(Error::InvalidRequest(InvalidRequestKind::EmptyCommandName));
+    }
+    if !args.is_object() {
         return Err(Error::InvalidRequest(
-            "command name must be nonempty and arguments must be an object".into(),
+            InvalidRequestKind::ArgumentsNotObject {
+                command: name.into(),
+            },
         ));
     }
     let verb = if oob { "exec-oob" } else { "execute" };
@@ -43,7 +48,7 @@ pub(crate) fn validate_request(value: &Value, oob: bool) -> Result<()> {
     let verb = if oob { "exec-oob" } else { "execute" };
     let object = value
         .as_object()
-        .ok_or_else(|| Error::InvalidRequest("QMP request must be an object".into()))?;
+        .ok_or(Error::InvalidRequest(InvalidRequestKind::RequestNotObject))?;
     if !object
         .get(verb)
         .and_then(Value::as_str)
@@ -51,9 +56,9 @@ pub(crate) fn validate_request(value: &Value, oob: bool) -> Result<()> {
         || object.keys().any(|k| k != verb && k != "arguments")
         || object.get("arguments").is_some_and(|v| !v.is_object())
     {
-        return Err(Error::InvalidRequest(format!(
-            "expected {verb} and optional object arguments; IDs are owned by the connection"
-        )));
+        return Err(Error::InvalidRequest(InvalidRequestKind::RequestEnvelope {
+            verb,
+        }));
     }
     Ok(())
 }
@@ -92,14 +97,14 @@ impl Envelope<'_> {
 pub(crate) fn envelope(bytes: &[u8]) -> Result<Envelope<'_>> {
     let envelope = serde_json::from_slice(bytes).map_err(|error| match error.classify() {
         serde_json::error::Category::Data => {
-            Error::Protocol(format!("message must be a JSON object: {error}"))
+            Error::Protocol(ProtocolViolation::NotAnObject(Some(error)))
         }
         _ => Error::Malformed(error),
     })?;
     // Serde also reads a struct from an array of its members in order, so
     // `[1]` would otherwise be the reply `{"return": 1}`.
     if bytes.trim_ascii_start().first() != Some(&b'{') {
-        return Err(Error::Protocol("message must be a JSON object".into()));
+        return Err(Error::Protocol(ProtocolViolation::NotAnObject(None)));
     }
     Ok(envelope)
 }
@@ -111,13 +116,11 @@ pub(crate) fn response<'a>(envelope: &Envelope<'a>) -> Result<&'a RawValue> {
         || envelope.greeting.is_some()
         || envelope.ret.is_some() == envelope.error.is_some()
     {
-        return Err(Error::Protocol(
-            "response must contain exactly one of return or error".into(),
-        ));
+        return Err(Error::Protocol(ProtocolViolation::ResponseShape));
     }
     if let Some(error) = envelope.error {
         let error: RemoteError = serde_json::from_str(error.get())
-            .map_err(|e| Error::Protocol(format!("invalid error response: {e}")))?;
+            .map_err(|e| Error::Protocol(ProtocolViolation::InvalidErrorResponse(e)))?;
         return Err(Error::Remote(error));
     }
     Ok(envelope.ret.unwrap())

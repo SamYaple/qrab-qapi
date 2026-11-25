@@ -135,8 +135,8 @@ limited to `max_message_bytes` and decoded straight into their return type.
 `execute_with_reply_limit` raises the limit for one call:
 `qga::FILE_READ_REPLY_BYTES` admits the base64 reply of a `guest-file-read` of
 the agent's 48 MiB maximum count. Requests are limited to `max_message_bytes`
-as well, and a larger one fails with `Error::InvalidRequest` before anything
-is sent. Write a large file in several `guest-file-write` calls on its
+as well, and a larger one fails with `InvalidRequestKind::RequestTooLarge`
+before anything is sent. Write a large file in several `guest-file-write` calls on its
 handle: under the default limit, a chunk of up to 6 MiB less 1 KiB fits its
 base64 request. Raising `max_message_bytes` instead admits larger requests,
 but also larger replies from the guest for every call.
@@ -165,24 +165,34 @@ return values are never success. An empty object maps to Rust `()` only when
 that is the actual return type; other failed decodes are not retried as null.
 
 `Error` is `#[non_exhaustive]`. Its variants tell the kind of failure apart,
-and with it whether the request reached the peer and the connection survived:
+and with it whether the request reached the peer and the connection survived.
+The clients and mock sessions create these errors: variants with named fields
+cannot be built outside the crate, so fields can be added to them later.
 
 | Variant | Meaning | Connection |
 | --- | --- | --- |
 | `Remote` | The peer ran the command and returned an error reply | usable |
 | `Unavailable` | The command, or a type, variant or field it uses, is not in the peer's release; nothing was sent | usable |
 | `Encode` | The request could not be serialized; nothing was sent | usable |
-| `InvalidRequest` | The request or the options are invalid; nothing was sent | usable |
+| `InvalidRequest(kind)` | The request or the options are invalid; `InvalidRequestKind` names the rule; nothing was sent | usable |
 | `Decode` | A well-formed reply does not match the return type | usable |
 | `Timeout { phase }` | A deadline elapsed in the `Connect`, `Handshake`, `BeforeDispatch` or `AfterDispatch` phase | usable after `BeforeDispatch` |
 | `Malformed` | The peer sent invalid JSON | closed |
 | `MessageTooLarge { limit }` | A message from the peer exceeds the limit in effect | closed |
-| `Protocol` | The peer sent valid JSON that breaks the protocol | closed |
+| `Protocol(violation)` | The peer sent valid JSON that breaks the protocol; `ProtocolViolation` names the rule | closed |
 | `AgentVersion` | The guest agent reported a version that is not a release number | closed |
 | `SyncUnsupported` | The guest agent refused guest-sync-delimited; it predates qemu-ga 1.1 or has the command disabled | closed |
+| `SyncNonce` | The operating system could not supply the guest agent's random sync nonce | closed |
 | `Io` | Connecting, reading or writing failed | closed |
 | `Closed` | The connection was already closed | closed |
 | `Disconnected` | The connection failed while the call was pending; it holds the original failure | closed |
+
+`InvalidRequestKind` and `ProtocolViolation` are `#[non_exhaustive]` enums with
+a variant per rule, carrying what the rule concerns: the command name for a
+command that refuses OOB or sends no success response, the size and limit of
+a request that is too large, the descriptor count, the option that is out of
+range. A mock session reports a request that breaks the protocol as `Protocol`
+too, such as `exec-oob` before the client enabled OOB.
 
 `RemoteError` retains the exact string `class` and `desc` of an error reply,
 including new error classes; `known_class()` optionally maps it to the

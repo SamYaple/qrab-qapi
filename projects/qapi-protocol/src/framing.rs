@@ -1,4 +1,4 @@
-use crate::{Error, Result};
+use crate::{Error, InvalidRequestKind, ProtocolViolation, Result};
 use serde_json::Value;
 use tokio::io::AsyncReadExt;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
@@ -44,7 +44,7 @@ impl<R: AsyncRead + Unpin> JsonReader<R> {
                 return if self.partial.is_empty() {
                     Err(Error::Closed)
                 } else {
-                    Err(Error::Protocol("truncated JSON message at EOF".into()))
+                    Err(Error::Protocol(ProtocolViolation::Truncated))
                 };
             }
             // QMP pretty output contains newlines inside the JSON object.
@@ -163,9 +163,10 @@ pub(crate) enum SyncLine {
 pub(crate) fn encode(value: &Value, limit: usize) -> Result<Vec<u8>> {
     let mut bytes = serde_json::to_vec(value).map_err(|error| Error::Encode(error.into()))?;
     if bytes.len() > limit {
-        return Err(Error::InvalidRequest(format!(
-            "JSON request exceeds {limit} bytes"
-        )));
+        return Err(Error::InvalidRequest(InvalidRequestKind::RequestTooLarge {
+            size: bytes.len(),
+            limit,
+        }));
     }
     bytes.extend_from_slice(b"\r\n");
     Ok(bytes)

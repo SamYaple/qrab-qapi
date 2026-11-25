@@ -1,5 +1,5 @@
 mod support;
-use qapi_protocol::{ClientOptions, Error, Qmp};
+use qapi_protocol::{ClientOptions, Error, InvalidRequestKind, ProtocolViolation, Qmp};
 use serde_json::json;
 use std::{sync::Arc, time::Duration};
 use tokio::{io::AsyncWriteExt, net::UnixStream};
@@ -22,7 +22,7 @@ async fn oversized_unterminated_frame_fails_without_waiting_for_newline() {
     );
     assert!(matches!(
         &*client.closed().await,
-        Error::MessageTooLarge { limit: 512 }
+        Error::MessageTooLarge { limit: 512, .. }
     ));
 }
 
@@ -332,7 +332,7 @@ async fn the_limit_counts_json_bytes_without_either_terminator() {
         } else {
             assert!(matches!(
                 &*client.closed().await,
-                Error::MessageTooLarge { limit: LIMIT }
+                Error::MessageTooLarge { limit: LIMIT, .. }
             ));
         }
     }
@@ -348,7 +348,7 @@ async fn an_array_is_not_a_greeting() {
     support::write(&mut write, json!([null, null, null, null, null, greeting])).await;
     assert!(matches!(
         Qmp::from_stream(client).await,
-        Err(Error::Protocol(_))
+        Err(Error::Protocol(ProtocolViolation::NotAnObject(None)))
     ));
 }
 
@@ -379,7 +379,7 @@ async fn capabilities_enable_oob_only_when_the_greeting_offers_it() {
                 client
                     .execute_raw_oob(json!({"exec-oob": "query-yank"}))
                     .await,
-                Err(Error::InvalidRequest(_))
+                Err(Error::InvalidRequest(InvalidRequestKind::OobNotNegotiated))
             ));
         }
     }
@@ -400,7 +400,10 @@ async fn a_reply_before_its_request_is_written_closes_the_connection() {
     assert!(!reader.fill_buf().await.unwrap().is_empty());
     support::write(&mut writer, json!({"return": {}, "id": 1})).await;
     match upload.await.unwrap() {
-        Err(Error::Disconnected(cause)) => assert!(matches!(&*cause, Error::Protocol(_))),
+        Err(Error::Disconnected(cause)) => assert!(matches!(
+            &*cause,
+            Error::Protocol(ProtocolViolation::EarlyResponse)
+        )),
         other => panic!("{other:?}"),
     }
 }
@@ -418,7 +421,13 @@ async fn event_data_must_be_an_object() {
         let reason = tokio::time::timeout(Duration::from_secs(1), client.closed())
             .await
             .unwrap_or_else(|_| panic!("an event with data {data} was accepted"));
-        assert!(matches!(&*reason, Error::Protocol(_)), "{data}");
+        assert!(
+            matches!(
+                &*reason,
+                Error::Protocol(ProtocolViolation::EventDataNotObject)
+            ),
+            "{data}"
+        );
         assert!(events.recv().await.is_none());
     }
 }
@@ -440,6 +449,9 @@ async fn an_event_capacity_beyond_the_channel_limit_is_refused() {
     let (client, _peer) = UnixStream::pair().unwrap();
     assert!(matches!(
         Qmp::from_stream_with_options(client, options).await,
-        Err(Error::InvalidRequest(_))
+        Err(Error::InvalidRequest(InvalidRequestKind::Options {
+            option: "event_capacity",
+            ..
+        }))
     ));
 }

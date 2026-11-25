@@ -1,5 +1,5 @@
 mod support;
-use qapi_protocol::{ClientOptions, Error};
+use qapi_protocol::{ClientOptions, Error, InvalidRequestKind};
 use serde_json::json;
 
 #[qapi::qapi(command, returns = "()", allow_oob(added = "11.0.0"))]
@@ -14,7 +14,8 @@ async fn qmp_uses_the_peer_release_for_oob_and_reply_flags() {
     let (new, _, mut new_peer) = support::qmp_version(ClientOptions::default(), (11, 1, 3)).await;
     assert!(matches!(
         old.execute_oob(&NewOob {}).await,
-        Err(Error::InvalidRequest(_))
+        Err(Error::InvalidRequest(InvalidRequestKind::OobNotAllowed { ref command, .. }))
+            if command == "NewOob"
     ));
     let (result, ()) = tokio::join!(new.execute_oob(&NewOob {}), async {
         let request = new_peer.recv_command_full().await.unwrap();
@@ -27,7 +28,8 @@ async fn qmp_uses_the_peer_release_for_oob_and_reply_flags() {
     result.unwrap();
     assert!(matches!(
         new.execute(&ChangedReply {}).await,
-        Err(Error::InvalidRequest(_))
+        Err(Error::InvalidRequest(InvalidRequestKind::NoSuccessResponse { ref command, .. }))
+            if command == "ChangedReply"
     ));
     let (result, ()) = tokio::join!(old.execute(&ChangedReply {}), async {
         let request = old_peer.recv_command_full().await.unwrap();
@@ -48,7 +50,8 @@ async fn qga_selects_reply_or_delivery_only_for_each_peer_release() {
     let (mut new, mut new_peer) = support::qga_version(ClientOptions::default(), "11.1.3").await;
     assert!(matches!(
         old.send_no_response(&ChangedReply {}).await,
-        Err(Error::InvalidRequest(_))
+        Err(Error::InvalidRequest(InvalidRequestKind::HasResponse { ref command, .. }))
+            if command == "ChangedReply"
     ));
     let (result, ()) = tokio::join!(old.execute(&ChangedReply {}), async {
         old_peer.recv_command().await.unwrap();
@@ -57,7 +60,8 @@ async fn qga_selects_reply_or_delivery_only_for_each_peer_release() {
     result.unwrap();
     assert!(matches!(
         new.execute(&ChangedReply {}).await,
-        Err(Error::InvalidRequest(_))
+        Err(Error::InvalidRequest(InvalidRequestKind::NoSuccessResponse { ref command, .. }))
+            if command == "ChangedReply"
     ));
     new.send_no_response(&ChangedReply {}).await.unwrap();
     new_peer.recv_command().await.unwrap();

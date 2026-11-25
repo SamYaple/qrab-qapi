@@ -1,5 +1,5 @@
 use crate::{
-    ClientOptions, Error, QmpEvent, Result, TimeoutPhase,
+    ClientOptions, Error, InvalidRequestKind, ProtocolViolation, QmpEvent, Result, TimeoutPhase,
     framing::{self, JsonReader},
     wire::{self, Envelope},
 };
@@ -77,13 +77,13 @@ struct Events {
 impl Events {
     fn publish(&self, bytes: &[u8], envelope: &Envelope) -> Result<()> {
         if envelope.ret.is_some() || envelope.error.is_some() || envelope.id.is_some() {
-            return Err(Error::Protocol("event mixed with response fields".into()));
+            return Err(Error::Protocol(ProtocolViolation::EventWithResponseFields));
         }
         if envelope
             .data
             .is_some_and(|data| !data.get().starts_with('{'))
         {
-            return Err(Error::Protocol("event data must be an object".into()));
+            return Err(Error::Protocol(ProtocolViolation::EventDataNotObject));
         }
         // Checked before parsing, so a large event never becomes a tree.
         if bytes.len() > self.limit {
@@ -91,7 +91,7 @@ impl Events {
             return Ok(());
         }
         let event: QmpEvent = serde_json::from_slice(bytes)
-            .map_err(|error| Error::Protocol(format!("invalid event: {error}")))?;
+            .map_err(|error| Error::Protocol(ProtocolViolation::InvalidEvent(error)))?;
         if let Err(mpsc::error::TrySendError::Full(_)) = self.tx.try_send(event) {
             self.dropped.fetch_add(1, Ordering::Relaxed);
         }
@@ -171,9 +171,9 @@ impl Qmp {
             let bytes = reader.next().await?;
             let greeting = wire::envelope(&bytes)?
                 .greeting
-                .ok_or_else(|| Error::Protocol("expected the QMP greeting".into()))?;
+                .ok_or(Error::Protocol(ProtocolViolation::MissingGreeting))?;
             let greeting: Greeting = serde_json::from_str(greeting.get())
-                .map_err(|error| Error::Protocol(format!("invalid QMP greeting: {error}")))?;
+                .map_err(|error| Error::Protocol(ProtocolViolation::InvalidGreeting(error)))?;
             let oob = greeting.capabilities.iter().any(|cap| cap == "oob");
             let mut request = json!({"execute": "qmp_capabilities", "id": 0});
             if oob {
@@ -188,15 +188,11 @@ impl Qmp {
                     continue;
                 }
                 if envelope.numeric_id() != Some(0) {
-                    return Err(Error::Protocol(
-                        "capabilities reply has wrong or missing ID".into(),
-                    ));
+                    return Err(Error::Protocol(ProtocolViolation::CapabilitiesReplyId));
                 }
                 let value: Value = wire::decode(wire::response(&envelope)?)?;
                 if !value.as_object().is_some_and(|o| o.is_empty()) {
-                    return Err(Error::Protocol(
-                        "capabilities reply must return an empty object".into(),
-                    ));
+                    return Err(Error::Protocol(ProtocolViolation::CapabilitiesReply));
                 }
                 return Ok((greeting, oob));
             }
@@ -307,9 +303,7 @@ impl Qmp {
         duration: Duration,
     ) -> Result<C::Returns> {
         if !C::sends_success_response(self.version()) {
-            return Err(Error::InvalidRequest(
-                "command does not send a success response".into(),
-            ));
+            return Err(no_success_response::<C>());
         }
         let request = wire::command(cmd, self.version(), false)?;
         let reply = self.dispatch(request, Vec::new(), false, duration).await?;
@@ -327,15 +321,12 @@ impl Qmp {
         duration: Duration,
     ) -> Result<C::Returns> {
         if !C::allows_oob(self.version()) {
-            return Err(Error::InvalidRequest(format!(
-                "{} does not allow OOB execution",
-                C::NAME
-            )));
+            return Err(Error::InvalidRequest(InvalidRequestKind::OobNotAllowed {
+                command: C::NAME.into(),
+            }));
         }
         if !C::sends_success_response(self.version()) {
-            return Err(Error::InvalidRequest(
-                "command does not send a success response".into(),
-            ));
+            return Err(no_success_response::<C>());
         }
         let request = wire::command(cmd, self.version(), true)?;
         let reply = self.dispatch(request, Vec::new(), true, duration).await?;
@@ -420,20 +411,22 @@ impl Qmp {
         wire::validate_request(&request, oob)?;
         framing::encode(&request, self.options.max_message_bytes)?;
         if oob && !self.oob {
-            return Err(Error::InvalidRequest("OOB was not negotiated".into()));
+            return Err(Error::InvalidRequest(InvalidRequestKind::OobNotNegotiated));
         }
         if fds.len() > MAX_FDS {
-            return Err(Error::InvalidRequest(format!(
-                "at most {MAX_FDS} file descriptors fit in one message, not {}",
-                fds.len()
-            )));
+            return Err(Error::InvalidRequest(InvalidRequestKind::TooManyFds {
+                count: fds.len(),
+                max: MAX_FDS,
+            }));
         }
         if self.is_closed() {
             return Err(self.disconnected());
         }
         let deadline = Instant::now()
             .checked_add(duration)
-            .ok_or_else(|| Error::InvalidRequest("timeout is too large".into()))?;
+            .ok_or(Error::InvalidRequest(InvalidRequestKind::TimeoutTooLarge {
+                timeout: duration,
+            }))?;
         let state = Arc::new(AtomicU8::new(QUEUED));
         let timed_out = || {
             let unsent = state
@@ -478,6 +471,12 @@ impl Qmp {
             .await
             .unwrap_or_else(|_| Err(timed_out()))
     }
+}
+
+pub(crate) fn no_success_response<C: QapiCommand>() -> Error {
+    Error::InvalidRequest(InvalidRequestKind::NoSuccessResponse {
+        command: C::NAME.into(),
+    })
 }
 
 impl Drop for Qmp {
@@ -576,7 +575,7 @@ async fn drive(
                     // ID. It cannot be correlated, so close and retain its cause.
                     return match wire::response(&envelope) {
                         Err(error @ Error::Remote(_)) => Err(error),
-                        _ => Err(Error::Protocol("QMP response has no ID".into())),
+                        _ => Err(Error::Protocol(ProtocolViolation::MissingResponseId)),
                     };
                 }
                 // QMP IDs can be arbitrary JSON. Anything that is not one of
@@ -584,7 +583,7 @@ async fn drive(
                 let Some(response_id) = envelope.numeric_id() else { continue; };
                 if !pending.contains_key(&response_id) { continue; }
                 if writing.as_ref().is_some_and(|w| w.id == response_id) {
-                    return Err(Error::Protocol("response preceded completion of its request".into()));
+                    return Err(Error::Protocol(ProtocolViolation::EarlyResponse));
                 }
                 // Only the payload is kept, as raw JSON for the caller to decode.
                 let response = wire::response(&envelope).map(RawValue::to_owned);
@@ -624,7 +623,7 @@ async fn drive(
                 }
                 // A caller that timed out first has abandoned the request.
                 if state.compare_exchange(QUEUED, DISPATCHED, Ordering::AcqRel, Ordering::Acquire).is_err() { continue; }
-                id = id.checked_add(1).ok_or_else(|| Error::Protocol("QMP request ID space exhausted".into()))?;
+                id = id.checked_add(1).ok_or(Error::Protocol(ProtocolViolation::IdsExhausted))?;
                 json["id"] = json!(id);
                 let bytes = match framing::encode(&json, limit) {
                     Ok(bytes) => bytes,
