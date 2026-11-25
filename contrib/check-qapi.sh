@@ -8,9 +8,11 @@ unset QEMU_MIN_VERSION QEMU_MAX_VERSION
 # cache, so a fresh checkout (CI) needs every locked package downloaded first.
 cargo fetch --locked
 
+# Strict Clippy on all four crates, the generated QMP and QGA sources included.
 # The crates built on the macros, one per line:
 qapi_crates=(
     -p qrab-qapi
+    -p qrab-qapi-protocol
 )
 cargo clippy --locked -p qrab-qapi-codegen -p qrab-qapi-macros "${qapi_crates[@]}" --all-targets \
     -- -D warnings

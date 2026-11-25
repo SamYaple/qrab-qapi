@@ -1,0 +1,116 @@
+use qapi_protocol::Qmp;
+use qapi_protocol::server::QmpSession;
+use std::sync::atomic::{AtomicU64, Ordering};
+use tokio::net::UnixListener;
+
+static COUNTER: AtomicU64 = AtomicU64::new(0);
+fn unique_socket() -> String {
+    let id = COUNTER.fetch_add(1, Ordering::Relaxed);
+    format!("/tmp/qrab-mock-{}-{}.sock", std::process::id(), id)
+}
+
+// ── Mock QMP Server Tests ──
+
+#[tokio::test]
+async fn mock_qmp_negotiate() {
+    let sock = unique_socket();
+    let listener = UnixListener::bind(&sock).unwrap();
+
+    let server = tokio::spawn(async move {
+        let mut session = QmpSession::accept(&listener).await.unwrap();
+        session.send_greeting(11, 1, 3).await.unwrap();
+        session.negotiate().await.unwrap();
+
+        // Receive query-status
+        let (name, _args) = session.recv_command().await.unwrap();
+        assert_eq!(name, "query-status");
+        session
+            .send_return(serde_json::json!({
+                "running": true,
+                "status": "running"
+            }))
+            .await
+            .unwrap();
+    });
+
+    let (qmp, _events) = Qmp::new(std::path::Path::new(&sock)).await.unwrap();
+    assert_eq!(qmp.version(), (11, 1, 3));
+
+    let status: qapi::StatusInfo = qmp.execute(&qapi::commands::QueryStatus {}).await.unwrap();
+    assert!(status.running);
+
+    qmp.shutdown().await;
+    server.await.unwrap();
+    let _ = std::fs::remove_file(&sock);
+}
+
+#[tokio::test]
+async fn mock_qmp_error_response() {
+    let sock = unique_socket();
+    let listener = UnixListener::bind(&sock).unwrap();
+
+    let server = tokio::spawn(async move {
+        let mut session = QmpSession::accept(&listener).await.unwrap();
+        session.send_greeting(11, 1, 3).await.unwrap();
+        session.negotiate().await.unwrap();
+
+        let (name, _args) = session.recv_command().await.unwrap();
+        assert_eq!(name, "query-status");
+        session
+            .send_error("GenericError", "something went wrong")
+            .await
+            .unwrap();
+    });
+
+    let (qmp, _events) = Qmp::new(std::path::Path::new(&sock)).await.unwrap();
+    let result: Result<qapi::StatusInfo, _> = qmp.execute(&qapi::commands::QueryStatus {}).await;
+    match result {
+        Err(e) => assert!(e.to_string().contains("something went wrong"), "Got: {}", e),
+        Ok(_) => panic!("Expected error"),
+    }
+
+    qmp.shutdown().await;
+    server.await.unwrap();
+    let _ = std::fs::remove_file(&sock);
+}
+
+#[tokio::test]
+async fn mock_qmp_event() {
+    let sock = unique_socket();
+    let listener = UnixListener::bind(&sock).unwrap();
+
+    let server = tokio::spawn(async move {
+        let mut session = QmpSession::accept(&listener).await.unwrap();
+        session.send_greeting(11, 1, 3).await.unwrap();
+        session.negotiate().await.unwrap();
+
+        // Send an event then a command response
+        session
+            .send_event("STOP", serde_json::json!({}))
+            .await
+            .unwrap();
+
+        let (name, _) = session.recv_command().await.unwrap();
+        assert_eq!(name, "query-status");
+        session
+            .send_return(serde_json::json!({"running": false, "status": "paused"}))
+            .await
+            .unwrap();
+    });
+
+    let (qmp, mut events) = Qmp::new(std::path::Path::new(&sock)).await.unwrap();
+
+    let status: qapi::StatusInfo = qmp.execute(&qapi::commands::QueryStatus {}).await.unwrap();
+    assert!(!status.running);
+
+    // The event should have been received
+    let evt = tokio::time::timeout(std::time::Duration::from_secs(2), events.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(evt.event, "STOP");
+
+    qmp.shutdown().await;
+    server.await.unwrap();
+    let _ = std::fs::remove_file(&sock);
+}

@@ -18,6 +18,7 @@
 //! for byte. Change the generator, its IR or the macros and regenerate; never
 //! edit the generated files by hand. The repository's `docs/codegen.md`
 //! describes generation.
+//! Its `docs/protocol.md` describes the version contexts.
 #![forbid(unsafe_code)]
 
 use std::{

@@ -37,6 +37,7 @@ third-party Rust source is stored in the repository.
 - **Runtime use:** the qrab-qapi-codegen library also links
   `proc-macro2` and `syn`, which build and parse the Rust it generates,
   so programs that generate code with it contain unicode-ident.
+  The other crates use it only at compile time.
 - **Modified:** no.
 - **Distribution and integration model:** User-Fetched Dependency. The project
   publishes source crates; Cargo fetches unicode-ident when they are built.

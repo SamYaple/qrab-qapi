@@ -58,6 +58,9 @@ bash contrib/check-qapi.sh
   lines, and the documentation of `qrab-qapi` built with it
 - builds of `qrab-qapi` with `QEMU_MIN_VERSION` and `QEMU_MAX_VERSION`
   bounds for each maintained QEMU series
+- strict Clippy on all four crates, the generated sources included, and
+  the tests of the other crates
+- the API documentation of all four crates, with warnings treated as errors
 
 It needs the QEMU source with its release tags:
 
@@ -69,6 +72,11 @@ git -C vendor/qemu fetch origin --tags
 `vendor/qemu` is a git submodule of the QEMU repository named in
 [.gitmodules](.gitmodules). The tags it must hold are the ones pinned in
 [`projects/qapi-codegen/qemu-versions.lock`](projects/qapi-codegen/qemu-versions.lock).
+
+Tests against real QEMU binaries are opt-in and not part of CI;
+[docs/testing.md](docs/testing.md) explains how to run them. Run them when
+you change protocol behaviour, and say in the pull request which QEMU
+version you tested against.
 
 ## Generated sources are outputs
 
@@ -89,6 +97,22 @@ Never commit output generated with `--schema-docs` or built with the
 `schema-docs` feature: it contains QEMU's GPL-2.0-or-later documentation
 text (see [NOTICE](NOTICE)). Generator internals, the compatibility policy
 and the correctness rules are in [docs/codegen.md](docs/codegen.md).
+
+### Advancing the QEMU baseline
+
+A newer QEMU release is pinned, both trees are regenerated and committed
+with the pins, as
+[docs/codegen.md](docs/codegen.md#advancing-the-qemu-baseline) describes.
+Update the baseline that [docs/protocol.md](docs/protocol.md) and
+[docs/testing.md](docs/testing.md) name in the same change.
+
+### Protocol changes
+
+Target the current QEMU baseline in `qrab-qapi-protocol` changes;
+compatibility work for older peers is deferred. Keep the protocol tests
+self-contained: they use the bounded mock servers and must not need KVM,
+systemd, a guest image or network downloads. [docs/protocol.md](docs/protocol.md)
+describes the client behaviour that tests and changes must preserve.
 
 ## Dependencies and licensing
 

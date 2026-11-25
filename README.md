@@ -16,6 +16,80 @@ against the version of the peer you are talking to.
 | [`qrab-qapi-macros`](projects/qapi-macros/README.md) | `qapi_macros` | The `#[qapi(...)]` attribute: version-aware Serde and trait implementations |
 | [`qrab-qapi-codegen`](projects/qapi-codegen/README.md) | `qapi_codegen` | Parses QEMU's QAPI schema language and generates the unified, version-annotated Rust types |
 
+How they fit together:
+
+- `qrab-qapi-codegen` reads the QAPI schemas of every pinned QEMU release,
+  merges them into one version-annotated registry and writes the Rust
+  sources of `qrab-qapi`. Those sources are checked in, so ordinary builds
+  neither run the generator nor need a QEMU source tree.
+- `qrab-qapi` contains the generated types. Each one carries a
+  `#[qapi(...)]` attribute that `qrab-qapi-macros` expands into Serde and
+  trait implementations that check QEMU version lifetimes. `qrab-qapi`
+  re-exports the attribute, so you do not depend on the macros crate
+  directly.
+- `qrab-qapi-protocol` connects to a QEMU monitor (QMP) socket, learns the
+  peer's QEMU version during the handshake, and sends and decodes
+  `qrab-qapi` types checked against that version.
+
+Most users want `qrab-qapi-protocol` together with `qrab-qapi`.
+
+## QEMU version support
+
+- **Schema history.** The generated types cover every stable QEMU release
+  pinned in
+  [`projects/qapi-codegen/qemu-versions.lock`](projects/qapi-codegen/qemu-versions.lock):
+  QMP from QEMU 1.0, where its schema first appears, and QGA from 0.15,
+  through the current baseline, **QEMU 11.1.3**.
+- **Maintained matrix.** The release series **9.2, 10.0, 10.1, 10.2, 11.0
+  and 11.1** are maintained. CI compiles `qrab-qapi` bounded to each of them,
+  using the latest pinned patch release of each series.
+- **Protocol clients.** `qrab-qapi-protocol` targets the QEMU 11.1.3
+  protocol. Each connection checks requests and replies against its own
+  peer's version.
+- **Older QEMU** is untested, not unsupported. Historical schemas stay
+  generation inputs and regression fixtures, but schema coverage does not
+  mean every release has been tested against a live QEMU.
+
+To compile only the representations that exist in a range of QEMU releases,
+set `QEMU_MIN_VERSION` and `QEMU_MAX_VERSION` when building, for example to
+`9.2.0` and `11.1.3`. Without them the complete history is available.
+
+[docs/codegen.md](docs/codegen.md#compatibility-policy) has the full
+compatibility policy and [docs/protocol.md](docs/protocol.md) the client
+behaviour.
+
+## Usage
+
+The packages carry a `qrab-` prefix, while their library names stay `qapi`,
+`qapi_protocol`, `qapi_macros` and `qapi_codegen`. Rename the dependency so
+code imports `qapi::...`:
+
+```toml
+[dependencies]
+qapi = { package = "qrab-qapi", version = "0.1" }
+qapi-protocol = { package = "qrab-qapi-protocol", version = "0.1" }
+```
+
+Query a running QEMU over its QMP socket, inside an async function:
+
+```rust
+let (qmp, _events) = qapi_protocol::Qmp::new(std::path::Path::new("/run/vm/qmp.sock")).await?;
+let status = qmp.execute(&qapi::commands::QueryStatus {}).await?;
+println!("running: {}", status.running);
+qmp.shutdown().await;
+```
+
+Each crate's README has more:
+
+- [qrab-qapi](projects/qapi/README.md): the generated types, version bounds
+  and the `schema-docs` feature;
+- [qrab-qapi-protocol](projects/qapi-protocol/README.md): connecting to
+  QEMU;
+- [qrab-qapi-macros](projects/qapi-macros/README.md): the `#[qapi(...)]`
+  attribute;
+- [qrab-qapi-codegen](projects/qapi-codegen/README.md): the generator and its
+  command line.
+
 ## QEMU's schema documentation is GPL
 
 QEMU's QAPI schema files, including their documentation comments, are
@@ -41,6 +115,45 @@ binaries, and rendered documentation. The feature needs a QEMU git tree with
 the pinned release tags, named by `QRAB_QAPI_QEMU_SRC` or found at
 `vendor/qemu`. See [NOTICE](NOTICE).
 
+## Building, testing and regenerating
+
+You need a Rust toolchain from [rustup](https://rustup.rs/), Rust 1.88 or
+newer; CI uses a pinned stable toolchain, currently 1.97.1. The default
+workspace members (`qrab-qapi-macros`, `qrab-qapi` and `qrab-qapi-protocol`)
+build from the checked-in generated sources and need no QEMU checkout,
+Python, KVM, root privileges or network access:
+
+```sh
+cargo test --locked
+```
+
+The generated sources under `projects/qapi/src/generated` (QMP) and
+`projects/qapi/src/qga` (QGA) are outputs of `qrab-qapi-codegen`. Generator
+work and regeneration need the QEMU source as the `vendor/qemu` git
+submodule, which points at the QEMU repository URL in
+[.gitmodules](.gitmodules), with the release tags pinned in
+`projects/qapi-codegen/qemu-versions.lock`. Git and Python 3.14 or newer are
+also needed:
+
+```sh
+git submodule update --init vendor/qemu
+git -C vendor/qemu fetch origin --tags
+bash contrib/check-qapi.sh
+```
+
+[`contrib/check-qapi.sh`](contrib/check-qapi.sh) runs strict Clippy on all
+four crates, tests the generator against QEMU's own parser, regenerates QMP
+and QGA and compares the output byte for byte with the checked-in sources,
+compiles `qrab-qapi` for each maintained QEMU series and builds the API
+documentation with warnings treated as errors. The submodule is used only by
+the generator, its tests and the `schema-docs` feature; the published crates
+do not include it.
+
+Tests against real QEMU binaries are explicit and opt-in.
+[docs/testing.md](docs/testing.md) describes them, and
+[docs/codegen.md](docs/codegen.md) describes the generator.
+[CONTRIBUTING.md](CONTRIBUTING.md) lists every check CI runs.
+
 ## Relationship to qrab
 
 These crates were developed as part of
@@ -50,6 +163,13 @@ not depend on qrab, Kubernetes or any particular way of launching QEMU, and
 are maintained as a general-purpose library. qrab-qapi is a subproject of
 qrab and is governed by the qrab project; see [GOVERNANCE.md](GOVERNANCE.md).
 The project site is <https://qrab.dev>.
+
+## Status
+
+qrab-qapi is pre-1.0. The APIs may change between minor releases, and each
+crate is versioned separately.
+Report bugs and propose features in this repository's GitHub issues, and
+security problems privately as described in [SECURITY.md](SECURITY.md).
 
 ## Contributing
 
