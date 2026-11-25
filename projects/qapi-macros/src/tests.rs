@@ -58,6 +58,7 @@ pub(crate) fn expanded(args: &str, item: &str, bounds: &VersionBounds) -> (Deriv
     let mut items = file.items.into_iter();
     let item: DeriveInput = match items.next() {
         Some(syn::Item::Enum(item)) => item.into(),
+        Some(syn::Item::Struct(item)) => item.into(),
         other => panic!("not an item: {}", quote::quote!(#other)),
     };
     let rest: TokenStream2 = items.map(|item| quote::quote!(#item)).collect();

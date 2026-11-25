@@ -15,10 +15,27 @@
 //!   bound may be left out);
 //! - the repeatable `feature = "deprecated"` and `feature = "unstable"`:
 //!   QAPI's built-in features;
+//! - on structs: `command`, `event`, the repeatable `simple_union`, and on
+//!   commands `returns = "Type"`, the repeatable `returns(added = "V", value
+//!   = "Type")` and the repeatable flags `allow_oob`, `allow_preconfig` and
+//!   `no_success_response`; each flag and `simple_union` is bare or has a
+//!   version range;
 //! - on enums: `union_branch`.
 //!
 //! On a member of a type: `name = "wire"`, `added`, `removed`,
 //! `condition`, `deprecated(...)` and `feature` as above.
+//! A struct field also takes `flatten`, the repeatable `discriminator`,
+//! `union` and `required`. A bare `discriminator` makes the field its
+//! union's discriminator in every release that has it, and
+//! `discriminator(added = "V", removed = "V")` (either bound may be left
+//! out, to start or end with the field) in that run of releases only, as
+//! `CpuInfoFast.arch` is until 3.0, where `target` takes over while `arch`
+//! lasts until 6.0. A bound of a run is not the field's own, which leaving
+//! it out gives. The runs lie within the field's lifetime and the union
+//! field's, and in each release of the union field exactly one run is the
+//! discriminator.
+//! A `flatten`ed field has no member of its own, so it takes
+//! only `added`, `removed` and `union`.
 //!
 //! Only the keys called repeatable above may appear more than once on one
 //! item, counting all of its `#[qapi(...)]` attributes together, and a
@@ -76,7 +93,15 @@ pub(crate) struct TypeAttrs {
     pub(crate) unstable: Vec<AttrRange>,
     pub(crate) condition: Option<String>,
     pub(crate) features: Vec<String>,
+    pub(crate) returns: Option<LitStr>,
+    pub(crate) returns_history: Vec<(Version, LitStr)>,
+    pub(crate) allow_oob: Vec<AttrRange>,
+    pub(crate) allow_preconfig: Vec<AttrRange>,
+    pub(crate) no_success_response: Vec<AttrRange>,
+    pub(crate) command: Option<Span>,
+    pub(crate) event: Option<Span>,
     pub(crate) union_branch: Option<Span>,
+    pub(crate) simple_union: Vec<AttrRange>,
     spans: LifetimeSpans,
 }
 
@@ -89,6 +114,13 @@ pub(crate) struct ItemAttrs {
     pub(crate) deprecated: Vec<Deprecation>,
     pub(crate) condition: Option<String>,
     pub(crate) features: Vec<String>,
+    /// The flags of a field, each the span of its key.
+    pub(crate) flatten: Option<Span>,
+    /// The runs of releases in which the field is its union's
+    /// discriminator; a bare `discriminator` is one without bounds.
+    pub(crate) discriminator: Vec<AttrRange>,
+    pub(crate) union_field: Option<Span>,
+    pub(crate) required: Option<Span>,
     spans: LifetimeSpans,
 }
 
@@ -102,6 +134,21 @@ struct LifetimeSpans {
 impl ItemAttrs {
     pub(crate) fn has_feature(&self, name: &str) -> bool {
         self.features.iter().any(|feature| feature == name)
+    }
+
+    /// The first key that only a struct field takes, for a variant's error.
+    pub(crate) fn field_key(&self) -> Option<(Span, &'static str)> {
+        [
+            (self.flatten, "flatten"),
+            (
+                self.discriminator.first().map(|range| range.span),
+                "discriminator",
+            ),
+            (self.union_field, "union"),
+            (self.required, "required"),
+        ]
+        .into_iter()
+        .find_map(|(span, key)| Some((span?, key)))
     }
 }
 
@@ -336,6 +383,18 @@ fn parse_attr_range(meta: &Meta, key: &str) -> syn::Result<AttrRange> {
     Ok(range)
 }
 
+/// A bare flag, or a flag with a version range.
+fn flag_range(meta: &Meta, key: &str) -> syn::Result<AttrRange> {
+    match meta {
+        Meta::Path(path) => Ok(AttrRange {
+            span: path.span(),
+            added: None,
+            removed: None,
+        }),
+        _ => parse_attr_range(meta, key),
+    }
+}
+
 /// Parse `deprecated(added = "X", removed = "Y")`, where `removed` ends a
 /// deprecation that a later release drops while the item lasts.
 fn parse_deprecated(meta: &Meta) -> syn::Result<Deprecation> {
@@ -540,6 +599,10 @@ impl TypeAttrs {
             .check(parsed.since, parsed.until, &mut parsed.deprecated)?;
         let ranges = |key, list| check_ranges(key, list, parsed.since, parsed.until);
         ranges("unstable", &parsed.unstable)?;
+        ranges("simple_union", &parsed.simple_union)?;
+        ranges("allow_oob", &parsed.allow_oob)?;
+        ranges("allow_preconfig", &parsed.allow_preconfig)?;
+        ranges("no_success_response", &parsed.no_success_response)?;
         Ok(parsed)
     }
 
@@ -563,6 +626,16 @@ impl TypeAttrs {
                 "condition" => once(&mut self.condition, item, condition(item)?)?,
                 "unstable" => self.unstable.push(parse_attr_range(item, &key)?),
                 "union_branch" => once_flag(&mut self.union_branch, item, &key)?,
+                "simple_union" => self.simple_union.push(flag_range(item, &key)?),
+                "allow_oob" => self.allow_oob.push(flag_range(item, &key)?),
+                "allow_preconfig" => self.allow_preconfig.push(flag_range(item, &key)?),
+                "no_success_response" => self.no_success_response.push(flag_range(item, &key)?),
+                "command" => once_flag(&mut self.command, item, &key)?,
+                "event" => once_flag(&mut self.event, item, &key)?,
+                "returns" => match item {
+                    Meta::List(_) => self.returns_history.push(parse_returns_history(item)?),
+                    _ => once(&mut self.returns, item, lit_str(item, &key)?.clone())?,
+                },
                 _ => return Err(unknown(item, &key)),
             }
         }
@@ -571,6 +644,61 @@ impl TypeAttrs {
 
     pub(crate) fn has_feature(&self, name: &str) -> bool {
         self.features.iter().any(|feature| feature == name)
+    }
+
+    /// The keys that only a command takes, by the span of each.
+    pub(crate) fn command_keys(&self) -> impl Iterator<Item = (Span, &'static str)> + '_ {
+        let ranges = |ranges: &'static str, list: &[AttrRange]| {
+            list.first().map(|range| (range.span, ranges))
+        };
+        [
+            self.returns.as_ref().map(|text| (text.span(), "returns")),
+            self.returns_history
+                .first()
+                .map(|(_, text)| (text.span(), "returns")),
+            ranges("allow_oob", &self.allow_oob),
+            ranges("allow_preconfig", &self.allow_preconfig),
+            ranges("no_success_response", &self.no_success_response),
+        ]
+        .into_iter()
+        .flatten()
+    }
+
+    /// The first key that only a struct takes, for an enum's error.
+    pub(crate) fn struct_key(&self) -> Option<(Span, &'static str)> {
+        let command = self.command.map(|span| (span, "command"));
+        let event = self.event.map(|span| (span, "event"));
+        let simple_union = self
+            .simple_union
+            .first()
+            .map(|range| (range.span, "simple_union"));
+        command
+            .into_iter()
+            .chain(self.command_keys())
+            .chain(event)
+            .chain(simple_union)
+            .next()
+    }
+}
+
+/// Parse `returns(added = "X", value = "Type")`.
+fn parse_returns_history(meta: &Meta) -> syn::Result<(Version, LitStr)> {
+    let (list, items) = nested(meta, "returns")?;
+    let mut added = None;
+    let mut value = None;
+    for item in &items {
+        match key(item)?.as_str() {
+            "added" => once(&mut added, item, version(item, "added")?)?,
+            "value" => once(&mut value, item, lit_str(item, "value")?.clone())?,
+            other => return Err(unknown(item, other)),
+        }
+    }
+    match (added, value) {
+        (Some(added), Some(value)) => Ok((added, value)),
+        _ => Err(syn::Error::new_spanned(
+            list,
+            "qapi: `returns(...)` needs `added` and `value`",
+        )),
     }
 }
 
@@ -593,6 +721,10 @@ impl ItemAttrs {
                 "feature" => feature(&mut self.features, item)?,
                 "name" => once(&mut self.name, item, lit_str(item, &key)?.value())?,
                 "condition" => once(&mut self.condition, item, condition(item)?)?,
+                "flatten" => once_flag(&mut self.flatten, item, &key)?,
+                "discriminator" => self.discriminator.push(flag_range(item, &key)?),
+                "union" => once_flag(&mut self.union_field, item, &key)?,
+                "required" => once_flag(&mut self.required, item, &key)?,
                 _ => return Err(unknown(item, &key)),
             }
         }

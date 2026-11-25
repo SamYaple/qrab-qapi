@@ -44,6 +44,13 @@ pub(crate) fn gen_enum(
     bounds: &VersionBounds,
 ) -> syn::Result<TokenStream2> {
     let enum_name = input_ast.ident.clone();
+    if let Some((span, key)) = ta.struct_key() {
+        return Err(syn::Error::new(
+            span,
+            format!("qapi: `{key}` applies only to structs"),
+        ));
+    }
+
     // Entry-point dispatches on the same `input_ast.data` variant, so this
     // branch is an internal invariant, not user-reachable.
     let syn::Data::Enum(data_enum) = &mut input_ast.data else {
@@ -53,6 +60,12 @@ pub(crate) fn gen_enum(
     let mut parsed = Vec::new();
     for variant in std::mem::take(&mut data_enum.variants) {
         let attrs = ItemAttrs::parse(&variant.attrs, ta)?;
+        if let Some((span, key)) = attrs.field_key() {
+            return Err(syn::Error::new(
+                span,
+                format!("qapi: `{key}` applies only to struct fields"),
+            ));
+        }
         let kind = match &variant.fields {
             Fields::Unit => VariantKind::Unit,
             Fields::Unnamed(f) if f.unnamed.len() == 1 => {

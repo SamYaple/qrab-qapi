@@ -78,3 +78,37 @@ pub trait QapiFlatUnion: Sized {
         }
     }
 }
+
+pub trait QapiCommand: serde::Serialize {
+    type Returns: serde::de::DeserializeOwned + 'static;
+    const NAME: &'static str;
+    const ALLOW_OOB: bool;
+    const ALLOW_PRECONFIG: bool;
+    const SUCCESS_RESPONSE: bool;
+    const UNSTABLE: bool;
+    const AVAILABLE_SINCE: (u32, u32, u32);
+    const REMOVED_IN: Option<(u32, u32, u32)>;
+    const PRECONFIG_SINCE: Option<(u32, u32, u32)>;
+
+    fn allows_oob(_version: (u32, u32, u32)) -> bool {
+        Self::ALLOW_OOB
+    }
+
+    fn allows_preconfig(_version: (u32, u32, u32)) -> bool {
+        Self::ALLOW_PRECONFIG
+    }
+
+    fn sends_success_response(_version: (u32, u32, u32)) -> bool {
+        Self::SUCCESS_RESPONSE
+    }
+
+    fn is_unstable(_version: (u32, u32, u32)) -> bool {
+        Self::UNSTABLE
+    }
+}
+
+pub trait PreconfigSafe: QapiCommand {}
+
+pub trait QapiEvent: serde::de::DeserializeOwned {
+    const NAME: &'static str;
+}

@@ -6,6 +6,8 @@
 //! type and its members against the version of the peer:
 //!
 //! - String enums, alternates and the enums of union branches.
+//! - Structs, with their flattened bases and unions, and command and event
+//!   types, which also implement `QapiCommand` or `QapiEvent`.
 //!
 //! The expansion calls the run-time support of `qrab-qapi` by the relative
 //! path `qapi`, so it compiles only where `qapi` names that library, as in a
@@ -17,6 +19,8 @@
 //! and one that every release of the range deprecates is Rust
 //! `#[deprecated]`. The documentation of an unstable type describes the
 //! maximum.
+//! So do the flag constants of a command, while its return types, and
+//! whether it is `PreconfigSafe`, cover every release of the range.
 //! An invalid value fails the build with one error. Cargo does not track
 //! the variables that a macro reads, so a crate that uses the attribute must
 //! rebuild when they change: its build script prints
@@ -29,7 +33,9 @@
 // what the expansions share; and an expansion per kind of item.
 mod attrs;
 mod bounds;
+mod command;
 mod enums;
+mod structs;
 mod support;
 #[cfg(test)]
 mod tests;
@@ -37,6 +43,7 @@ mod tests;
 use crate::attrs::{MetaArgs, TypeAttrs, parse_items};
 use crate::bounds::{VersionBounds, excluded_by_bounds, version_bounds};
 use crate::enums::gen_enum;
+use crate::structs::gen_struct;
 use crate::support::{
     condition_note, deprecated_attr, flag_at_newest, push_doc_notes, ranges_at_newest,
 };
@@ -56,6 +63,9 @@ use syn::{DeriveInput, parse_macro_input};
 /// `Deserialize`, so the item must not derive them itself: a derive below the
 /// attribute is an error at its path, and one above it conflicts with the
 /// expansion. String enums also implement `Display`, writing the wire name.
+/// Structs implement it as their QAPI name; a struct with fields that is
+/// not a command follows it with the fields that are set, as
+/// `name(wire=value, ...)` with each value in its `Debug` form.
 /// Generic items are not supported.
 ///
 /// ```
@@ -137,6 +147,7 @@ pub(crate) fn expand(
 
     let impls = match input_ast.data {
         syn::Data::Enum(_) => gen_enum(&mut input_ast, &ta, bounds)?,
+        syn::Data::Struct(_) => gen_struct(&mut input_ast, &ta, bounds)?,
         _ => {
             return Err(syn::Error::new_spanned(
                 &input_ast.ident,
