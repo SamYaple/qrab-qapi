@@ -32,7 +32,9 @@ You need:
   with the `rustfmt` and `clippy` components. CI pins a stable toolchain,
   currently 1.97.1, in [.github/workflows/ci.yml](.github/workflows/ci.yml).
 - Optionally [cargo-deny](https://github.com/EmbarkStudios/cargo-deny), for
-  the dependency license check.
+  the dependency license check, and
+  [cargo-semver-checks](https://github.com/obi1kenobi/cargo-semver-checks),
+  for the API compatibility check.
 - For generator work: Git, Python 3.14 or newer, and the `vendor/qemu`
   submodule with its release tags (see below).
 
@@ -72,6 +74,40 @@ git -C vendor/qemu fetch origin --tags
 `vendor/qemu` is a git submodule of the QEMU repository named in
 [.gitmodules](.gitmodules). The tags it must hold are the ones pinned in
 [`projects/qapi-codegen/qemu-versions.lock`](projects/qapi-codegen/qemu-versions.lock).
+
+### Minimum Rust version and API compatibility
+
+Two more jobs of the `ci` workflow check what a release promises. They
+are not required checks.
+
+- `msrv` type-checks every crate of the workspace, with all of its
+  targets, on the oldest Rust the crates declare: `rust-version` in the
+  root [Cargo.toml](Cargo.toml), currently 1.88. Raising it is a
+  deliberate change of its own.
+
+  ```sh
+  rustup toolchain install 1.88 --profile minimal
+  cargo +1.88 check --locked --workspace --all-targets
+  ```
+
+- `semver` runs `cargo-semver-checks` on the library crates through
+  [`contrib/check-semver.sh`](contrib/check-semver.sh). It compares them
+  with the newest release tag (`v*`) in the history of the pull request's
+  base, so a change that breaks the public API since the last release
+  fails unless the crate's version has the bump that the change needs:
+  before 1.0, the minor version for a breaking change. Until the first
+  release is tagged it compares with the base itself and only reports
+  what it finds, with a warning. `qrab-qapi-macros` is a proc-macro
+  crate, which cargo-semver-checks cannot check, and `qrab-qapi` is
+  checked without the `schema-docs` feature, which changes only the
+  documentation. cargo-semver-checks does not yet detect every breaking
+  change, such as a changed type of a public field, so review the API
+  as well.
+
+  ```sh
+  cargo install --locked cargo-semver-checks@0.51.0
+  bash contrib/check-semver.sh origin/main
+  ```
 
 Tests against real QEMU binaries are opt-in and not part of CI;
 [docs/testing.md](docs/testing.md) explains how to run them. Run them when
@@ -142,10 +178,11 @@ has the details and the reasoning.
 3. **Open a pull request** against `main`. Fill in the template: what the
    change does, why, and how you tested it. Keep a pull request to one
    logical change; split unrelated fixes into separate pull requests.
-4. **Pass CI.** The `ci` workflow runs the jobs `fmt`, `clippy`, `test`,
-   `cargo-deny` and `check-qapi`, and the `DCO` check verifies every commit's
-   sign-off. `check-qapi` needs the QEMU source and takes longer than the
-   others. The branch must sit on top of the current `main`, so that
+4. **Pass CI.** The `ci` workflow runs the required jobs `fmt`, `clippy`,
+   `test`, `cargo-deny` and `check-qapi`, and the `DCO` check verifies every
+   commit's sign-off. `check-qapi` needs the QEMU source and takes longer
+   than the others. The `msrv` and `semver` jobs (see
+   [above](#minimum-rust-version-and-api-compatibility)) run as well. The branch must sit on top of the current `main`, so that
    `main` can be fast-forwarded to it; rebase it when `main` has moved.
 5. **Get a code owner's review.** A maintainer listed in
    [.github/CODEOWNERS](.github/CODEOWNERS) must approve the latest push, and

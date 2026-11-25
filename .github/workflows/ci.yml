@@ -1,11 +1,13 @@
 # The required checks of qrab's main-review-gate ruleset: the job names
 # fmt, clippy, test, cargo-deny and check-qapi are the check contexts. Keep
 # them single, non-matrix jobs, and keep this workflow free of path filters,
-# or a required check never reports.
+# or a required check never reports. The msrv and semver jobs are not
+# required checks (see CONTRIBUTING.md).
 #
 # Every job runs on every change. Its steps after the checkout are guarded on
-# the files they need (the Cargo workspace, contrib/check-qapi.sh), so a job
-# with nothing to check yet succeeds with those steps skipped.
+# the files they need (the Cargo workspace, contrib/check-qapi.sh,
+# contrib/check-semver.sh), so a job with nothing to check yet succeeds with
+# those steps skipped.
 #
 # Only GitHub's own actions (actions/*) are used, and there is no build
 # cache: every job builds from a clean checkout.
@@ -144,3 +146,54 @@ jobs:
       - name: Run check-qapi
         if: hashFiles('contrib/check-qapi.sh') != ''
         run: bash contrib/check-qapi.sh
+
+  # The oldest Rust the crates declare, rust-version in Cargo.toml: every
+  # crate of the workspace, with all of its targets, type-checks with it.
+  msrv:
+    name: msrv
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the MSRV toolchain
+        if: hashFiles('Cargo.toml') != ''
+        run: |
+          msrv=$(sed -n 's/^rust-version = "\([0-9.]*\)"$/\1/p' Cargo.toml)
+          [[ -n $msrv ]] || { echo '::error::Cargo.toml declares no rust-version'; exit 1; }
+          rustup toolchain install "$msrv" --profile minimal
+          rustup default "$msrv"
+      - name: Check the workspace
+        if: hashFiles('Cargo.toml') != ''
+        run: cargo check --locked --workspace --all-targets
+
+  # cargo-semver-checks of the library crates against the newest release
+  # tag in the history of the base: the PR's base, or for a push the
+  # previous tip of main, which a fast-forward makes the PR's base. Until
+  # the first release is tagged it compares with the base itself and only
+  # reports, with a warning; contrib/check-semver.sh has the details.
+  semver:
+    name: semver
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The base and the release tags.
+          fetch-depth: 0
+      - name: Install the Rust toolchain
+        if: hashFiles('contrib/check-semver.sh') != ''
+        run: |
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
+          rustup default "$RUST_TOOLCHAIN"
+      # Built from its crates.io source at a pinned version and lock file.
+      - name: Install cargo-semver-checks
+        if: hashFiles('contrib/check-semver.sh') != ''
+        run: cargo install --locked cargo-semver-checks@0.51.0
+      - name: Check the public API
+        if: hashFiles('contrib/check-semver.sh') != ''
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: bash contrib/check-semver.sh "$BASE"
