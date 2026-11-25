@@ -28,4 +28,9 @@ syn = { version = "3.0.10", features = ["full"] }
 tempfile = "3"
 # The QAPI crates: the qrab-qapi* packages, under the names the code uses.
 qapi = { package = "qrab-qapi", path = "projects/qapi", version = "0.1.0" }
+qapi-codegen = { package = "qrab-qapi-codegen", path = "projects/qapi-codegen", version = "0.1.0" }
 qapi-macros = { package = "qrab-qapi-macros", path = "projects/qapi-macros", version = "0.1.0" }
+
+# Optimize the generator when the qrab-qapi `schema-docs` feature runs it from build.rs.
+[profile.dev.package.qrab-qapi-codegen]
+opt-level = 3

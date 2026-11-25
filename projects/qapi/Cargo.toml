@@ -26,3 +26,12 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 qapi-macros = { workspace = true }
+
+[features]
+# Opt-in local reading build: regenerate the QMP/QGA types from a QEMU tree
+# with QEMU's GPL-2.0-or-later schema documentation as rustdoc. The checked-in
+# generated sources carry no schema documentation.
+schema-docs = ["dep:qapi-codegen"]
+
+[build-dependencies]
+qapi-codegen = { workspace = true, optional = true }

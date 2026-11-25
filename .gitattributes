@@ -1,0 +1,5 @@
+# The generated QMP and QGA sources; GitHub collapses them in diffs. They are
+# checked out with LF endings, as the generator writes them, so that the
+# byte-for-byte regeneration check holds on any platform.
+projects/qapi/src/generated/** linguist-generated eol=lf
+projects/qapi/src/qga/** linguist-generated eol=lf

@@ -138,6 +138,61 @@ To move to a newer stable QEMU release, from the repository root:
 4. Run `bash contrib/check-qapi.sh`, which runs the generator's tests, and
    commit the gitlink and the lockfile together, with the changes above.
 
+## Regeneration
+
+`qrab-qapi` checks in the generator's output. Regenerate it from the
+repository root:
+
+```sh
+cargo run --release --locked -p qrab-qapi-codegen -- vendor/qemu \
+  --output-dir projects/qapi/src/generated
+cargo run --release --locked -p qrab-qapi-codegen -- vendor/qemu --qga \
+  --output-dir projects/qapi/src/qga
+```
+
+Normal builds consume these files directly and perform no network access or
+code generation; only the opt-in `schema-docs` feature generates at build
+time. `contrib/check-qapi.sh` regenerates both trees and requires them to
+match byte for byte. It also generates both with `--schema-docs`, diffs both
+modes with their `///` lines removed, and builds the API docs of the
+`schema-docs` build with warnings treated as errors.
+
+When advancing the QEMU baseline, regenerate both trees once the new release
+is pinned, and commit them with the pins. A release that starts a new series
+of the maintained matrix also joins the series that `contrib/check-qapi.sh`
+compiles the generated code for.
+
+## Reading the full QEMU docs locally
+
+The `qapi` crate's opt-in `schema-docs` feature regenerates the QMP and QGA
+modules during the build with the schema documentation included. Its output
+contains QEMU's GPL-2.0-or-later text, which must not be published, so build
+it into a target directory of its own rather than the `target/doc` that
+ordinary documentation builds use, as `contrib/check-qapi.sh` does:
+
+```sh
+cargo doc -p qrab-qapi --features schema-docs --target-dir target/schema-docs --open
+```
+
+Its build script reads the QEMU tree named by `QRAB_QAPI_QEMU_SRC`, defaulting
+to the workspace `vendor/qemu`, which must hold the pinned release tags. It
+writes both trees to the build's `OUT_DIR` and compiles them in place of
+`src/generated` and `src/qga` under the same module paths. Default builds
+neither need a QEMU tree nor build `qapi-codegen`. The feature adds roughly
+half a minute to a clean build, mostly generation across every pinned release.
+For hover docs in an editor, enable it in rust-analyzer, with its build in
+that target directory too:
+
+```json
+{
+  "rust-analyzer.cargo.features": ["qrab-qapi/schema-docs"],
+  "rust-analyzer.cargo.targetDir": "target/schema-docs"
+}
+```
+
+The docs-enabled build is for local reading. The QEMU text in it is
+GPL-2.0-or-later; do not publish or ship artifacts built with the feature.
+
 ## Validation
 
 Each release's schema is checked before lowering as its own QEMU generator
@@ -531,3 +586,60 @@ still has the item drops the feature. A run that lasts until the item goes,
 such as the deprecation of the `MEM_UNPLUG_ERROR` event from 6.2, ends with
 the item's own `removed` (9.1).
 
+## The generated code at run time
+
+The `#[qapi]` attribute of `qrab-qapi-macros` expands the generated items, and
+`qrab-qapi` provides the version context they check against.
+
+Generated command constants describe the newest schema flags. The
+`allows_oob`, `allows_preconfig` and `sends_success_response` trait methods
+query their added/removed ranges for a particular peer release, and repeated
+macro ranges combine independently of order. Command `is_unstable(version)`
+queries the peer release; reflection and the `UNSTABLE` constant describe the
+newest declaration.
+
+A command whose return type changed across the releases that a build
+supports has an enum as its `Returns`, with a variant per return type named
+by the release that introduced it:
+`qapi::commands::QueryTargetReturns` is `V1_2_0(TargetInfo)` or
+`V10_1_0(QemuTargetInfo)`. A reply decoded in a peer's version scope, as the
+protocol clients decode them, takes the variant of the peer's release, and
+unscoped decoding the newest. A variant whose type is unit reads QEMU's `{}`.
+
+Generated enum serializers enforce both type and variant lifetimes. The same
+checks apply to alternate values and union branch payloads, including scalar
+payloads whose Rust types carry no QEMU metadata. Invalid outgoing values name
+the unavailable type, variant or field and peer version, and `qapi::to_value`
+returns them as the typed `EncodeError::Unavailable`. Explicitly scoped decoding
+also checks type and variant lifetimes, including union dispatch. Unscoped
+decoding remains permissive so recorded and newer replies can still be inspected.
+Union serialization also checks that a present typed payload matches its active
+discriminator, for both flat and historical nested layouts. The branch trait's
+optional `wire_tag` hook keeps handwritten implementations compatible.
+
+Use `qapi::with_version` when decoding a recorded historical simple-union
+layout; unscoped decoding selects the newest layout. Discriminator dispatch
+selects a branch representation for the scoped peer version; unscoped
+inspection uses the newest shape and does not fall back to an obsolete
+permissive shape after a decoding error. String enum decoding selects the
+active representation of a shared wire tag.
+
+A field that is set is serialized only within its lifetime: outside it,
+serialization fails with `EncodeError::Unavailable` instead of discarding the
+value, as it does for the inactive representation of a shared wire name, which
+decoding never populates. Explicit peer contexts enforce active required fields and check type
+lifetimes; unscoped record inspection remains lenient. Present nullable values
+retain `Some(null)` separately from absent fields.
+
+`QEMU_MIN_VERSION`/`QEMU_MAX_VERSION` builds prune representations outside the
+requested range: a command's return enum keeps the variants of the range,
+and a range with one return type has it as the `Returns` type. The newest
+release of the range takes the place of the newest pin in the command
+constants, the documentation of unstable types and unscoped decoding.
+`contrib/check-qapi.sh` compiles all maintained release series and restores an
+unbounded development build afterwards.
+
+Serde macro expansions allocate helper names against user fields, referenced
+types and other generated helpers. Fields such as `map` and internal-looking
+identifiers cannot capture JSON storage, visitors or serde generic parameters.
+These cases have compile-and-round-trip regressions.
