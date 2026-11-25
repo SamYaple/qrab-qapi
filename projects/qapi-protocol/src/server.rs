@@ -11,6 +11,7 @@ use crate::{
     wire,
 };
 use serde_json::{Value, json};
+use tokio::io::AsyncWriteExt;
 use tokio::net::{
     UnixListener, UnixStream,
     unix::{OwnedReadHalf, OwnedWriteHalf},
@@ -156,5 +157,49 @@ impl QmpSession {
     }
     pub async fn send_event(&mut self, name: &str, data: Value) -> Result<()> {
         self.writer.send_event(name, data).await
+    }
+}
+
+pub struct QgaSession {
+    reader: QmpReader,
+    writer: QmpWriter,
+}
+impl QgaSession {
+    pub async fn accept(listener: &UnixListener) -> Result<Self> {
+        Ok(Self::from_stream(listener.accept().await?.0))
+    }
+    pub fn from_stream(stream: UnixStream) -> Self {
+        let session = QmpSession::from_stream(stream);
+        Self {
+            reader: session.reader,
+            writer: session.writer,
+        }
+    }
+    pub async fn handle_sync(&mut self) -> Result<i64> {
+        self.reader.reader.reset_at_sentinel().await?;
+        let command = self.reader.recv_command_full().await?;
+        if command.name != "guest-sync-delimited" || command.oob {
+            return Err(Error::Protocol("expected guest-sync-delimited".into()));
+        }
+        let nonce = command.arguments["id"]
+            .as_i64()
+            .ok_or_else(|| Error::Protocol("missing sync nonce".into()))?;
+        let mut bytes = vec![0xff];
+        bytes.extend(framing::encode(&json!({"return": nonce}), LIMIT)?);
+        self.writer.writer.write_all(&bytes).await?;
+        Ok(nonce)
+    }
+    pub async fn recv_command(&mut self) -> Result<(String, Value)> {
+        let command = self.reader.recv_command_full().await?;
+        if command.oob {
+            return Err(Error::Protocol("QGA does not support OOB".into()));
+        }
+        Ok((command.name, command.arguments))
+    }
+    pub async fn send_return(&mut self, value: Value) -> Result<()> {
+        self.writer.send_return_with_id(value, None).await
+    }
+    pub async fn send_error(&mut self, class: &str, desc: &str) -> Result<()> {
+        self.writer.send_error_with_id(class, desc, None).await
     }
 }

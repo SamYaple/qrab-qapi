@@ -3,11 +3,13 @@
 //!
 //! Each connection owns its version and lifecycle. [`Qmp`] describes the
 //! QMP client's cancellation and timeout semantics.
+//! [`qga::Qga`] describes the guest agent client's.
 //! [`Error`] says which failures leave a connection usable. The
 //! repository's `docs/protocol.md` describes the client lifecycle, the mock
 //! server API and the internals, and `docs/testing.md` the tests.
 
 mod framing;
+pub mod qga;
 mod qmp;
 #[cfg(feature = "mock")]
 pub mod server;
@@ -59,6 +61,19 @@ pub enum Error {
     /// The peer sent valid JSON that breaks the protocol.
     #[error("protocol violation: {0}")]
     Protocol(String),
+    /// The guest agent's `guest-info` reports a version that is not a
+    /// release number, so no client was returned.
+    #[error(transparent)]
+    AgentVersion(#[from] qapi::VersionParseError),
+    /// The guest agent answered `guest-sync-delimited`, which the client
+    /// synchronizes with, with this error reply instead of its nonce: an
+    /// agent before qemu-ga 1.1 lacks the command, and one started with it
+    /// disabled (`--block-rpcs`, `--allow-rpcs`) refuses it. No client was
+    /// returned.
+    #[error(
+        "the guest agent cannot synchronize; it needs guest-sync-delimited (qemu-ga 1.1 or later): {0}"
+    )]
+    SyncUnsupported(#[source] RemoteError),
     /// A deadline elapsed; the phase says whether the request reached the peer.
     #[error("timed out {phase}")]
     Timeout { phase: TimeoutPhase },

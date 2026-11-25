@@ -1,4 +1,6 @@
 #![allow(dead_code)]
+use qapi_protocol::qga::Qga;
+use qapi_protocol::server::QgaSession;
 use qapi_protocol::{ClientOptions, Qmp, QmpEvent, server::QmpSession};
 use tokio::{net::UnixStream, sync::mpsc};
 
@@ -20,6 +22,23 @@ pub async fn qmp_version(
     });
     let (client, events) = client.unwrap();
     (client, events, peer)
+}
+
+pub async fn qga(options: ClientOptions) -> (Qga, QgaSession) {
+    qga_version(options, "11.1.3").await
+}
+
+pub async fn qga_version(options: ClientOptions, version: &str) -> (Qga, QgaSession) {
+    let (client, server) = UnixStream::pair().unwrap();
+    let mut peer = QgaSession::from_stream(server);
+    let (client, ()) = tokio::join!(Qga::from_stream_with_options(client, options), async {
+        peer.handle_sync().await.unwrap();
+        assert_eq!(peer.recv_command().await.unwrap().0, "guest-info");
+        peer.send_return(serde_json::json!({"version": version, "supported_commands": []}))
+            .await
+            .unwrap();
+    });
+    (client.unwrap(), peer)
 }
 
 pub type RawReader = tokio::io::BufReader<tokio::net::unix::OwnedReadHalf>;

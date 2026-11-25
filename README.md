@@ -30,6 +30,7 @@ How they fit together:
 - `qrab-qapi-protocol` connects to a QEMU monitor (QMP) socket, learns the
   peer's QEMU version during the handshake, and sends and decodes
   `qrab-qapi` types checked against that version.
+  Its guest agent (QGA) client does the same with the agent's own version.
 
 Most users want `qrab-qapi-protocol` together with `qrab-qapi`.
 
@@ -46,6 +47,8 @@ Most users want `qrab-qapi-protocol` together with `qrab-qapi`.
 - **Protocol clients.** `qrab-qapi-protocol` targets the QEMU 11.1.3
   protocol. Each connection checks requests and replies against its own
   peer's version.
+  A guest agent's version can differ from QEMU's.
+  The guest agent client needs qemu-ga 1.1 or later.
 - **Older QEMU** is untested, not unsupported. Historical schemas stay
   generation inputs and regression fixtures, but schema coverage does not
   mean every release has been tested against a live QEMU.

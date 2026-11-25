@@ -1,4 +1,6 @@
 use qapi_protocol::Qmp;
+use qapi_protocol::qga::Qga;
+use qapi_protocol::server::QgaSession;
 use qapi_protocol::server::QmpSession;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::net::UnixListener;
@@ -111,6 +113,50 @@ async fn mock_qmp_event() {
     assert_eq!(evt.event, "STOP");
 
     qmp.shutdown().await;
+    server.await.unwrap();
+    let _ = std::fs::remove_file(&sock);
+}
+
+// ── Mock QGA Server Tests ──
+
+#[tokio::test]
+async fn mock_qga_sync_and_ping() {
+    let sock = unique_socket();
+    let listener = UnixListener::bind(&sock).unwrap();
+
+    let server = tokio::spawn(async move {
+        let mut session = QgaSession::accept(&listener).await.unwrap();
+        let sync_id = session.handle_sync().await.unwrap();
+        assert!(sync_id != 0, "Sync ID should be non-zero");
+
+        // Expect guest-info (auto-sent by Qga::new)
+        let (name, _args) = session.recv_command().await.unwrap();
+        assert_eq!(name, "guest-info");
+        session
+            .send_return(serde_json::json!({
+                "version": "11.1.3",
+                "supported_commands": [
+                    {"name": "guest-ping", "enabled": true, "success-response": true},
+                    {"name": "guest-info", "enabled": true, "success-response": true}
+                ]
+            }))
+            .await
+            .unwrap();
+
+        // Expect guest-ping
+        let (name, _args) = session.recv_command().await.unwrap();
+        assert_eq!(name, "guest-ping");
+        session.send_return(serde_json::json!({})).await.unwrap();
+    });
+
+    let mut qga = Qga::new(std::path::Path::new(&sock)).await.unwrap();
+    assert_eq!(qga.version(), (11, 1, 3));
+
+    // Execute guest-ping
+    qga.execute(&qapi::qga::commands::GuestPing {})
+        .await
+        .unwrap();
+
     server.await.unwrap();
     let _ = std::fs::remove_file(&sock);
 }

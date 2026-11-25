@@ -22,6 +22,8 @@ let request = qapi::to_value((11, 1, 0), &QueryStatus {}).unwrap();
 assert_eq!(request, serde_json::json!({}));
 ```
 
+`qrab-qapi-protocol` provides async QMP and QGA clients for these types.
+
 ## Version bounds
 
 Set `QEMU_MIN_VERSION` and `QEMU_MAX_VERSION` (for example `9.2.0` and

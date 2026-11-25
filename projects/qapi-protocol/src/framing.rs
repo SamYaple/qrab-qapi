@@ -1,5 +1,6 @@
 use crate::{Error, Result};
 use serde_json::Value;
+use tokio::io::AsyncReadExt;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
 
 /// Partial input lives in the reader, not in a disposable read future. This
@@ -94,6 +95,69 @@ impl<R: AsyncRead + Unpin> JsonReader<R> {
             }
         }
     }
+
+    #[cfg(feature = "mock")]
+    pub async fn reset_at_sentinel(&mut self) -> Result<()> {
+        self.partial.clear();
+        self.depth = 0;
+        self.in_string = false;
+        self.escaped = false;
+        while self.reader.read_u8().await? != 0xff {}
+        Ok(())
+    }
+
+    /// Return the next line of the QGA handshake, resetting at *every*
+    /// sentinel: a candidate message following a sentinel, or a whole line
+    /// that no sentinel preceded, such as an agent's error reply to a sync
+    /// command it lacks. The QGA handshake validates the candidate's envelope
+    /// and nonce under its overall deadline and ignores stale or malformed
+    /// data.
+    pub async fn sync_message(&mut self) -> Result<SyncLine> {
+        self.partial.clear();
+        self.depth = 0;
+        self.in_string = false;
+        self.escaped = false;
+        let mut started = false;
+        // Set while dropping the rest of a line longer than the limit.
+        let mut skipping = false;
+        loop {
+            let byte = self.reader.read_u8().await?;
+            match byte {
+                0xff => {
+                    self.partial.clear();
+                    started = true;
+                    skipping = false;
+                }
+                b'\n' => {
+                    let line = std::mem::take(&mut self.partial);
+                    if started {
+                        return Ok(SyncLine::Sentineled(line));
+                    }
+                    if !skipping && !line.is_empty() {
+                        return Ok(SyncLine::Bare(line));
+                    }
+                    skipping = false;
+                }
+                _ if skipping => {}
+                _ if self.partial.len() >= self.limit => {
+                    // Stale data is not a protocol reply. Keep scanning for
+                    // another sentinel without retaining an unbounded buffer.
+                    self.partial.clear();
+                    started = false;
+                    skipping = true;
+                }
+                _ => self.partial.push(byte),
+            }
+        }
+    }
+}
+
+/// A line of the QGA handshake, from [`JsonReader::sync_message`].
+pub(crate) enum SyncLine {
+    /// The line after a sentinel.
+    Sentineled(Vec<u8>),
+    /// A whole line that no sentinel preceded.
+    Bare(Vec<u8>),
 }
 
 pub(crate) fn encode(value: &Value, limit: usize) -> Result<Vec<u8>> {
@@ -116,5 +180,24 @@ pub(crate) async fn write_json<W: AsyncWrite + Unpin>(
 ) -> Result<()> {
     let bytes = encode(value, limit)?;
     writer.write_all(&bytes).await?;
+    Ok(())
+}
+
+/// Write a whole frame, recording in `sent` whether any byte left. `write()`
+/// is cancellation safe, so a cancelled call with `sent` false wrote nothing.
+pub(crate) async fn write_frame<W: AsyncWrite + Unpin>(
+    writer: &mut W,
+    bytes: &[u8],
+    sent: &mut bool,
+) -> Result<()> {
+    let mut offset = 0;
+    while offset < bytes.len() {
+        let n = writer.write(&bytes[offset..]).await?;
+        if n == 0 {
+            return Err(std::io::Error::from(std::io::ErrorKind::WriteZero).into());
+        }
+        *sent = true;
+        offset += n;
+    }
     Ok(())
 }

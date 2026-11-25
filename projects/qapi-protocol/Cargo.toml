@@ -25,6 +25,7 @@ name = "qapi_protocol"
 mock = []
 
 [dependencies]
+getrandom = "0.4"
 nix = { workspace = true, features = ["socket", "uio"] }
 thiserror = { workspace = true }
 serde = { workspace = true }

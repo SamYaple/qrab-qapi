@@ -79,3 +79,16 @@ cd target/qemu-11.1.3
   --disable-docs --disable-werror
 ninja -j 8 qemu-system-x86_64
 ```
+
+The real guest-agent test uses a private Unix listener, temporary files and an
+explicit RPC allowlist. It checks sync, guest-info, ping, a typed 2 MiB file
+read and typed guest-exec/status:
+
+```sh
+# Include --enable-guest-agent in the QEMU configure command above.
+ninja -C target/qemu-11.1.3 -j 8 qga/qemu-ga
+QRAB_TEST_QGA="$PWD/target/qemu-11.1.3/qga/qemu-ga" \
+  cargo test --locked -p qrab-qapi-protocol --test live_qga -- --ignored --nocapture
+```
+
+It runs as the current user and reads no host agent configuration.

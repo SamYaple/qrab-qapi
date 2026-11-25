@@ -11,6 +11,7 @@ the binaries you give them ([testing.md](testing.md)).
 ## Connecting and configuration
 
 `Qmp::new(path)` returns a QMP client and its event receiver.
+`Qga::new(path)` returns a sequential guest-agent client.
 `from_stream(stream)` takes an already-connected Unix socket instead, and the
 `*_with_options` constructors take `ClientOptions`. Options set connect,
 handshake and command timeouts, maximum JSON message size, and the QMP event
@@ -102,10 +103,54 @@ client's version scope does not reach the caller's decode. Decode it inside
 the payload layout and checks it; outside any scope a decode takes the newest
 layout unchecked.
 
+## QGA requests and lifecycle
+
+QGA sends an OS-random 64-bit guest-sync-delimited nonce. It flushes parser state
+at every `0xFF` sentinel and ignores stale, malformed or mismatched replies until
+the nonce matches. The same handshake deadline also bounds guest-info discovery.
+A guest-info version that `qapi::parse_qga_version` refuses fails connection
+establishment with `Error::AgentVersion`.
+
+The client needs qemu-ga 1.1 or later, the first with guest-sync-delimited.
+An older agent, or one started with the command disabled (`--block-rpcs`,
+`--allow-rpcs`), answers it with a `CommandNotFound` error and no sentinel;
+the handshake fails at once with `Error::SyncUnsupported` holding that reply,
+instead of waiting for its deadline.
+
+QGA calls use `&mut self` and `qapi::qga::commands`. The session is taken out of
+the client before socket I/O and restored only after a complete valid response,
+or after a timeout before any byte of the request was written. A timeout after
+that, cancellation, malformed JSON or I/O failure therefore closes the socket
+instead of letting a late reply satisfy the next command. Reconnect to perform
+synchronization again. Closing a socket does not roll back guest-side
+resources or effects; a known file handle may require explicit cleanup through
+a newly synchronized connection. A valid agent error or a typed payload decoding
+error leaves an aligned session usable. `is_closed()` and `shutdown()` expose
+this state explicitly.
+
+The guest agent runs inside the guest and is not trusted. Its replies are
+limited to `max_message_bytes` and decoded straight into their return type.
+`execute_with_reply_limit` raises the limit for one call:
+`qga::FILE_READ_REPLY_BYTES` admits the base64 reply of a `guest-file-read` of
+the agent's 48 MiB maximum count. Requests are limited to `max_message_bytes`
+as well, and a larger one fails with `Error::InvalidRequest` before anything
+is sent. Write a large file in several `guest-file-write` calls on its
+handle: under the default limit, a chunk of up to 6 MiB less 1 KiB fits its
+base64 request. Raising `max_message_bytes` instead admits larger requests,
+but also larger replies from the guest for every call.
+
+Commands with `success-response: false`, such as guest-shutdown and guest-suspend,
+use `send_no_response` instead of `execute`. Success means only that the request
+bytes were written; no remote success acknowledgement exists. This operation
+closes the socket so a possible error reply cannot contaminate a later call.
+Typed QMP and QGA calls evaluate OOB and reply flags for their connected peer's
+release, including historical additions and removals of those flags.
+
 ## Types and errors
 
 Each connection serializes requests and decodes typed replies using its own
 peer's `version()`.
+For a guest agent, that is the agent's own version, which can differ from QEMU's.
 Direct serialization can use the synchronous
 `qapi::with_version(version, || ...)` scope or `qapi::to_value(version, &value)`;
 outside any scope a version-gated type fails with an error naming
@@ -131,6 +176,8 @@ and with it whether the request reached the peer and the connection survived:
 | `Malformed` | The peer sent invalid JSON | closed |
 | `MessageTooLarge { limit }` | A message from the peer exceeds the limit in effect | closed |
 | `Protocol` | The peer sent valid JSON that breaks the protocol | closed |
+| `AgentVersion` | The guest agent reported a version that is not a release number | closed |
+| `SyncUnsupported` | The guest agent refused guest-sync-delimited; it predates qemu-ga 1.1 or has the command disabled | closed |
 | `Io` | Connecting, reading or writing failed | closed |
 | `Closed` | The connection was already closed | closed |
 | `Disconnected` | The connection failed while the call was pending; it holds the original failure | closed |
