@@ -118,6 +118,12 @@ dependencies = [
 [[package]]
 name = "qrab-qapi"
 version = "0.1.0"
+dependencies = [
+ "qrab-qapi-macros",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
 
 [[package]]
 name = "qrab-qapi-codegen"

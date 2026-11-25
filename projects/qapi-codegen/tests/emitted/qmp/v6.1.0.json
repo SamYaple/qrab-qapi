@@ -1,5 +1,5 @@
-# Commands whose structs data types and events name: Inner and Outer go to
-# mod.rs, next to Top, which names Outer, and to which EVT can refer.
+# Commands whose structs a data type and an event name: Top names Outer,
+# and EVT Inner. They stay in commands.rs, which mod.rs then imports.
 { 'struct': 'Inner', 'data': { 'a': 'int' } }
 { 'command': 'inner', 'data': 'Inner' }
 { 'struct': 'Outer', 'data': { 'i': 'Inner' } }

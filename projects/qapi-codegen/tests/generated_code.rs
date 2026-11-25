@@ -276,7 +276,9 @@ fn cargo(fixture: &Path, args: &[&str], rustdocflags: Option<&str>) -> String {
 /// crate of the generated modules with those attributes removed and a
 /// stand-in for `serde_json::Value`. That proves what the items, fields,
 /// references and modules are: every type exists in a module that the code
-/// naming it can see, no two items of a module share a name, recursive
+/// naming it can see, code outside the modules reaches each command under
+/// `commands` and each event under `events`, no two items of a module share
+/// a name, recursive
 /// fields are boxed and the metadata tables type-check against their
 /// definitions. It cannot prove that the attributes expand. The crate's
 /// `main`, `tests/emitted/check.rs`, then checks the metadata of the pinned
@@ -337,6 +339,20 @@ fn generated_code_compiles_and_its_metadata_is_true() {
         }
         std::fs::write(dir.join("metadata.rs"), &output.metadata).unwrap();
         lib.push_str(&format!("pub mod {name};\n"));
+        // Each command of `COMMANDS` and each event, named from outside.
+        for command in metadata_commands(output) {
+            lib.push_str(&format!(
+                "const _: Option<&{name}::commands::{command}> = None;\n"
+            ));
+        }
+        for (_, event, _) in command_and_event_structs(output)
+            .into_iter()
+            .filter(|(_, _, kind)| *kind == "event")
+        {
+            lib.push_str(&format!(
+                "const _: Option<&{name}::events::{event}> = None;\n"
+            ));
+        }
     }
     std::fs::write(fixture.join("src/lib.rs"), lib).unwrap();
     std::fs::copy(emitted().join("check.rs"), fixture.join("src/main.rs")).unwrap();
@@ -671,61 +687,126 @@ fn boxed_commands_have_structs_of_their_own() {
     }
 }
 
-/// Commands and events have modules of their own, except the command
-/// structs that data types name, which are in `mod.rs` with them.
+/// The command and event structs of an output, by the module they are in:
+/// `(module, name, kind)` for each struct with `#[qapi(command)]` or
+/// `#[qapi(event)]`.
+fn command_and_event_structs(
+    output: &GeneratedOutput,
+) -> Vec<(&'static str, String, &'static str)> {
+    let mut found = Vec::new();
+    for (module, source) in [
+        ("mod.rs", &output.types),
+        ("commands.rs", &output.commands),
+        ("events.rs", &output.events),
+    ] {
+        for item in syn::parse_file(source).unwrap().items {
+            let syn::Item::Struct(item) = item else {
+                continue;
+            };
+            for attr in &item.attrs {
+                match quote::quote!(#attr).to_string().as_str() {
+                    "# [qapi (command)]" => found.push((module, item.ident.to_string(), "command")),
+                    "# [qapi (event)]" => found.push((module, item.ident.to_string(), "event")),
+                    _ => {}
+                }
+            }
+        }
+    }
+    found
+}
+
+/// The Rust names of the entries of an output's `COMMANDS` table.
+fn metadata_commands(output: &GeneratedOutput) -> Vec<String> {
+    output
+        .metadata
+        .split("CommandMeta { name: \"")
+        .skip(1)
+        .map(|entry| entry[..entry.find('"').unwrap()].to_owned())
+        .collect()
+}
+
+/// Every command struct is in `commands.rs` and every event struct in
+/// `events.rs`, also those that data types name, which `mod.rs` imports
+/// from there; every entry of `COMMANDS` is one of those commands.
 #[test]
 fn modules_separate_types_commands_and_events() {
-    let output = pinned(Qmp, Reference);
-    let structs = |source: &str| -> Vec<String> {
-        syn::parse_file(source)
-            .unwrap()
+    let outputs = [
+        ("qmp", pinned(Qmp, Reference)),
+        ("qga", pinned(Qga, Reference)),
+        ("history", &history("qmp", Reference)),
+        ("guest", &history("qga", Reference)),
+    ];
+    for (name, output) in outputs {
+        let structs = command_and_event_structs(output);
+        for (module, item, kind) in &structs {
+            let expected = if *kind == "command" {
+                "commands.rs"
+            } else {
+                "events.rs"
+            };
+            assert_eq!(module, &expected, "{name}: {kind} {item}");
+        }
+        let mut commands: Vec<_> = structs
+            .iter()
+            .filter(|(_, _, kind)| *kind == "command")
+            .map(|(_, item, _)| item.clone())
+            .collect();
+        let mut listed = metadata_commands(output);
+        commands.sort();
+        listed.sort();
+        assert_eq!(commands, listed, "{name}");
+
+        let types = syn::parse_file(&output.types).unwrap();
+        let modules: Vec<_> = types
             .items
             .iter()
             .filter_map(|item| match item {
-                syn::Item::Struct(item) => Some(item.ident.to_string()),
+                syn::Item::Mod(item) if item.content.is_none() => Some(item.ident.to_string()),
                 _ => None,
             })
-            .collect()
-    };
-    let types = syn::parse_file(&output.types).unwrap();
-    let modules: Vec<_> = types
-        .items
-        .iter()
-        .filter_map(|item| match item {
-            syn::Item::Mod(item) if item.content.is_none() => Some(item.ident.to_string()),
-            _ => None,
-        })
-        .collect();
-    assert_eq!(modules, ["commands", "events", "metadata"]);
-    assert!(
-        !types
+            .collect();
+        assert_eq!(modules, ["commands", "events", "metadata"], "{name}");
+        let imports: Vec<_> = types
             .items
             .iter()
-            .any(|item| matches!(item, syn::Item::Use(item)
-            if quote::quote!(#item).to_string().contains("commands")
-                || quote::quote!(#item).to_string().contains("events"))),
-        "mod.rs must not re-export commands or events"
-    );
-    let (data, commands, events) = (
-        structs(&output.types),
-        structs(&output.commands),
-        structs(&output.events),
-    );
-    assert!(data.len() > 500 && commands.len() > 200 && events.len() > 30);
+            .filter_map(|item| match item {
+                syn::Item::Use(item) => Some(quote::quote!(#item).to_string()),
+                _ => None,
+            })
+            .collect();
+        // Private: the crate root re-exports only the data types.
+        let globs: &[&str] = if matches!(name, "qga" | "guest") {
+            &[]
+        } else {
+            &["use self :: commands :: * ;"]
+        };
+        assert_eq!(
+            imports,
+            [&["use crate as qapi ;", "use qapi_macros :: qapi ;"], globs].concat(),
+            "{name}"
+        );
+    }
+    let output = pinned(Qmp, Reference);
+    let structs = command_and_event_structs(output);
+    let count = |kind| structs.iter().filter(|item| item.2 == kind).count();
+    assert!(count("command") > 200 && count("event") > 30);
+    // Commands whose structs data types name, as the transaction actions do.
     for command in [
         "BlockdevBackup",
         "BlockdevSnapshotSync",
         "BlockDirtyBitmapAdd",
         "DriveBackup",
     ] {
-        assert!(data.contains(&command.to_owned()), "{command}");
         assert!(
-            struct_attributes(&output.types, command).contains(&"# [qapi (command)]".to_owned()),
+            struct_attributes(&output.commands, command).contains(&"# [qapi (command)]".to_owned()),
+            "{command}"
+        );
+        assert!(
+            output.types.contains(&format!("data: {command},")),
             "{command}"
         );
     }
-    assert!(commands.contains(&"QueryStatus".to_owned()));
-    assert!(events.contains(&"ShutdownEvent".to_owned()));
+    assert!(structs.contains(&("events.rs", "ShutdownEvent".to_owned(), "event")));
 }
 
 #[test]

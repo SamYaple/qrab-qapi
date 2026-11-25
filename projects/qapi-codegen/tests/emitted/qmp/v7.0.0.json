@@ -15,8 +15,8 @@
 { 'struct': 'Top', 'data': { 'o': 'Outer' } }
 { 'command': 'top-query', 'returns': 'Top' }
 
-# Pod is a command's struct that a command in mod.rs returns. Mid moves to
-# mod.rs because Zed names it, and only then Ant, which Mid names.
+# Command structs that commands and data types name: the command outer
+# returns Pod, the data type Zed names Mid, and Mid names Ant.
 { 'struct': 'Pod', 'data': { 'p': 'int' } }
 { 'command': 'pod', 'data': 'Pod' }
 { 'struct': 'Ant', 'data': { 'v': 'int' } }

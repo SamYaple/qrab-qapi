@@ -361,12 +361,16 @@ The quirks of old schemas that generation tolerates with a warning,
 mislabeled documentation before 2.9 and a string discriminator in 1.7, are
 described in `projects/qapi-codegen/KNOWN_ISSUES.md`.
 
-`commands.rs` and `events.rs` import `mod.rs`, and nothing imports them. A
-command or event struct that a data type or the other module names, as a
-field, payload or return type, is therefore emitted in `mod.rs`, and so is
-every command or event struct that it names in turn: `BlockdevBackup`,
-`BlockdevSnapshotSync`, `BlockDirtyBitmapAdd` and `DriveBackup` are commands
-whose structs other types name.
+Every command struct is in `commands.rs` and every event struct in
+`events.rs`, so the `commands` module holds every command and `events`
+every event. Both import `mod.rs` by glob, and `mod.rs` imports one of them
+by glob, as `use self::commands::*;`, when a type outside it names one of
+its structs as a field, payload or return type: the QMP transaction actions
+name the commands `BlockdevBackup`, `BlockdevSnapshotSync`,
+`BlockDirtyBitmapAdd` and `DriveBackup`. A glob, unlike a list of names,
+still resolves when the version bounds leave some of the structs out. The
+import is private, so a glob re-export of `mod.rs`, such as qrab-qapi's at
+its crate root, holds only the data types.
 
 A type that a release renames without changing its Rust name, such as
 `SGXInfo`, which QEMU 10.1 spells `SgxInfo`, keeps one lifetime and takes the

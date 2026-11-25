@@ -139,40 +139,33 @@ fn references(value: &UnifiedType) -> Vec<String> {
     }
 }
 
-/// The module of each type, by Rust name. Data types go to `mod.rs`, and
-/// the structs of commands and events to `commands.rs` and `events.rs`,
-/// which import `mod.rs`. Nothing imports those two, so a command or event
-/// struct that a type of another module names goes to `mod.rs` too, and
-/// then so does every command or event struct that it names in turn.
-fn modules(registry: &UnifiedRegistry) -> BTreeMap<&str, TypeCategory> {
-    let mut modules: BTreeMap<_, _> = registry
-        .types
-        .iter()
-        .map(|(name, value)| (name.as_str(), classify_type(value)))
-        .collect();
-    let references: Vec<_> = registry
-        .types
-        .iter()
-        .map(|(name, value)| (name.as_str(), references(value)))
-        .collect();
-    loop {
-        let mut moved = false;
-        for (name, referenced) in &references {
-            let module = modules[name];
-            for referenced in referenced {
-                if let Some(target) = modules.get_mut(referenced.as_str())
-                    && *target != TypeCategory::DataType
-                    && *target != module
-                {
-                    *target = TypeCategory::DataType;
-                    moved = true;
-                }
-            }
-        }
-        if !moved {
-            return modules;
-        }
+/// The glob imports of `mod.rs`. Each command struct is in `commands.rs`
+/// and each event struct in `events.rs`, so that `commands` holds every
+/// command and `events` every event. Those modules import `mod.rs` by glob,
+/// and `mod.rs` imports a module by glob where a type outside it names one
+/// of its structs, as a field, payload or return type. A glob, unlike a
+/// named import, holds whatever a build's QEMU version bounds leave of the
+/// module.
+fn glob_imports(registry: &UnifiedRegistry) -> String {
+    let named_elsewhere = |category: TypeCategory| {
+        registry.types.values().any(|value| {
+            classify_type(value) != category
+                && references(value).iter().any(|name| {
+                    registry
+                        .types
+                        .get(name)
+                        .is_some_and(|referenced| classify_type(referenced) == category)
+                })
+        })
+    };
+    let mut imports = String::new();
+    if named_elsewhere(TypeCategory::Command) {
+        imports.push_str("use self::commands::*;\n");
     }
+    if named_elsewhere(TypeCategory::Event) {
+        imports.push_str("use self::events::*;\n");
+    }
+    imports
 }
 
 /// Emit the four modules of a registry, such as one that
@@ -209,12 +202,11 @@ pub fn emit_registry(
     let mut entries: Vec<_> = registry.types.iter().collect();
     entries.sort_by_cached_key(|(name, _)| name.to_lowercase());
 
-    let modules = modules(registry);
     let mut types_tokens = proc_macro2::TokenStream::new();
     let mut commands_tokens = proc_macro2::TokenStream::new();
     let mut events_tokens = proc_macro2::TokenStream::new();
-    for (name, value) in entries {
-        let tokens = match modules[name.as_str()] {
+    for (_, value) in entries {
+        let tokens = match classify_type(value) {
             TypeCategory::DataType => &mut types_tokens,
             TypeCategory::Command => &mut commands_tokens,
             TypeCategory::Event => &mut events_tokens,
@@ -235,7 +227,7 @@ pub fn emit_registry(
     let metadata = crate::metadata_emit::emit(registry);
     parse_rust(&metadata, "metadata.rs")?;
     Ok(GeneratedOutput {
-        types: format_rust_file(types_tokens, "", "mod.rs")?,
+        types: format_rust_file(types_tokens, &glob_imports(registry), "mod.rs")?,
         commands: format_rust_file(commands_tokens, "use super::*;\n", "commands.rs")?,
         events: format_rust_file(events_tokens, "use super::*;\n", "events.rs")?,
         metadata,
@@ -275,8 +267,7 @@ pub fn generate(
 #[derive(Debug)]
 #[non_exhaustive]
 pub struct GeneratedOutput {
-    /// Data types (structs, enums, unions) and the command and event structs
-    /// that they or other modules name — goes into `mod.rs`.
+    /// Data types (structs, enums, unions) — goes into `mod.rs`.
     pub types: String,
     /// Command types — goes into `commands.rs`.
     pub commands: String,
@@ -1031,6 +1022,66 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "Ask returns refers to the undefined type 'Answer'"
+        );
+    }
+
+    /// Every command and event struct stays in its own module, and `mod.rs`
+    /// imports `commands` or `events` by glob only where a type outside that
+    /// module names one of its structs: a data type, or an event naming a
+    /// command, which `events.rs` sees through its import of `mod.rs`.
+    #[test]
+    fn mod_rs_imports_the_command_and_event_structs_that_other_modules_name() {
+        let mut registry = registry(&[(
+            "v11.1.3",
+            "{ 'struct': 'Args', 'data': { 'v': 'int' } }\n\
+             { 'command': 'args', 'data': 'Args' }\n\
+             { 'struct': 'Holder', 'data': { 'v': 'int' } }\n\
+             { 'event': 'HAPPENED', 'data': { 'h': 'Holder' } }",
+        )]);
+        let mut name_from = |name: &str, field: usize, r#type: &str| {
+            let Some(UnifiedType::Struct(value)) = registry.types.get_mut(name) else {
+                panic!("{name}")
+            };
+            value.ir.fields[field].r#type = r#type.to_owned();
+            let output = emit_registry(&registry, Protocol::Qmp, Docs::Reference).unwrap();
+            assert!(
+                output.commands.contains("\npub struct Args {"),
+                "{}",
+                output.commands
+            );
+            assert!(
+                output.events.contains("\npub struct HappenedEvent {"),
+                "{}",
+                output.events
+            );
+            output
+                .types
+                .lines()
+                .filter(|line| line.starts_with("use self::"))
+                .map(str::to_owned)
+                .collect::<Vec<_>>()
+        };
+        assert!(name_from("Holder", 0, "int").is_empty());
+        assert_eq!(
+            name_from("HappenedEvent", 0, "Args"),
+            ["use self::commands::*;"]
+        );
+        assert_eq!(
+            name_from("HappenedEvent", 0, "Holder"),
+            Vec::<String>::new()
+        );
+        assert_eq!(
+            name_from("Holder", 0, "HappenedEvent"),
+            ["use self::events::*;"]
+        );
+        assert_eq!(
+            name_from("Args", 0, "HappenedEvent"),
+            ["use self::events::*;"],
+            "a command naming an event"
+        );
+        assert_eq!(
+            name_from("Holder", 0, "Args"),
+            ["use self::commands::*;", "use self::events::*;"]
         );
     }
 

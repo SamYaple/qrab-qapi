@@ -20,3 +20,9 @@ targets = ["x86_64-unknown-linux-gnu"]
 
 [lib]
 name = "qapi"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+qapi-macros = { workspace = true }

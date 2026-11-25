@@ -2,6 +2,15 @@ use crate as qapi;
 use qapi_macros::qapi;
 use std::collections::HashMap;
 use super::*;
+/// QMP command `ant`; see the QEMU QMP Reference Manual.
+#[qapi(name = "ant")]
+#[qapi(command)]
+#[qapi(returns = "()")]
+#[qapi(added = "7.0.0")]
+pub struct Ant {
+    pub v: i64,
+}
+
 /// QMP command `backup`; see the QEMU QMP Reference Manual.
 #[qapi(name = "backup")]
 #[qapi(command)]
@@ -11,6 +20,15 @@ use super::*;
 #[qapi(unstable(added = "6.2.0", removed = "7.0.0"))]
 pub struct Backup {
     pub target: String,
+}
+
+/// QMP command `bag`; see the QEMU QMP Reference Manual.
+#[qapi(name = "bag")]
+#[qapi(command)]
+#[qapi(returns = "()")]
+#[qapi(added = "6.1.0")]
+pub struct Bag {
+    pub q: i64,
 }
 
 /// QMP command `flip`; see the QEMU QMP Reference Manual.
@@ -33,6 +51,15 @@ pub struct Flip {}
 #[qapi(allow_oob)]
 pub struct Gone {}
 
+/// QMP command `inner`; see the QEMU QMP Reference Manual.
+#[qapi(name = "inner")]
+#[qapi(command)]
+#[qapi(returns = "()")]
+#[qapi(added = "6.1.0")]
+pub struct Inner {
+    pub a: i64,
+}
+
 /// QMP command `loose`; see the QEMU QMP Reference Manual.
 #[qapi(command)]
 #[qapi(name = "loose")]
@@ -50,6 +77,36 @@ pub struct Loose {
     #[qapi(added = "6.2.0")]
     #[qapi(required)]
     pub x: Option<i64>,
+}
+
+/// QMP command `mid`; see the QEMU QMP Reference Manual.
+#[qapi(name = "mid")]
+#[qapi(command)]
+#[qapi(returns = "()")]
+#[qapi(added = "7.0.0")]
+pub struct Mid {
+    pub a: Ant,
+}
+
+/// QMP command `outer`; see the QEMU QMP Reference Manual.
+#[qapi(name = "outer")]
+#[qapi(command)]
+#[qapi(returns = "Pod")]
+#[qapi(added = "6.1.0")]
+#[qapi(returns(added = "6.1.0", value = "()"))]
+#[qapi(returns(added = "6.2.0", value = "Bag"))]
+#[qapi(returns(added = "7.0.0", value = "Pod"))]
+pub struct Outer {
+    pub i: Inner,
+}
+
+/// QMP command `pod`; see the QEMU QMP Reference Manual.
+#[qapi(name = "pod")]
+#[qapi(command)]
+#[qapi(returns = "()")]
+#[qapi(added = "7.0.0")]
+pub struct Pod {
+    pub p: i64,
 }
 
 /// QMP command `query-kind`; see the QEMU QMP Reference Manual.

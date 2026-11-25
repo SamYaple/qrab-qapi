@@ -1,23 +1,6 @@
 use crate as qapi;
 use qapi_macros::qapi;
-/// QMP command `ant`; see the QEMU QMP Reference Manual.
-#[qapi(name = "ant")]
-#[qapi(command)]
-#[qapi(returns = "()")]
-#[qapi(added = "7.0.0")]
-pub struct Ant {
-    pub v: i64,
-}
-
-/// QMP command `bag`; see the QEMU QMP Reference Manual.
-#[qapi(name = "bag")]
-#[qapi(command)]
-#[qapi(returns = "()")]
-#[qapi(added = "6.1.0")]
-pub struct Bag {
-    pub q: i64,
-}
-
+use self::commands::*;
 /// QMP struct `Circle`; see the QEMU QMP Reference Manual.
 #[qapi(added = "6.1.0")]
 pub struct Circle {
@@ -113,15 +96,6 @@ pub struct FooInfo {
     pub name: String,
 }
 
-/// QMP command `inner`; see the QEMU QMP Reference Manual.
-#[qapi(name = "inner")]
-#[qapi(command)]
-#[qapi(returns = "()")]
-#[qapi(added = "6.1.0")]
-pub struct Inner {
-    pub a: i64,
-}
-
 /// QMP enum `KindInfo`; see the QEMU QMP Reference Manual.
 #[qapi(added = "6.1.0")]
 pub enum KindInfo {
@@ -135,15 +109,6 @@ pub enum KindInfo {
 #[qapi(removed = "6.2.0")]
 pub struct Lab {
     pub z: i64,
-}
-
-/// QMP command `mid`; see the QEMU QMP Reference Manual.
-#[qapi(name = "mid")]
-#[qapi(command)]
-#[qapi(returns = "()")]
-#[qapi(added = "7.0.0")]
-pub struct Mid {
-    pub a: Ant,
 }
 
 /// QMP enum `Mode`; see the QEMU QMP Reference Manual.
@@ -173,27 +138,6 @@ pub struct Node {
 #[qapi(added = "6.1.0")]
 pub struct Old {
     pub v: bool,
-}
-
-/// QMP command `outer`; see the QEMU QMP Reference Manual.
-#[qapi(name = "outer")]
-#[qapi(command)]
-#[qapi(returns = "Pod")]
-#[qapi(added = "6.1.0")]
-#[qapi(returns(added = "6.1.0", value = "()"))]
-#[qapi(returns(added = "6.2.0", value = "Bag"))]
-#[qapi(returns(added = "7.0.0", value = "Pod"))]
-pub struct Outer {
-    pub i: Inner,
-}
-
-/// QMP command `pod`; see the QEMU QMP Reference Manual.
-#[qapi(name = "pod")]
-#[qapi(command)]
-#[qapi(returns = "()")]
-#[qapi(added = "7.0.0")]
-pub struct Pod {
-    pub p: i64,
 }
 
 /// QMP enum `Probe`; see the QEMU QMP Reference Manual.
