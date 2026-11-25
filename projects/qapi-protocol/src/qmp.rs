@@ -4,7 +4,7 @@ use crate::{
     wire::{self, Envelope},
 };
 use qapi::QapiCommand;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::{Value, json, value::RawValue};
 use std::{
     collections::HashMap,
@@ -38,23 +38,56 @@ const QUEUED: u8 = 0;
 const DISPATCHED: u8 = 1;
 const ABANDONED: u8 = 2;
 
+/// The QMP greeting, as [`Qmp::greeting`] returns it.
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[non_exhaustive]
 pub struct Greeting {
     pub version: VersionInfo,
+    /// The capabilities the peer offers, such as `oob`.
     pub capabilities: Vec<String>,
 }
 
+/// The peer's release and its package string.
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[non_exhaustive]
 pub struct VersionInfo {
     pub qemu: QemuVersion,
     pub package: String,
 }
 
+/// A QEMU release number; [`Qmp::version`] returns it as a tuple.
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
+#[non_exhaustive]
 pub struct QemuVersion {
     pub major: u32,
     pub minor: u32,
     pub micro: u32,
+}
+
+/// The events of one QMP connection, in the order the peer sent them.
+///
+/// The queue holds at most [`ClientOptions::event_capacity`] events; an
+/// event that does not fit is dropped and counted by
+/// [`Qmp::dropped_events`]. Dropping this receiver discards later events
+/// without closing the connection.
+#[derive(Debug)]
+pub struct QmpEvents {
+    rx: mpsc::Receiver<QmpEvent>,
+}
+
+impl QmpEvents {
+    /// Wait for the next event. `None` once the connection is closed and
+    /// every queued event was received. Cancellation safe: an event is
+    /// never lost by dropping the future, as in `tokio::select!`.
+    pub async fn recv(&mut self) -> Option<QmpEvent> {
+        self.rx.recv().await
+    }
+
+    /// The next queued event, without waiting. `None` when no event is
+    /// queued, whether or not the connection is closed.
+    pub fn try_recv(&mut self) -> Option<QmpEvent> {
+        self.rx.try_recv().ok()
+    }
 }
 
 struct Request {
@@ -131,14 +164,14 @@ impl std::fmt::Debug for Qmp {
 }
 
 impl Qmp {
-    pub async fn new(path: &Path) -> Result<(Self, mpsc::Receiver<QmpEvent>)> {
+    pub async fn new(path: &Path) -> Result<(Self, QmpEvents)> {
         Self::connect_with_options(path, ClientOptions::default()).await
     }
 
     pub async fn connect_with_options(
         path: &Path,
         options: ClientOptions,
-    ) -> Result<(Self, mpsc::Receiver<QmpEvent>)> {
+    ) -> Result<(Self, QmpEvents)> {
         options.validate()?;
         let stream = timeout(options.connect_timeout, UnixStream::connect(path))
             .await
@@ -149,14 +182,14 @@ impl Qmp {
     }
 
     /// Handshake on an already connected Unix socket (including inherited FDs).
-    pub async fn from_stream(stream: UnixStream) -> Result<(Self, mpsc::Receiver<QmpEvent>)> {
+    pub async fn from_stream(stream: UnixStream) -> Result<(Self, QmpEvents)> {
         Self::from_stream_with_options(stream, ClientOptions::default()).await
     }
 
     pub async fn from_stream_with_options(
         stream: UnixStream,
         options: ClientOptions,
-    ) -> Result<(Self, mpsc::Receiver<QmpEvent>)> {
+    ) -> Result<(Self, QmpEvents)> {
         options.validate()?;
         let (read, mut write) = stream.into_split();
         let mut reader = JsonReader::new(read, options.max_message_bytes);
@@ -248,7 +281,7 @@ impl Qmp {
                 abort,
                 dropped_events,
             },
-            event_rx,
+            QmpEvents { rx: event_rx },
         ))
     }
 
@@ -286,7 +319,13 @@ impl Qmp {
         }
     }
 
-    /// Can be called through `Arc<Qmp>` while other tasks await replies.
+    /// Close the connection and wait until the driver has stopped. Pending
+    /// callers fail with [`Error::Disconnected`].
+    ///
+    /// It takes `&self`, unlike the guest agent's synchronous
+    /// [`Qga::shutdown`](crate::qga::Qga::shutdown): a QMP client is shared,
+    /// as through `Arc<Qmp>`, while other tasks await replies, and one task
+    /// that owns the socket must stop, which is awaited here.
     pub async fn shutdown(&self) {
         self.shutdown.send_replace(());
         let _ = self.closed().await;
@@ -333,60 +372,90 @@ impl Qmp {
         qapi::with_version(self.version(), || wire::decode(&reply))
     }
 
-    /// Raw envelopes contain execute and optional object arguments. Caller IDs
-    /// and the opposite execution verb are rejected before any socket I/O.
-    pub async fn execute_raw(&self, request: Value) -> Result<Value> {
-        self.execute_raw_with_timeout(request, self.options.command_timeout)
+    /// Run the command `name` with `args`, a JSON object (`{}` for none),
+    /// and decode its reply into `T`, such as a `serde_json::Value`, in the
+    /// peer's version scope, as [`Qga::execute_raw`](crate::qga::Qga::execute_raw)
+    /// does. The connection owns the request ID.
+    pub async fn execute_raw<T: DeserializeOwned + 'static>(
+        &self,
+        name: &str,
+        args: Value,
+    ) -> Result<T> {
+        self.execute_raw_with_timeout(name, args, self.options.command_timeout)
             .await
     }
-    pub async fn execute_raw_with_timeout(
+    pub async fn execute_raw_with_timeout<T: DeserializeOwned + 'static>(
         &self,
-        request: Value,
+        name: &str,
+        args: Value,
         duration: Duration,
-    ) -> Result<Value> {
-        let reply = self.dispatch(request, Vec::new(), false, duration).await?;
-        wire::decode(&reply)
+    ) -> Result<T> {
+        self.raw(name, args, Vec::new(), false, duration).await
     }
-    pub async fn execute_raw_oob(&self, request: Value) -> Result<Value> {
-        self.execute_raw_oob_with_timeout(request, self.options.command_timeout)
+    /// [`execute_raw`](Self::execute_raw) out of band, as `exec-oob`.
+    pub async fn execute_raw_oob<T: DeserializeOwned + 'static>(
+        &self,
+        name: &str,
+        args: Value,
+    ) -> Result<T> {
+        self.execute_raw_oob_with_timeout(name, args, self.options.command_timeout)
             .await
     }
-    pub async fn execute_raw_oob_with_timeout(
+    pub async fn execute_raw_oob_with_timeout<T: DeserializeOwned + 'static>(
         &self,
-        request: Value,
+        name: &str,
+        args: Value,
         duration: Duration,
-    ) -> Result<Value> {
-        let reply = self.dispatch(request, Vec::new(), true, duration).await?;
-        wire::decode(&reply)
+    ) -> Result<T> {
+        self.raw(name, args, Vec::new(), true, duration).await
     }
 
-    /// Run an in-band raw `request` with `fds` attached to it as SCM_RIGHTS,
+    /// Run an in-band raw command with `fds` attached to it as SCM_RIGHTS,
     /// as QMP's `getfd` and `add-fd` expect. At most 253 descriptors fit in
     /// one message (Linux's `SCM_MAX_FD`). The descriptors are moved in and
     /// closed here once sent, or when the request is refused or expires.
-    pub async fn execute_raw_with_fds(&self, request: Value, fds: Vec<OwnedFd>) -> Result<Value> {
-        self.execute_raw_with_fds_and_timeout(request, fds, self.options.command_timeout)
+    pub async fn execute_raw_with_fds<T: DeserializeOwned + 'static>(
+        &self,
+        name: &str,
+        args: Value,
+        fds: Vec<OwnedFd>,
+    ) -> Result<T> {
+        self.execute_raw_with_fds_and_timeout(name, args, fds, self.options.command_timeout)
             .await
     }
-    pub async fn execute_raw_with_fds_and_timeout(
+    pub async fn execute_raw_with_fds_and_timeout<T: DeserializeOwned + 'static>(
         &self,
-        request: Value,
+        name: &str,
+        args: Value,
         fds: Vec<OwnedFd>,
         duration: Duration,
-    ) -> Result<Value> {
-        let reply = self.dispatch(request, fds, false, duration).await?;
-        wire::decode(&reply)
+    ) -> Result<T> {
+        self.raw(name, args, fds, false, duration).await
     }
 
     /// `getfd`: hand QEMU `fd` under `name` for a later `netdev_add`
     /// (`fds=name:...`) or `device_add`.
     pub async fn getfd(&self, name: &str, fd: OwnedFd) -> Result<()> {
-        self.execute_raw_with_fds(
-            json!({"execute":"getfd","arguments":{"fdname":name}}),
+        self.execute_raw_with_fds::<serde::de::IgnoredAny>(
+            "getfd",
+            json!({"fdname": name}),
             vec![fd],
         )
         .await
         .map(drop)
+    }
+
+    async fn raw<T: DeserializeOwned + 'static>(
+        &self,
+        name: &str,
+        args: Value,
+        fds: Vec<OwnedFd>,
+        oob: bool,
+        duration: Duration,
+    ) -> Result<T> {
+        let request = wire::request(name, args, oob)?;
+        let reply = self.dispatch(request, fds, oob, duration).await?;
+        qapi::with_version(self.version(), || wire::decode(&reply))
     }
 
     fn disconnected(&self) -> Error {
@@ -408,7 +477,6 @@ impl Qmp {
         oob: bool,
         duration: Duration,
     ) -> Result<Box<RawValue>> {
-        wire::validate_request(&request, oob)?;
         framing::encode(&request, self.options.max_message_bytes)?;
         if oob && !self.oob {
             return Err(Error::InvalidRequest(InvalidRequestKind::OobNotNegotiated));

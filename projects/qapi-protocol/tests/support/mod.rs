@@ -1,17 +1,17 @@
 #![allow(dead_code)]
 use qapi_protocol::qga::Qga;
 use qapi_protocol::server::QgaSession;
-use qapi_protocol::{ClientOptions, Qmp, QmpEvent, server::QmpSession};
-use tokio::{net::UnixStream, sync::mpsc};
+use qapi_protocol::{ClientOptions, Qmp, QmpEvents, server::QmpSession};
+use tokio::net::UnixStream;
 
-pub async fn qmp(options: ClientOptions) -> (Qmp, mpsc::Receiver<QmpEvent>, QmpSession) {
+pub async fn qmp(options: ClientOptions) -> (Qmp, QmpEvents, QmpSession) {
     qmp_version(options, (11, 1, 3)).await
 }
 
 pub async fn qmp_version(
     options: ClientOptions,
     version: (u32, u32, u32),
-) -> (Qmp, mpsc::Receiver<QmpEvent>, QmpSession) {
+) -> (Qmp, QmpEvents, QmpSession) {
     let (client, server) = UnixStream::pair().unwrap();
     let mut peer = QmpSession::from_stream(server);
     let (client, ()) = tokio::join!(Qmp::from_stream_with_options(client, options), async {
@@ -59,9 +59,7 @@ pub async fn read(reader: &mut RawReader) -> serde_json::Value {
 pub fn greeting() -> serde_json::Value {
     serde_json::json!({"QMP": {"version": {"qemu": {"major": 11, "minor": 1, "micro": 3}, "package": "test"}, "capabilities": ["oob"]}})
 }
-pub async fn raw_qmp(
-    options: ClientOptions,
-) -> (Qmp, mpsc::Receiver<QmpEvent>, RawReader, RawWriter) {
+pub async fn raw_qmp(options: ClientOptions) -> (Qmp, QmpEvents, RawReader, RawWriter) {
     let (client, peer) = UnixStream::pair().unwrap();
     let (read_half, mut writer) = peer.into_split();
     let mut reader = tokio::io::BufReader::new(read_half);

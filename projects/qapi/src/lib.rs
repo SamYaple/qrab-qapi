@@ -229,6 +229,7 @@ pub fn with_version<T>(version: (u32, u32, u32), f: impl FnOnce() -> T) -> T {
     "the process QEMU version is already {}.{}.{}, so {}.{}.{} was not set",
     .existing.0, .existing.1, .existing.2, .requested.0, .requested.1, .requested.2
 )]
+#[non_exhaustive]
 pub struct VersionAlreadySet {
     /// The process default, which stays in effect.
     pub existing: (u32, u32, u32),
@@ -243,8 +244,7 @@ pub struct VersionAlreadySet {
 /// [`VersionAlreadySet`], even for an equal version. Protocol clients scope
 /// serialization to their own peer, and code that talks to more than one
 /// peer should do the same with [`with_version`] or [`to_value`].
-pub fn set_qemu_version(major: u32, minor: u32, patch: u32) -> Result<(), VersionAlreadySet> {
-    let requested = (major, minor, patch);
+pub fn set_qemu_version(requested: (u32, u32, u32)) -> Result<(), VersionAlreadySet> {
     let mut stored = false;
     let existing = *QEMU_VERSION.get_or_init(|| {
         stored = true;

@@ -10,7 +10,7 @@ the binaries you give them ([testing.md](testing.md)).
 
 ## Connecting and configuration
 
-`Qmp::new(path)` returns a QMP client and its event receiver.
+`Qmp::new(path)` returns a QMP client and its event receiver, `QmpEvents`.
 `Qga::new(path)` returns a sequential guest-agent client.
 `from_stream(stream)` takes an already-connected Unix socket instead, and the
 `*_with_options` constructors take `ClientOptions`. Options set connect,
@@ -33,7 +33,7 @@ Plain structs, enums and lists decode straight from those bytes. Unions,
 alternates, structs with flattened bases and members whose type changed between
 releases are buffered as a `Value` while they decode, as in the replies of
 `query-qmp-schema` and `query-cpus-fast`; the message size limit bounds them.
-The raw calls return a `Value`, since the caller asks for one.
+The raw calls decode into the type the caller names, which may be a `Value`.
 
 QMP validates the typed greeting and sends a correlated `qmp_capabilities`
 request. It enables OOB only if advertised. A missing, malformed or incorrectly
@@ -48,9 +48,12 @@ independently, so a large upload cannot prevent reading an earlier reply.
 Request IDs belong to the connection. Typed calls use `qapi::commands` and
 decode the reply into `QapiCommand::Returns` in the peer's version scope, which
 selects the return type of the peer's release for a command whose return type
-changed. `execute_raw` accepts an `execute` envelope with optional
-object arguments, while `execute_raw_oob` requires `exec-oob`. Caller IDs,
-conflicting verbs and malformed arguments fail before any socket I/O. Unknown
+changed. `execute_raw(name, args)` runs a command by name with a JSON object of
+arguments (`{}` for none) and decodes the reply into the caller's type in the
+peer's version scope, as the guest agent's `execute_raw` does;
+`execute_raw_oob` sends it as `exec-oob`. The client builds the envelope and
+owns its ID, so the name and the arguments are all a caller can get wrong: an
+empty name or arguments that are not an object fail before any socket I/O. Unknown
 response IDs of any JSON type are dropped as required by QMP. An ID-less server
 parser error closes the connection while preserving its error class and description.
 
@@ -85,13 +88,18 @@ automatic retry occurs: cancellation, timeout or disconnect never proves that
 a command did not execute.
 
 `shutdown(&self)` works through `Arc<Qmp>`, wakes both admitted callers and
-callers waiting for capacity, closes the socket and ends the driver. Dropping
+callers waiting for capacity, closes the socket and ends the driver. It is
+async because it waits for that driver task to stop, while the guest agent's
+`shutdown(&mut self)`, on a client with one owner and no task, only drops the
+socket. Dropping
 the owner aborts the driver with the same cleanup. `is_closed()`,
 `close_reason()` and `closed().await` expose connection lifecycle. Pending
 callers share the original failure via `Error::Disconnected`.
 
 Events within `max_event_bytes` are parsed once and delivered without blocking
-replies. Dropping the event receiver does not disconnect QMP. Buffer overflow
+replies. `QmpEvents::recv().await` waits for the next one and returns `None`
+once the connection is closed and the queue drained; `try_recv()` takes one
+only if it is queued. Dropping the event receiver does not disconnect QMP. Buffer overflow
 or an event exceeding `max_event_bytes` drops that event, unparsed;
 `dropped_events()` counts these losses, so consumers can detect loss and refresh
 state. QEMU itself also rate-limits some events: this stream is not a durable
@@ -101,7 +109,8 @@ An event's `data` stays raw JSON, since only the caller knows its type, and the
 client's version scope does not reach the caller's decode. Decode it inside
 `qapi::with_version(qmp.version(), || ...)`, so that the peer's release selects
 the payload layout and checks it; outside any scope a decode takes the newest
-layout unchecked.
+layout unchecked. `QmpEvent::new` and `Timestamp::new` build an event, such as
+one a caller records alongside the peer's.
 
 ## QGA requests and lifecycle
 
@@ -196,11 +205,15 @@ too, such as `exec-oob` before the client enabled OOB.
 
 `RemoteError` retains the exact string `class` and `desc` of an error reply,
 including new error classes; `known_class()` optionally maps it to the
-generated enum.
+generated enum, and `RemoteError::new(class, desc)` builds one.
+
+`Greeting`, `VersionInfo`, `QemuVersion`, `QmpEvent`, `Timestamp` and
+`RemoteError` are `#[non_exhaustive]`, with readable fields, so a release can
+add a member that QEMU adds.
 
 These API choices are deliberate: `RemoteError.class` is a string,
 `Timestamp.microseconds` is signed, deserialized return types are owned and
-`'static`, and `Qmp::shutdown` takes `&self`. Consumers should use the
+`'static`, `Qmp::shutdown` takes `&self` and `Qga::shutdown` is synchronous. Consumers should use the
 connection's version and lifecycle rather than a process-global snapshot.
 
 See [testing.md](testing.md) for fault tests, the core checks and smoke tests

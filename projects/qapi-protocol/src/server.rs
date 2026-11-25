@@ -8,7 +8,6 @@
 use crate::{
     Error, ProtocolViolation, Result,
     framing::{self, JsonReader},
-    wire,
 };
 use serde_json::{Value, json};
 use tokio::io::AsyncWriteExt;
@@ -17,12 +16,33 @@ use tokio::net::{
     unix::{OwnedReadHalf, OwnedWriteHalf},
 };
 
+/// A command a mock session received.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct ParsedCommand {
     pub name: String,
     pub arguments: Value,
     pub oob: bool,
     pub id: Option<Value>,
+}
+
+/// A request, without its ID, has the verb, a nonempty command name and
+/// at most object arguments.
+fn validate(value: &Value, oob: bool) -> Result<()> {
+    let verb = if oob { "exec-oob" } else { "execute" };
+    let object = value
+        .as_object()
+        .ok_or(Error::Protocol(ProtocolViolation::NotAnObject(None)))?;
+    if !object
+        .get(verb)
+        .and_then(Value::as_str)
+        .is_some_and(|s| !s.is_empty())
+        || object.keys().any(|k| k != verb && k != "arguments")
+        || object.get("arguments").is_some_and(|v| !v.is_object())
+    {
+        return Err(Error::Protocol(ProtocolViolation::InvalidCommand { verb }));
+    }
+    Ok(())
 }
 
 /// Refuse any other command than an in-band `expected`.
@@ -55,7 +75,7 @@ impl QmpReader {
         let mut value: Value = serde_json::from_slice(&bytes).map_err(Error::Malformed)?;
         let id = value.as_object_mut().and_then(|o| o.remove("id"));
         let oob = value.get("exec-oob").is_some();
-        wire::validate_request(&value, oob)?;
+        validate(&value, oob)?;
         if oob && !self.oob {
             return Err(Error::Protocol(ProtocolViolation::OobNotEnabled));
         }

@@ -116,7 +116,7 @@ async fn getfd_carries_its_descriptor_and_plain_commands_carry_none() {
         "the client kept the descriptor"
     );
     let status = qmp
-        .execute_raw(json!({"execute":"query-status"}))
+        .execute_raw::<Value>("query-status", json!({}))
         .await
         .unwrap();
     assert_eq!(status["status"], "running");
@@ -141,7 +141,7 @@ async fn more_descriptors_than_one_message_carries_are_refused_before_sending() 
         .map(|_| std::fs::File::open("/dev/null").unwrap().into())
         .collect();
     assert!(matches!(
-        qmp.execute_raw_with_fds(json!({"execute":"getfd","arguments":{"fdname":"x"}}), fds)
+        qmp.execute_raw_with_fds::<Value>("getfd", json!({"fdname":"x"}), fds)
             .await,
         Err(qapi_protocol::Error::InvalidRequest(
             qapi_protocol::InvalidRequestKind::TooManyFds {
@@ -173,12 +173,14 @@ async fn descriptors_of_a_refused_request_are_closed() {
     });
     let (qmp, _events) = Qmp::new(&path).await.unwrap();
     let (read, write) = nix::unistd::pipe().unwrap();
-    // An invalid envelope is refused before any I/O, and the descriptor goes with it.
-    assert!(
-        qmp.execute_raw_with_fds(json!({"execute":"getfd","id":7}), vec![read])
-            .await
-            .is_err()
-    );
+    // Invalid arguments are refused before any I/O, and the descriptor goes with it.
+    assert!(matches!(
+        qmp.execute_raw_with_fds::<Value>("getfd", json!([]), vec![read])
+            .await,
+        Err(qapi_protocol::Error::InvalidRequest(
+            qapi_protocol::InvalidRequestKind::ArgumentsNotObject { .. }
+        ))
+    ));
     // With the only reader closed, writing to the pipe fails with EPIPE.
     let mut write = std::fs::File::from(write);
     let error = write.write_all(b"x").unwrap_err();
@@ -203,8 +205,9 @@ async fn descriptors_go_once_with_a_frame_written_in_parts() {
     let fd: OwnedFd = std::fs::File::open("/dev/null").unwrap().into();
     // More than the socket buffers, so the frame takes several writes.
     let padding = "x".repeat(512 * 1024);
-    let request = json!({"execute":"add-fd","arguments":{"opaque":padding}});
-    let (result, ()) = tokio::join!(qmp.execute_raw_with_fds(request, vec![fd]), async {
+    let args = json!({"opaque": padding});
+    let call = qmp.execute_raw_with_fds::<Value>("add-fd", args, vec![fd]);
+    let (result, ()) = tokio::join!(call, async {
         let (add, fds) = line_with_fds(&server).await;
         assert_eq!(
             add["arguments"]["opaque"].as_str().unwrap().len(),

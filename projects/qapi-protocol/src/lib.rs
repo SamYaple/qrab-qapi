@@ -15,7 +15,7 @@ mod qmp;
 pub mod server;
 mod wire;
 
-pub use qmp::{Greeting, QMP_QUEUE_CAPACITY, QemuVersion, Qmp, VersionInfo};
+pub use qmp::{Greeting, QMP_QUEUE_CAPACITY, QemuVersion, Qmp, QmpEvents, VersionInfo};
 use std::{fmt, sync::Arc, time::Duration};
 
 /// Why a connection or a call failed.
@@ -131,18 +131,6 @@ pub enum InvalidRequestKind {
         /// The command name.
         command: String,
     },
-    /// A raw QMP request is not a JSON object.
-    #[error("QMP request must be an object")]
-    RequestNotObject,
-    /// A raw QMP request lacks the execution verb the call expects, or has
-    /// another member than that verb and `arguments`, such as an ID, or
-    /// arguments that are not an object.
-    #[error("expected {verb} and optional object arguments; IDs are owned by the connection")]
-    #[non_exhaustive]
-    RequestEnvelope {
-        /// The verb the call expects, `execute` or `exec-oob`.
-        verb: &'static str,
-    },
     /// The encoded request exceeds
     /// [`ClientOptions::max_message_bytes`].
     #[error("JSON request of {size} bytes exceeds {limit} bytes")]
@@ -252,6 +240,15 @@ pub enum ProtocolViolation {
     /// An event does not have the expected members.
     #[error("invalid event: {0}")]
     InvalidEvent(#[source] serde_json::Error),
+    /// A mock session received a request without a nonempty `execute` or
+    /// `exec-oob` command name, or with another member than that verb,
+    /// `arguments` and `id`, or with arguments that are not an object.
+    #[error("expected {verb} with a command name and optional object arguments")]
+    #[non_exhaustive]
+    InvalidCommand {
+        /// The verb of the request, `execute` or `exec-oob`.
+        verb: &'static str,
+    },
     /// A mock session received `exec-oob` before the client enabled OOB.
     #[error("exec-oob before the client enabled OOB")]
     OobNotEnabled,
@@ -407,12 +404,20 @@ impl ClientOptions {
 /// peers are kept verbatim.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, thiserror::Error)]
 #[error("{class}: {desc}")]
+#[non_exhaustive]
 pub struct RemoteError {
     pub class: String,
     pub desc: String,
 }
 
 impl RemoteError {
+    pub fn new(class: impl Into<String>, desc: impl Into<String>) -> Self {
+        Self {
+            class: class.into(),
+            desc: desc.into(),
+        }
+    }
+
     pub fn known_class(&self) -> Option<qapi::QapiErrorClass> {
         serde_json::from_value(serde_json::Value::String(self.class.clone())).ok()
     }
@@ -443,7 +448,16 @@ impl RemoteError {
 /// assert_eq!(unscoped.node_name.as_deref(), Some("disk0"));
 /// # Ok::<(), serde_json::Error>(())
 /// ```
+///
+/// [`QmpEvent::new`] builds one, such as an event of the caller's own:
+///
+/// ```
+/// use qapi_protocol::{QmpEvent, Timestamp};
+/// let event = QmpEvent::new("POWER", Timestamp::new(-1, -1), serde_json::json!({}));
+/// assert_eq!(event.event, "POWER");
+/// ```
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[non_exhaustive]
 pub struct QmpEvent {
     pub event: String,
     pub timestamp: Timestamp,
@@ -451,9 +465,29 @@ pub struct QmpEvent {
     pub data: serde_json::Value,
 }
 
+impl QmpEvent {
+    pub fn new(event: impl Into<String>, timestamp: Timestamp, data: serde_json::Value) -> Self {
+        Self {
+            event: event.into(),
+            timestamp,
+            data,
+        }
+    }
+}
+
 /// QEMU reports both components as -1 when host time is unavailable.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[non_exhaustive]
 pub struct Timestamp {
     pub seconds: i64,
     pub microseconds: i64,
+}
+
+impl Timestamp {
+    pub const fn new(seconds: i64, microseconds: i64) -> Self {
+        Self {
+            seconds,
+            microseconds,
+        }
+    }
 }

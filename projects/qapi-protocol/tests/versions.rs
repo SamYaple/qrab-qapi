@@ -79,7 +79,7 @@ async fn multiple_qmp_versions_serialize_independently() {
 #[tokio::test]
 async fn qga_uses_guest_version_instead_of_host_default() {
     // This deliberately disagrees with both agents below.
-    let _ = qapi::set_qemu_version(1, 0, 0);
+    let _ = qapi::set_qemu_version((1, 0, 0));
     let dir = tempfile::tempdir().unwrap();
     let mut clients = Vec::new();
     let mut servers = Vec::new();

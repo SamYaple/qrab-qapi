@@ -44,25 +44,6 @@ pub(crate) fn command<C: QapiCommand>(
     request(C::NAME, args, oob)
 }
 
-pub(crate) fn validate_request(value: &Value, oob: bool) -> Result<()> {
-    let verb = if oob { "exec-oob" } else { "execute" };
-    let object = value
-        .as_object()
-        .ok_or(Error::InvalidRequest(InvalidRequestKind::RequestNotObject))?;
-    if !object
-        .get(verb)
-        .and_then(Value::as_str)
-        .is_some_and(|s| !s.is_empty())
-        || object.keys().any(|k| k != verb && k != "arguments")
-        || object.get("arguments").is_some_and(|v| !v.is_object())
-    {
-        return Err(Error::InvalidRequest(InvalidRequestKind::RequestEnvelope {
-            verb,
-        }));
-    }
-    Ok(())
-}
-
 /// The top-level members of a message, borrowed from its bytes without
 /// parsing them. A present member is `Some`, even when it is `null`.
 #[derive(Deserialize)]

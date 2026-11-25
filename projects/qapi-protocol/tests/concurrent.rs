@@ -1,6 +1,6 @@
 mod support;
 use qapi_protocol::{ClientOptions, Error, QMP_QUEUE_CAPACITY, Qmp, TimeoutPhase};
-use serde_json::json;
+use serde_json::{Value, json};
 use std::{future::Future, pin::Pin, sync::Arc, time::Duration};
 
 type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
@@ -15,7 +15,7 @@ async fn pipelined_replies_are_routed_out_of_order() {
         let client = client.clone();
         tasks.push(tokio::spawn(async move {
             let response = client
-                .execute_raw(json!({"execute": "echo", "arguments": {"index": index}}))
+                .execute_raw::<Value>("echo", json!({"index": index}))
                 .await
                 .unwrap();
             assert_eq!(response, json!(index));
@@ -45,7 +45,7 @@ async fn cancelled_sent_commands_keep_remote_queue_slots() {
     for _ in 0..QMP_QUEUE_CAPACITY {
         let client = client.clone();
         tasks.push(tokio::spawn(async move {
-            client.execute_raw(json!({"execute": "slow"})).await
+            client.execute_raw::<Value>("slow", json!({})).await
         }));
     }
     let mut requests = Vec::new();
@@ -57,7 +57,7 @@ async fn cancelled_sent_commands_keep_remote_queue_slots() {
         let _ = task.await;
     }
     let other = client.clone();
-    let ninth = tokio::spawn(async move { other.execute_raw(json!({"execute": "ninth"})).await });
+    let ninth = tokio::spawn(async move { other.execute_raw::<Value>("ninth", json!({})).await });
     assert!(
         tokio::time::timeout(Duration::from_millis(50), peer.recv_command_full())
             .await
@@ -89,7 +89,7 @@ async fn oob_bypasses_saturated_normal_admission_and_shutdown_wakes_everyone() {
     for _ in 0..9 {
         let client = client.clone();
         tasks.push(tokio::spawn(async move {
-            client.execute_raw(json!({"execute": "slow"})).await
+            client.execute_raw::<Value>("slow", json!({})).await
         }));
     }
     for _ in 0..8 {
@@ -98,7 +98,7 @@ async fn oob_bypasses_saturated_normal_admission_and_shutdown_wakes_everyone() {
     let other = client.clone();
     let oob = tokio::spawn(async move {
         other
-            .execute_raw_oob(json!({"exec-oob": "query-yank"}))
+            .execute_raw_oob::<Value>("query-yank", json!({}))
             .await
     });
     let request = peer.recv_command_full().await.unwrap();
@@ -124,14 +124,14 @@ async fn command_deadline_includes_waiting_for_admission() {
     for _ in 0..8 {
         let client = client.clone();
         tasks.push(tokio::spawn(async move {
-            client.execute_raw(json!({"execute": "slow"})).await
+            client.execute_raw::<Value>("slow", json!({})).await
         }));
     }
     for _ in 0..8 {
         peer.recv_command_full().await.unwrap();
     }
     let result = client
-        .execute_raw_with_timeout(json!({"execute": "never-send"}), Duration::from_millis(20))
+        .execute_raw_with_timeout::<Value>("never-send", json!({}), Duration::from_millis(20))
         .await;
     assert!(matches!(
         result,
@@ -154,7 +154,7 @@ async fn command_deadline_includes_waiting_for_admission() {
 async fn timing_out_after_dispatch_says_so_and_closes_the_session() {
     let (client, _, mut peer) = support::qmp(ClientOptions::default()).await;
     let (result, _) = tokio::join!(
-        client.execute_raw_with_timeout(json!({"execute": "slow"}), Duration::from_millis(20)),
+        client.execute_raw_with_timeout::<Value>("slow", json!({}), Duration::from_millis(20)),
         peer.recv_command()
     );
     assert!(matches!(
@@ -188,14 +188,14 @@ async fn every_call_kind_takes_a_deadline_of_its_own() {
         }),
         ("execute_raw", |qmp| {
             Box::pin(async move {
-                qmp.execute_raw_with_timeout(json!({"execute": "slow"}), SHORT)
+                qmp.execute_raw_with_timeout::<Value>("slow", json!({}), SHORT)
                     .await
                     .map(drop)
             })
         }),
         ("execute_raw_oob", |qmp| {
             Box::pin(async move {
-                qmp.execute_raw_oob_with_timeout(json!({"exec-oob": "slow"}), SHORT)
+                qmp.execute_raw_oob_with_timeout::<Value>("slow", json!({}), SHORT)
                     .await
                     .map(drop)
             })
@@ -203,7 +203,7 @@ async fn every_call_kind_takes_a_deadline_of_its_own() {
         ("execute_raw_with_fds", |qmp| {
             Box::pin(async move {
                 let fd = std::fs::File::open("/dev/null").unwrap().into();
-                qmp.execute_raw_with_fds_and_timeout(json!({"execute": "getfd"}), vec![fd], SHORT)
+                qmp.execute_raw_with_fds_and_timeout::<Value>("getfd", json!({}), vec![fd], SHORT)
                     .await
                     .map(drop)
             })
@@ -240,7 +240,7 @@ async fn an_expired_call_reports_its_own_timeout_on_any_worker() {
         let caller = client.clone();
         let call = tokio::spawn(async move {
             caller
-                .execute_raw_with_timeout(json!({"execute": "slow"}), Duration::from_millis(5))
+                .execute_raw_with_timeout::<Value>("slow", json!({}), Duration::from_millis(5))
                 .await
         });
         peer.recv_command().await.unwrap();
@@ -264,7 +264,7 @@ async fn cancelled_unanswered_request_still_has_a_background_deadline() {
     let (client, _, mut peer) = support::qmp(options).await;
     let client = Arc::new(client);
     let other = client.clone();
-    let task = tokio::spawn(async move { other.execute_raw(json!({"execute": "slow"})).await });
+    let task = tokio::spawn(async move { other.execute_raw::<Value>("slow", json!({})).await });
     peer.recv_command().await.unwrap();
     task.abort();
     let _ = task.await;
@@ -281,7 +281,7 @@ async fn cancelled_unanswered_request_still_has_a_background_deadline() {
     assert_eq!(client.queue_depth(), 0);
     assert!(
         client
-            .execute_raw(json!({"execute": "query-status"}))
+            .execute_raw::<Value>("query-status", json!({}))
             .await
             .is_err()
     );
@@ -296,7 +296,7 @@ async fn event_overflow_and_dropped_receivers_do_not_break_commands() {
         peer.send_event("STOP", json!({})).await.unwrap();
     }
     let other = client.clone();
-    let call = tokio::spawn(async move { other.execute_raw(json!({"execute": "ping"})).await });
+    let call = tokio::spawn(async move { other.execute_raw::<Value>("ping", json!({})).await });
     peer.recv_command().await.unwrap();
     peer.send_return(json!({})).await.unwrap();
     call.await.unwrap().unwrap();
@@ -304,7 +304,7 @@ async fn event_overflow_and_dropped_receivers_do_not_break_commands() {
     drop(events);
     peer.send_event("STOP", json!({})).await.unwrap();
     let other = client.clone();
-    let call = tokio::spawn(async move { other.execute_raw(json!({"execute": "ping"})).await });
+    let call = tokio::spawn(async move { other.execute_raw::<Value>("ping", json!({})).await });
     peer.recv_command().await.unwrap();
     peer.send_return(json!({})).await.unwrap();
     call.await.unwrap().unwrap();
@@ -320,12 +320,12 @@ async fn oversized_events_are_not_retained_in_the_event_queue() {
         .await
         .unwrap();
     let other = client.clone();
-    let call = tokio::spawn(async move { other.execute_raw(json!({"execute":"ping"})).await });
+    let call = tokio::spawn(async move { other.execute_raw::<Value>("ping", json!({})).await });
     peer.recv_command().await.unwrap();
     peer.send_return(json!({})).await.unwrap();
     call.await.unwrap().unwrap();
     assert_eq!(client.dropped_events(), 1);
-    assert!(events.try_recv().is_err());
+    assert!(events.try_recv().is_none());
     client.shutdown().await;
 }
 
@@ -337,7 +337,7 @@ async fn a_request_cancelled_while_queued_is_never_sent() {
     let other = client.clone();
     let upload = tokio::spawn(async move {
         other
-            .execute_raw(json!({"execute":"upload","arguments":{"data":"x".repeat(4*1024*1024)}}))
+            .execute_raw::<Value>("upload", json!({"data":"x".repeat(4*1024*1024)}))
             .await
     });
     // The driver is writing the upload, which the socket cannot hold, so
@@ -345,12 +345,12 @@ async fn a_request_cancelled_while_queued_is_never_sent() {
     assert!(!reader.fill_buf().await.unwrap().is_empty());
     let other = client.clone();
     let cancelled =
-        tokio::spawn(async move { other.execute_raw(json!({"execute":"cancelled"})).await });
+        tokio::spawn(async move { other.execute_raw::<Value>("cancelled", json!({})).await });
     tokio::time::sleep(Duration::from_millis(50)).await;
     cancelled.abort();
     let _ = cancelled.await;
     let other = client.clone();
-    let after = tokio::spawn(async move { other.execute_raw(json!({"execute":"after"})).await });
+    let after = tokio::spawn(async move { other.execute_raw::<Value>("after", json!({})).await });
     let first = support::read(&mut reader).await;
     assert_eq!(first["execute"], "upload");
     support::write(&mut writer, json!({"return":{},"id":first["id"]})).await;
@@ -372,13 +372,13 @@ async fn no_request_is_sent_after_a_dispatched_one_expired() {
         let other = client.clone();
         let expiring = tokio::spawn(async move {
             other
-                .execute_raw_with_timeout(json!({"execute": "slow"}), Duration::from_secs(1))
+                .execute_raw_with_timeout::<Value>("slow", json!({}), Duration::from_secs(1))
                 .await
         });
         peer.recv_command().await.unwrap();
         tokio::time::pause();
         let other = client.clone();
-        let late = tokio::spawn(async move { other.execute_raw(json!({"execute": "late"})).await });
+        let late = tokio::spawn(async move { other.execute_raw::<Value>("late", json!({})).await });
         tokio::time::advance(Duration::from_secs(2)).await;
         assert!(matches!(
             expiring.await.unwrap(),

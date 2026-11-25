@@ -40,16 +40,10 @@ struct Layout {
 #[test]
 fn the_process_default_is_set_once_and_serves_serialization_only() {
     assert_eq!(qemu_version(), (0, 0, 0));
-    assert_eq!(set_qemu_version(10, 1, 0), Ok(()));
+    assert_eq!(set_qemu_version((10, 1, 0)), Ok(()));
     for requested in [(7, 0, 0), (10, 1, 0)] {
-        let error = set_qemu_version(requested.0, requested.1, requested.2).unwrap_err();
-        assert_eq!(
-            error,
-            VersionAlreadySet {
-                existing: (10, 1, 0),
-                requested,
-            }
-        );
+        let error: VersionAlreadySet = set_qemu_version(requested).unwrap_err();
+        assert_eq!((error.existing, error.requested), ((10, 1, 0), requested));
         assert!(error.to_string().contains("already 10.1.0"), "{error}");
     }
     assert_eq!(qemu_version(), (10, 1, 0));

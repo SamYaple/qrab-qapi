@@ -140,7 +140,7 @@ async fn smoke(binary: &OsStr, frontend: MonitorFrontend, pretty: bool) {
     replies.2.unwrap();
     replies.3.unwrap();
     assert!(matches!(
-        qmp.execute_raw(serde_json::json!({"execute": "qrab-no-such-command"}))
+        qmp.execute_raw::<serde_json::Value>("qrab-no-such-command", serde_json::json!({}))
             .await,
         Err(qapi_protocol::Error::Remote(_))
     ));

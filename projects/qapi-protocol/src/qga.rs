@@ -153,6 +153,12 @@ impl Qga {
     pub fn is_closed(&self) -> bool {
         self.session.is_none()
     }
+    /// Close the socket. Later calls fail with [`Error::Closed`].
+    ///
+    /// It is synchronous and takes `&mut self`, unlike the shared QMP
+    /// client's async [`Qmp::shutdown`](crate::Qmp::shutdown): a guest agent
+    /// client is owned and sequential, with no task or pending caller to
+    /// wait for, so dropping its socket is the whole shutdown.
     pub fn shutdown(&mut self) {
         self.session.take();
     }
@@ -179,6 +185,10 @@ impl Qga {
         self.call(request, max_reply_bytes).await
     }
 
+    /// Run the command `name` with `args`, a JSON object (`{}` for none),
+    /// and decode its reply into `T`, such as a `serde_json::Value`, in the
+    /// agent's version scope, as [`Qmp::execute_raw`](crate::Qmp::execute_raw)
+    /// does.
     pub async fn execute_raw<T: DeserializeOwned + 'static>(
         &mut self,
         name: &str,
