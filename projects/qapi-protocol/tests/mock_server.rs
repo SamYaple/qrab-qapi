@@ -117,6 +117,16 @@ async fn mock_qmp_event() {
     let _ = std::fs::remove_file(&sock);
 }
 
+#[tokio::test]
+async fn mock_qmp_session_and_its_halves_are_debug() {
+    let (_client, server) = tokio::net::UnixStream::pair().unwrap();
+    let session = QmpSession::from_stream(server);
+    assert!(format!("{session:?}").starts_with("QmpSession"));
+    let (reader, writer) = session.split();
+    assert_eq!(format!("{reader:?}"), "QmpReader { oob: false, .. }");
+    assert!(format!("{writer:?}").starts_with("QmpWriter"));
+}
+
 // ── Mock QGA Server Tests ──
 
 #[tokio::test]
@@ -159,4 +169,11 @@ async fn mock_qga_sync_and_ping() {
 
     server.await.unwrap();
     let _ = std::fs::remove_file(&sock);
+}
+
+#[tokio::test]
+async fn mock_qga_session_is_debug() {
+    let (_client, server) = tokio::net::UnixStream::pair().unwrap();
+    let session = QgaSession::from_stream(server);
+    assert!(format!("{session:?}").starts_with("QgaSession"));
 }

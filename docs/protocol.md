@@ -219,4 +219,5 @@ connection's version and lifecycle rather than a process-global snapshot.
 See [testing.md](testing.md) for fault tests, the core checks and smoke tests
 against real QEMU binaries. The mock `server` sessions need the `mock` feature.
 They share the bounded framing and validation helpers, including explicit
-response IDs for out-of-order tests.
+response IDs for out-of-order tests, and `QmpSession::split` gives a reader and
+a writer for a mock that reads commands in one task while another writes.

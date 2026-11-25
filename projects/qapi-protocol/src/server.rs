@@ -60,11 +60,24 @@ fn expect(command: &ParsedCommand, expected: &'static str) -> Result<()> {
 /// The largest message a mock session reads or writes.
 const LIMIT: usize = 64 * 1024 * 1024 + 1024;
 
+/// The reading half of a [`QmpSession`], from [`QmpSession::split`], for a
+/// mock that reads commands in one task and writes in another.
 pub struct QmpReader {
     reader: JsonReader<OwnedReadHalf>,
     // Whether the client enabled OOB; `exec-oob` is refused until it has.
     oob: bool,
 }
+
+impl std::fmt::Debug for QmpReader {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("QmpReader")
+            .field("oob", &self.oob)
+            .finish_non_exhaustive()
+    }
+}
+
+/// The writing half of a [`QmpSession`], from [`QmpSession::split`].
+#[derive(Debug)]
 pub struct QmpWriter {
     writer: OwnedWriteHalf,
 }
@@ -100,7 +113,7 @@ impl QmpWriter {
         }
         self.send(reply).await
     }
-    pub async fn send_error_with_id(
+    async fn send_error_with_id(
         &mut self,
         class: &str,
         desc: &str,
@@ -120,6 +133,8 @@ impl QmpWriter {
     }
 }
 
+/// A mock QMP server on one connection.
+#[derive(Debug)]
 pub struct QmpSession {
     reader: QmpReader,
     writer: QmpWriter,
@@ -190,6 +205,8 @@ impl QmpSession {
     }
 }
 
+/// A mock guest agent on one connection.
+#[derive(Debug)]
 pub struct QgaSession {
     reader: QmpReader,
     writer: QmpWriter,
