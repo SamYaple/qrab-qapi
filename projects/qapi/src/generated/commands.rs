@@ -1,5 +1,4 @@
 use qapi_macros::qapi;
-use std::collections::HashMap;
 use super::*;
 /// QMP command `add_client`; see the QEMU QMP Reference Manual.
 #[qapi(command)]
@@ -1190,7 +1189,7 @@ pub struct CxlReleaseDynamicCapacity {
 pub struct DeviceAdd {
     /// Additional command arguments not modeled by this schema.
     #[qapi(flatten)]
-    pub arguments: Option<HashMap<String, serde_json::Value>>,
+    pub arguments: Option<serde_json::Map<String, serde_json::Value>>,
     #[qapi(added = "2.9.0")]
     pub bus: Option<String>,
     pub driver: String,
@@ -1974,7 +1973,7 @@ pub struct NetdevAdd {
     /// Additional command arguments not modeled by this schema.
     #[qapi(flatten)]
     #[qapi(removed = "5.0.0")]
-    pub arguments: Option<HashMap<String, serde_json::Value>>,
+    pub arguments: Option<serde_json::Map<String, serde_json::Value>>,
     pub id: String,
     #[qapi(removed = "2.5.0")]
     pub props: Option<serde_json::Value>,
@@ -2013,11 +2012,11 @@ pub struct ObjectAdd {
     #[qapi(flatten)]
     #[qapi(added = "5.0.0")]
     #[qapi(removed = "6.0.0")]
-    pub arguments: Option<HashMap<String, serde_json::Value>>,
+    pub arguments: Option<serde_json::Map<String, serde_json::Value>>,
     /// Additional command arguments not modeled by this schema.
     #[qapi(flatten)]
     #[qapi(removed = "2.5.0")]
-    pub arguments_legacy: Option<HashMap<String, serde_json::Value>>,
+    pub arguments_legacy: Option<serde_json::Map<String, serde_json::Value>>,
     pub id: String,
     #[qapi(removed = "6.0.0")]
     pub props: Option<serde_json::Value>,
@@ -2090,7 +2089,7 @@ pub struct QomGet {
     /// Additional command arguments not modeled by this schema.
     #[qapi(flatten)]
     #[qapi(removed = "2.5.0")]
-    pub arguments: Option<HashMap<String, serde_json::Value>>,
+    pub arguments: Option<serde_json::Map<String, serde_json::Value>>,
     pub path: String,
     pub property: String,
 }
@@ -2146,7 +2145,7 @@ pub struct QomSet {
     /// Additional command arguments not modeled by this schema.
     #[qapi(flatten)]
     #[qapi(removed = "2.5.0")]
-    pub arguments: Option<HashMap<String, serde_json::Value>>,
+    pub arguments: Option<serde_json::Map<String, serde_json::Value>>,
     pub path: String,
     pub property: String,
     pub value: serde_json::Value,
@@ -2554,7 +2553,7 @@ pub struct QueryQmpSchema {
     /// Additional command arguments not modeled by this schema.
     #[qapi(flatten)]
     #[qapi(removed = "6.0.0")]
-    pub arguments: Option<HashMap<String, serde_json::Value>>,
+    pub arguments: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
 /// QMP command `query-replay`; see the QEMU QMP Reference Manual.

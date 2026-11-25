@@ -607,6 +607,18 @@ uses the attribute depends on `qrab-qapi` under its library name, and
 `qrab-qapi` declares `extern crate self as qapi` for its own generated
 modules, which therefore import no alias.
 
+QAPI's untyped values, `any` and the `visitor`, `dict` and `**` of the
+oldest schemas, are `serde_json::Value`. A `gen: false` command, whose
+schema declares only some of its arguments, takes the others in a
+flattened `arguments` field of type
+`Option<serde_json::Map<String, serde_json::Value>>`: the map that a JSON
+object holds as a `serde_json::Value::Object`, and that `QapiFlatUnion`
+decodes union branches from. Its key order is that of `serde_json::Map`:
+sorted by key, or insertion order where serde_json's `preserve_order`
+feature is enabled. The QAPI crates do not enable it, but Cargo unifies
+features, so any crate of a build that enables it changes the order for
+all of them.
+
 Generated command constants describe the newest schema flags. The
 `allows_oob`, `allows_preconfig` and `sends_success_response` trait methods
 query their added/removed ranges for a particular peer release, and repeated

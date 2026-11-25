@@ -43,7 +43,7 @@ fn builtin_type(qapi_type: &str) -> Option<&'static str> {
 /// The type of the `arguments` member that the lowering gives a gen:false
 /// command, for the arguments that its schema does not declare. It is a
 /// Rust type, not a QAPI name.
-const ARGUMENTS_TYPE: &str = "HashMap<String, serde_json::Value>";
+const ARGUMENTS_TYPE: &str = "serde_json::Map<String, serde_json::Value>";
 
 /// The Rust type that a type name of the IR stands for: the Rust type of a
 /// builtin, or the [`rustify_name`] of a defined or synthesized type.

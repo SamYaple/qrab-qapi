@@ -1022,7 +1022,7 @@ fn a_declared_member_does_not_take_a_same_named_catch_all() {
         assert_eq!(found, expected, "{releases:?}");
         for field in arguments {
             if field.meta.attributes.contains(&Attribute::new("flatten")) {
-                assert_eq!(field.r#type, "HashMap<String, serde_json::Value>");
+                assert_eq!(field.r#type, "serde_json::Map<String, serde_json::Value>");
                 assert_eq!(
                     field.meta.doc.as_deref(),
                     Some("Additional command arguments not modeled by this schema.")

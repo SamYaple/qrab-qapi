@@ -395,8 +395,7 @@ fn parse_rust(source: &str, file: &'static str) -> Result<syn::File, GenerateErr
 }
 
 /// Format a token stream as a complete Rust file with the standard header.
-/// An empty module has no imports, and `HashMap` is imported only where an
-/// item names it.
+/// An empty module has no imports.
 fn format_rust_file(
     tokens: proc_macro2::TokenStream,
     extra_imports: &str,
@@ -405,23 +404,12 @@ fn format_rust_file(
     let mut source = String::new();
     if !tokens.is_empty() {
         source.push_str("use qapi_macros::qapi;\n");
-        if mentions_ident(tokens.clone(), "HashMap") {
-            source.push_str("use std::collections::HashMap;\n");
-        }
         source.push_str(extra_imports);
     }
     source.push('\n');
     source.push_str(&tokens.to_string());
     let syntax = parse_rust(&source, file)?;
     Ok(separate_items(&prettyplease::unparse(&syntax)))
-}
-
-fn mentions_ident(tokens: proc_macro2::TokenStream, name: &str) -> bool {
-    tokens.into_iter().any(|token| match token {
-        proc_macro2::TokenTree::Ident(ident) => ident == name,
-        proc_macro2::TokenTree::Group(group) => mentions_ident(group.stream(), name),
-        _ => false,
-    })
 }
 
 /// Insert a blank line between top-level items for readability.

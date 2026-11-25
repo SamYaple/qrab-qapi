@@ -365,7 +365,7 @@ fn test_field_evolution_inline_to_boxed() {
     let bad_flatten = command.ir.fields.iter().any(|f| {
         has_unit(&f.meta.attributes, "flatten")
             && !has_unit(&f.meta.attributes, "union")
-            && !f.r#type.starts_with("HashMap<")
+            && !f.r#type.starts_with("serde_json::Map<")
     });
     assert!(!bad_flatten);
     assert!(command.ir.fields.iter().any(|f| f.name == "type"));

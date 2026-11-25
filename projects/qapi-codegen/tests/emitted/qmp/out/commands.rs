@@ -1,5 +1,4 @@
 use qapi_macros::qapi;
-use std::collections::HashMap;
 use super::*;
 /// QMP command `ant`; see the QEMU QMP Reference Manual.
 #[qapi(name = "ant")]
@@ -68,11 +67,11 @@ pub struct Loose {
     /// Additional command arguments not modeled by this schema.
     #[qapi(flatten)]
     #[qapi(added = "7.0.0")]
-    pub arguments: Option<HashMap<String, serde_json::Value>>,
+    pub arguments: Option<serde_json::Map<String, serde_json::Value>>,
     /// Additional command arguments not modeled by this schema.
     #[qapi(flatten)]
     #[qapi(removed = "6.2.0")]
-    pub arguments_legacy: Option<HashMap<String, serde_json::Value>>,
+    pub arguments_legacy: Option<serde_json::Map<String, serde_json::Value>>,
     #[qapi(added = "6.2.0")]
     #[qapi(required)]
     pub x: Option<i64>,

@@ -306,7 +306,8 @@ fn generated_code_compiles_and_its_metadata_is_true() {
     .unwrap();
     std::fs::write(
         fixture.join("serde_json/src/lib.rs"),
-        "//! A stand-in for the JSON value type.\n/// Any JSON value.\npub struct Value;\n",
+        "//! A stand-in for the JSON value and object types.\n/// Any JSON value.\npub struct Value;\n\
+         /// A JSON object.\npub struct Map<K, V>(K, V);\n",
     )
     .unwrap();
     let modules = [
@@ -654,7 +655,8 @@ fn boxed_commands_inline_their_data() {
                     let ty = &field.ty;
                     let ty = quote::quote!(#ty).to_string();
                     assert!(
-                        marker("union") || ty.contains("HashMap < String , serde_json :: Value >"),
+                        marker("union")
+                            || ty.contains("serde_json :: Map < String , serde_json :: Value >"),
                         "Unexpected flatten field in {}: {:?}",
                         item.ident,
                         field.ident

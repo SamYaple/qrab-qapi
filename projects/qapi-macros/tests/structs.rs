@@ -11,8 +11,7 @@ mod record;
 
 use qapi::{take_unavailable, with_default, with_version};
 use qapi_macros::qapi;
-use serde_json::{Value, json};
-use std::collections::HashMap;
+use serde_json::{Map, Value, json};
 
 #[qapi(name = "image-info")]
 struct ImageInfo {
@@ -573,7 +572,7 @@ struct Catchall {
     id: String,
     size: Option<u32>,
     #[qapi(flatten)]
-    arguments: Option<HashMap<String, Value>>,
+    arguments: Option<Map<String, Value>>,
 }
 
 #[test]
@@ -582,18 +581,18 @@ fn a_flattened_map_takes_the_unclaimed_members_and_claims_none_twice() {
     assert_eq!(catchall.size, Some(2));
     assert_eq!(
         catchall.arguments.unwrap(),
-        HashMap::from([("x".into(), json!(1))])
+        Map::from_iter([("x".into(), json!(1))])
     );
     let mut catchall = Catchall {
         id: "a".into(),
         size: None,
-        arguments: Some(HashMap::from([("x".into(), json!(1))])),
+        arguments: Some(Map::from_iter([("x".into(), json!(1))])),
     };
     assert_eq!(
         encode((9, 2, 0), &catchall).unwrap(),
         json!({"id": "a", "x": 1})
     );
-    catchall.arguments = Some(HashMap::from([("id".into(), json!("b"))]));
+    catchall.arguments = Some(Map::from_iter([("id".into(), json!("b"))]));
     assert_eq!(
         encode((9, 2, 0), &catchall).unwrap_err(),
         "Catchall: duplicate member `id`"
@@ -604,9 +603,9 @@ fn a_flattened_map_takes_the_unclaimed_members_and_claims_none_twice() {
 struct GatedFlat {
     id: String,
     #[qapi(flatten, added = "5.0.0")]
-    extra: Option<HashMap<String, Value>>,
+    extra: Option<Map<String, Value>>,
     #[qapi(flatten, removed = "5.0.0")]
-    old: Option<HashMap<String, Value>>,
+    old: Option<Map<String, Value>>,
 }
 
 #[test]
@@ -783,9 +782,7 @@ mod shadowed {
         #[qapi(flatten, union)]
         pub u: ::core::option::Option<Branch>,
         #[qapi(flatten)]
-        pub rest: ::core::option::Option<
-            ::std::collections::HashMap<::std::string::String, super::Value>,
-        >,
+        pub rest: ::core::option::Option<::serde_json::Map<::std::string::String, super::Value>>,
     }
 }
 

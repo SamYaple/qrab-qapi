@@ -155,7 +155,7 @@ fn unions_need_their_flatten_discriminator_and_union_field() {
         "discriminator",
     );
     for item in [
-        r#"struct S { #[qapi(flatten, name = "rest")] rest: Option<HashMap<String, Value>> }"#,
+        r#"struct S { #[qapi(flatten, name = "rest")] rest: Option<Map<String, Value>> }"#,
         r#"struct S { #[qapi(discriminator)] kind: Kind, #[qapi(flatten, union)] #[qapi(name = "u")] u: Option<Branch> }"#,
     ] {
         assert_error(

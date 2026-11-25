@@ -14,7 +14,7 @@ pub struct StructField {
     /// The QAPI name of the member's type, a builtin or a definition, or the
     /// Rust name of a type that the lowering synthesizes. The `arguments`
     /// member of a gen:false command has a Rust type,
-    /// `HashMap<String, serde_json::Value>`.
+    /// `serde_json::Map<String, serde_json::Value>`.
     pub r#type: String,
     /// The member may be absent (`'*name'`).
     pub optional: bool,
