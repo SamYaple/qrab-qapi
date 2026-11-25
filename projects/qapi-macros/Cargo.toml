@@ -19,3 +19,14 @@ targets = ["x86_64-unknown-linux-gnu"]
 [lib]
 name = "qapi_macros"
 proc-macro = true
+
+[dependencies]
+proc-macro2 = { workspace = true }
+quote = { workspace = true }
+syn = { workspace = true }
+
+[dev-dependencies]
+# The unit tests read the source text that a compile error points at.
+proc-macro2 = { workspace = true, features = ["span-locations"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
