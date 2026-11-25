@@ -1,4 +1,3 @@
-use crate as qapi;
 use qapi_macros::qapi;
 use super::*;
 /// Emitted when something happens.

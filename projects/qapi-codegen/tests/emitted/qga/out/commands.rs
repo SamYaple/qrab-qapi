@@ -1,4 +1,3 @@
-use crate as qapi;
 use qapi_macros::qapi;
 use super::*;
 /// QEMU Guest Agent command `guest-info`; see the QEMU Guest Agent Protocol Reference.

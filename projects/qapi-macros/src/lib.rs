@@ -9,9 +9,10 @@
 //! - Structs, with their flattened bases and unions, and command and event
 //!   types, which also implement `QapiCommand` or `QapiEvent`.
 //!
-//! The expansion calls the run-time support of `qrab-qapi` by the relative
-//! path `qapi`, so it compiles only where `qapi` names that library, as in a
-//! crate that depends on `qrab-qapi` under its library name.
+//! The expansion calls the run-time support of `qrab-qapi` by the absolute
+//! path `::qapi`, so it compiles only where the crate `qapi` is that
+//! library: in a crate that depends on `qrab-qapi` under its library name,
+//! and in `qrab-qapi` itself, which declares `extern crate self as qapi`.
 //!
 //! `QEMU_MIN_VERSION` and `QEMU_MAX_VERSION` (such as `9.2.0`), read when
 //! the attribute expands, bound the QEMU releases a build supports. Types
@@ -69,26 +70,30 @@ use syn::{DeriveInput, parse_macro_input};
 /// Generic items are not supported.
 ///
 /// ```
-/// # mod qapi {
+/// # // A stand-in for qrab-qapi, which this crate cannot depend on: the
+/// # // example crate names itself `qapi`.
+/// # extern crate self as qapi;
+/// # use std::cell::Cell;
+/// # thread_local!(static VERSION: Cell<Option<(u32, u32, u32)>> = const { Cell::new(None) });
+/// # pub fn with_version<T>(version: (u32, u32, u32), f: impl FnOnce() -> T) -> T {
+/// #     let outer = VERSION.replace(Some(version));
+/// #     let result = f();
+/// #     VERSION.set(outer);
+/// #     result
+/// # }
+/// # pub fn scoped_qemu_version() -> Option<(u32, u32, u32)> { VERSION.get() }
+/// # pub fn qemu_version() -> (u32, u32, u32) { VERSION.get().unwrap_or((0, 0, 0)) }
+/// # pub mod __private {
 /// #     pub use serde;
-/// #     use std::cell::Cell;
-/// #     thread_local!(static VERSION: Cell<Option<(u32, u32, u32)>> = const { Cell::new(None) });
-/// #     pub fn with_version<T>(version: (u32, u32, u32), f: impl FnOnce() -> T) -> T {
-/// #         let outer = VERSION.replace(Some(version));
-/// #         let result = f();
-/// #         VERSION.set(outer);
-/// #         result
-/// #     }
-/// #     pub fn scoped_qemu_version() -> Option<(u32, u32, u32)> { VERSION.get() }
-/// #     pub fn qemu_version() -> (u32, u32, u32) { VERSION.get().unwrap_or((0, 0, 0)) }
 /// #     pub fn unavailable_type_message(name: &str) -> String {
-/// #         let (major, minor, patch) = qemu_version();
+/// #         let (major, minor, patch) = super::qemu_version();
 /// #         format!("{name} is not available in QEMU {major}.{minor}.{patch}")
 /// #     }
 /// #     pub fn unavailable_error<E: serde::ser::Error>(name: &str) -> E {
 /// #         E::custom(unavailable_type_message(name))
 /// #     }
 /// # }
+/// # fn main() {
 /// use qapi_macros::qapi;
 ///
 /// #[qapi(added = "2.0.0")]
@@ -116,6 +121,7 @@ use syn::{DeriveInput, parse_macro_input};
 ///     decode((9, 2, 0), r#""archipelago""#).unwrap_err().to_string(),
 ///     "BlockdevDriver::Archipelago is not available in QEMU 9.2.0",
 /// );
+/// # }
 /// ```
 #[proc_macro_attribute]
 pub fn qapi(args: TokenStream, input: TokenStream) -> TokenStream {

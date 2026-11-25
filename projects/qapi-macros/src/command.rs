@@ -168,7 +168,7 @@ pub(crate) fn gen_command_impl(
     let preconfig_impl = (!preconfig_runs.is_empty()).then(|| {
         quote! {
             #[allow(deprecated)]
-            impl qapi::PreconfigSafe for #name {}
+            impl ::qapi::PreconfigSafe for #name {}
         }
     });
 
@@ -176,7 +176,7 @@ pub(crate) fn gen_command_impl(
         #returns_enum
 
         #[allow(deprecated)]
-        impl qapi::QapiCommand for #name {
+        impl ::qapi::QapiCommand for #name {
             type Returns = #returns;
             const NAME: &'static str = #wn;
             const ALLOW_OOB: bool = #oob;
@@ -263,7 +263,7 @@ fn gen_returns_enum(
                 if !#available {
                     return ::core::result::Result::Err(#unavailable);
                 }
-                qapi::serde::Serialize::serialize(#inner, #serializer)
+                ::qapi::__private::serde::Serialize::serialize(#inner, #serializer)
             }
         }
     });
@@ -275,14 +275,14 @@ fn gen_returns_enum(
             // A command without a return value replies `{}`.
             let message = format!("{name_str}::{variant}: expected an empty object, found {{}}");
             quote! {
-                match <qapi::serde_json::Value as qapi::serde::Deserialize>::deserialize(#deserializer)? {
-                    qapi::serde_json::Value::Null => ::core::result::Result::Ok(#enum_name::#variant(())),
-                    qapi::serde_json::Value::Object(#map) if #map.is_empty() => ::core::result::Result::Ok(#enum_name::#variant(())),
-                    #other => ::core::result::Result::Err(qapi::serde::de::Error::custom(::std::format!(#message, #other))),
+                match <::qapi::__private::serde_json::Value as ::qapi::__private::serde::Deserialize>::deserialize(#deserializer)? {
+                    ::qapi::__private::serde_json::Value::Null => ::core::result::Result::Ok(#enum_name::#variant(())),
+                    ::qapi::__private::serde_json::Value::Object(#map) if #map.is_empty() => ::core::result::Result::Ok(#enum_name::#variant(())),
+                    #other => ::core::result::Result::Err(::qapi::__private::serde::de::Error::custom(::std::format!(#message, #other))),
                 }
             }
         } else {
-            quote! { <#ty as qapi::serde::Deserialize>::deserialize(#deserializer).map(#enum_name::#variant) }
+            quote! { <#ty as ::qapi::__private::serde::Deserialize>::deserialize(#deserializer).map(#enum_name::#variant) }
         };
         quote! {
             if #selected {
@@ -303,17 +303,17 @@ fn gen_returns_enum(
         }
 
         #[allow(deprecated)]
-        impl qapi::serde::Serialize for #enum_name {
+        impl ::qapi::__private::serde::Serialize for #enum_name {
             fn serialize<#serializer_ty>(&self, #serializer: #serializer_ty) -> ::core::result::Result<#serializer_ty::Ok, #serializer_ty::Error>
-            where #serializer_ty: qapi::serde::Serializer {
+            where #serializer_ty: ::qapi::__private::serde::Serializer {
                 match *self { #(#ser_arms)* }
             }
         }
 
         #[allow(deprecated)]
-        impl<'de> qapi::serde::Deserialize<'de> for #enum_name {
+        impl<'de> ::qapi::__private::serde::Deserialize<'de> for #enum_name {
             fn deserialize<#deserializer_ty>(#deserializer: #deserializer_ty) -> ::core::result::Result<Self, #deserializer_ty::Error>
-            where #deserializer_ty: qapi::serde::Deserializer<'de> {
+            where #deserializer_ty: ::qapi::__private::serde::Deserializer<'de> {
                 #(#decodes)*
                 ::core::result::Result::Err(#unavailable)
             }
@@ -324,7 +324,7 @@ fn gen_returns_enum(
 pub(crate) fn gen_event_impl(name: &syn::Ident, wn: &str) -> TokenStream2 {
     quote! {
         #[allow(deprecated)]
-        impl qapi::QapiEvent for #name {
+        impl ::qapi::QapiEvent for #name {
             const NAME: &'static str = #wn;
         }
     }

@@ -7,9 +7,9 @@ against the peer's version. The crate documentation lists the kinds of
 items that it expands.
 
 The package is `qrab-qapi-macros`; the library is `qapi_macros`. The
-expansion refers to items of `qrab-qapi` by the path `qapi`, so it builds
-only where `qapi` names that library, as in a crate that depends on
-`qrab-qapi` under its library name.
+expansion refers to items of `qrab-qapi` by the absolute path `::qapi`, so
+it builds only where the crate `qapi` is that library, as in a crate that
+depends on `qrab-qapi` under its library name.
 
 ## License
 

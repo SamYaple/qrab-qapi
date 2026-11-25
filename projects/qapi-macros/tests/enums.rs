@@ -1,9 +1,12 @@
 //! The expansion of enums, compiled and run against the stand-in runtime in
-//! `qapi/`: string enums, alternates and union branches, with the lifetimes
+//! `runtime/`: string enums, alternates and union branches, with the lifetimes
 //! of their types and variants.
 
 mod child;
-mod qapi;
+// The stand-in runtime, which the expansion names `::qapi`.
+extern crate self as qapi;
+mod runtime;
+use runtime::*;
 mod record;
 
 use qapi::{QapiFlatUnion, take_unavailable, with_default, with_version};

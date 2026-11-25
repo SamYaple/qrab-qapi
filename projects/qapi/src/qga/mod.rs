@@ -1,4 +1,3 @@
-use crate as qapi;
 use qapi_macros::qapi;
 /// QEMU Guest Agent struct `GuestAgentCommandInfo`; see the QEMU Guest Agent Protocol Reference.
 #[qapi(added = "1.1.0")]

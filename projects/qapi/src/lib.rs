@@ -26,9 +26,38 @@ use std::{
     sync::OnceLock,
 };
 
+// The `#[qapi]` expansion names this crate `::qapi`, also in the generated
+// modules here.
+extern crate self as qapi;
+
 pub use qapi_macros::qapi;
-pub use serde;
-pub use serde_json;
+
+/// What the `#[qapi]` expansion uses besides the public API. It is not
+/// part of that API and may change in any release.
+#[doc(hidden)]
+pub mod __private {
+    pub use serde;
+    pub use serde_json;
+
+    /// The serialization error of a type, variant (`Type::Variant`) or
+    /// field (`Type.field`) outside its lifetime in the current version
+    /// context. [`to_value`](crate::to_value) turns it into
+    /// [`EncodeError::Unavailable`](crate::EncodeError::Unavailable), so a
+    /// `Serialize` implementation must return it, or an error whose message
+    /// carries its message, unchanged.
+    pub fn unavailable_error<E: serde::ser::Error>(name: &str) -> E {
+        let version = crate::qemu_version();
+        let message = crate::unavailable_message(name, version);
+        crate::record_unavailable(name.to_owned(), version, message.clone());
+        E::custom(message)
+    }
+
+    /// Error text for a version-gated type, variant or field decoded
+    /// outside its range.
+    pub fn unavailable_type_message(type_name: &str) -> String {
+        crate::unavailable_message(type_name, crate::qemu_version())
+    }
+}
 
 /// Trait implemented by QAPI command types.
 pub trait QapiCommand: serde::Serialize {
@@ -320,26 +349,6 @@ fn record_unavailable(name: String, version: (u32, u32, u32), message: String) {
             });
         }
     });
-}
-
-/// The serialization error of a type, variant (`Type::Variant`) or field
-/// (`Type.field`) outside its lifetime in the current version context.
-/// [`to_value`] turns it into [`EncodeError::Unavailable`], so a `Serialize`
-/// implementation must return it, or an error whose message carries its
-/// message, unchanged.
-#[doc(hidden)]
-pub fn unavailable_error<E: serde::ser::Error>(name: &str) -> E {
-    let version = qemu_version();
-    let message = unavailable_message(name, version);
-    record_unavailable(name.to_owned(), version, message.clone());
-    E::custom(message)
-}
-
-/// Error text for a version-gated type, variant or field decoded outside
-/// its range.
-#[doc(hidden)]
-pub fn unavailable_type_message(type_name: &str) -> String {
-    unavailable_message(type_name, qemu_version())
 }
 
 /// Without any version context the text names the fix rather than blaming

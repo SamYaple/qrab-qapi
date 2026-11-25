@@ -1,8 +1,11 @@
 //! The expansion of commands and events, compiled and run against the
-//! stand-in runtime in `qapi/`: their trait constants and per-release
+//! stand-in runtime in `runtime/`: their trait constants and per-release
 //! flags, and the replies of a command whose return type changed.
 
-mod qapi;
+// The stand-in runtime, which the expansion names `::qapi`.
+extern crate self as qapi;
+mod runtime;
+use runtime::*;
 
 use qapi::{PreconfigSafe, QapiCommand, QapiEvent, take_unavailable, with_version};
 use qapi_macros::qapi;

@@ -1,4 +1,3 @@
-use crate as qapi;
 use qapi_macros::qapi;
 use super::*;
 /// QMP event `ACPI_DEVICE_OST`; see the QEMU QMP Reference Manual.

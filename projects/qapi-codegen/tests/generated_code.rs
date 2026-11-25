@@ -791,7 +791,7 @@ fn modules_separate_types_commands_and_events() {
         };
         assert_eq!(
             imports,
-            [&["use crate as qapi ;", "use qapi_macros :: qapi ;"], globs].concat(),
+            [&["use qapi_macros :: qapi ;"], globs].concat(),
             "{name}"
         );
     }

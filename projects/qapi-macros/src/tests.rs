@@ -721,7 +721,7 @@ fn deprecation_marks_types_and_variants_by_feature_or_minimum() {
             "{max:?}"
         );
         assert!(
-            rest.contains("qapi :: qemu_version () < (10u32 , 0u32 , 0u32)"),
+            rest.contains(":: qapi :: qemu_version () < (10u32 , 0u32 , 0u32)"),
             "{rest}"
         );
     }
@@ -759,8 +759,8 @@ fn decoding_errors_name_the_bound_that_the_peers_release_lies_outside() {
     // The bounds themselves are releases within them.
     let (_, rest) = expanded("", "enum E { A }", &bounds(Some("3.0.0"), Some("5.0.0")));
     for comparison in [
-        "qapi :: scoped_qemu_version () < :: core :: option :: Option :: Some ((3u32 , 0u32 , 0u32))",
-        "qapi :: scoped_qemu_version () > :: core :: option :: Option :: Some ((5u32 , 0u32 , 0u32))",
+        ":: qapi :: scoped_qemu_version () < :: core :: option :: Option :: Some ((3u32 , 0u32 , 0u32))",
+        ":: qapi :: scoped_qemu_version () > :: core :: option :: Option :: Some ((5u32 , 0u32 , 0u32))",
     ] {
         assert!(rest.contains(comparison), "{comparison}: {rest}");
     }

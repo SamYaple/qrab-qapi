@@ -1,13 +1,27 @@
 //! A stand-in for the run-time support of `qrab-qapi`, which the expansion
-//! calls by the path `qapi`: the same items with the same contract, so that
-//! these tests compile and run expansions of the attribute on their own.
-//! It records each name that a serializer reports unavailable.
+//! calls by the path `::qapi`: the same items with the same contract, so
+//! that these tests compile and run expansions of the attribute on their
+//! own. Each test crate names itself `qapi` and imports these items into
+//! its root. It records each name that a serializer reports unavailable.
 #![allow(dead_code, reason = "each test binary uses a part of the runtime")]
 
 use std::cell::{Cell, RefCell};
 
-pub use serde;
-pub use serde_json;
+/// What the expansion uses besides the public API.
+pub mod __private {
+    pub use serde;
+    pub use serde_json;
+
+    pub fn unavailable_error<E: serde::ser::Error>(name: &str) -> E {
+        super::UNAVAILABLE.with_borrow_mut(|names| names.push(name.to_owned()));
+        E::custom(unavailable_type_message(name))
+    }
+
+    pub fn unavailable_type_message(name: &str) -> String {
+        let (major, minor, patch) = super::qemu_version();
+        format!("{name} is not available in QEMU {major}.{minor}.{patch}")
+    }
+}
 
 thread_local! {
     static VERSION: Cell<Option<(u32, u32, u32)>> = const { Cell::new(None) };
@@ -38,16 +52,6 @@ pub fn scoped_qemu_version() -> Option<(u32, u32, u32)> {
 
 pub fn qemu_version() -> (u32, u32, u32) {
     VERSION.get().or(DEFAULT.get()).unwrap_or((0, 0, 0))
-}
-
-pub fn unavailable_error<E: serde::ser::Error>(name: &str) -> E {
-    UNAVAILABLE.with_borrow_mut(|names| names.push(name.to_owned()));
-    E::custom(unavailable_type_message(name))
-}
-
-pub fn unavailable_type_message(name: &str) -> String {
-    let (major, minor, patch) = qemu_version();
-    format!("{name} is not available in QEMU {major}.{minor}.{patch}")
 }
 
 /// The names reported unavailable on this thread since the last call.

@@ -1,4 +1,3 @@
-use crate as qapi;
 use qapi_macros::qapi;
 use self::commands::*;
 /// QMP struct `Circle`; see the QEMU QMP Reference Manual.

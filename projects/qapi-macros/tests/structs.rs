@@ -1,9 +1,12 @@
 //! The expansion of structs, compiled and run against the stand-in runtime
-//! in `qapi/`: members and their lifetimes, version alternates, flattened
+//! in `runtime/`: members and their lifetimes, version alternates, flattened
 //! bases, unions in both layouts, and `Display`.
 
 mod child;
-mod qapi;
+// The stand-in runtime, which the expansion names `::qapi`.
+extern crate self as qapi;
+mod runtime;
+use runtime::*;
 mod record;
 
 use qapi::{take_unavailable, with_default, with_version};

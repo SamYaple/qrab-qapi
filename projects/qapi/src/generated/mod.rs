@@ -1,4 +1,3 @@
-use crate as qapi;
 use qapi_macros::qapi;
 use self::commands::*;
 /// QMP struct `Abort`; see the QEMU QMP Reference Manual.

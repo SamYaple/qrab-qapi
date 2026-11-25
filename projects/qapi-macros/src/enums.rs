@@ -259,7 +259,7 @@ impl EnumExpansion<'_> {
                 [#wire_var, #selected_var] => ::std::format!("expected `{}` or `{}`", #wire_var, #selected_var),
                 _ => ::std::format!("expected one of `{}`", #expected_var.join("`, `")),
             };
-            ::core::result::Result::Err(qapi::serde::de::Error::custom(::std::format!(#message, #found, #list)))
+            ::core::result::Result::Err(::qapi::__private::serde::de::Error::custom(::std::format!(#message, #found, #list)))
         }};
         let Some(clause) = outside_bounds_clause(self.bounds) else {
             return known;
@@ -270,8 +270,8 @@ impl EnumExpansion<'_> {
             if #list.is_empty() {
                 #known
             } else {
-                let #version = qapi::qemu_version();
-                ::core::result::Result::Err(qapi::serde::de::Error::custom(::std::format!(
+                let #version = ::qapi::qemu_version();
+                ::core::result::Result::Err(::qapi::__private::serde::de::Error::custom(::std::format!(
                     #outside, #found, #version.0, #version.1, #version.2, #list,
                 )))
             }
@@ -291,15 +291,15 @@ impl EnumExpansion<'_> {
             quote! {
                 #name::#ident => {
                     #guard
-                    qapi::serde::Serializer::serialize_unit_variant(#serializer, #qapi_name, #index, #wire)
+                    ::qapi::__private::serde::Serializer::serialize_unit_variant(#serializer, #qapi_name, #index, #wire)
                 }
             }
         });
         quote! {
             #[allow(deprecated)]
-            impl qapi::serde::Serialize for #name {
+            impl ::qapi::__private::serde::Serialize for #name {
                 fn serialize<#serializer_ty>(&self, #serializer: #serializer_ty) -> ::core::result::Result<#serializer_ty::Ok, #serializer_ty::Error>
-                where #serializer_ty: qapi::serde::Serializer {
+                where #serializer_ty: ::qapi::__private::serde::Serializer {
                     #type_guard
                     match *self { #(#arms)* }
                 }
@@ -335,11 +335,11 @@ impl EnumExpansion<'_> {
         let unknown = self.unknown_error("variant", &other, bindings);
         quote! {
             #[allow(deprecated)]
-            impl<'de> qapi::serde::Deserialize<'de> for #name {
+            impl<'de> ::qapi::__private::serde::Deserialize<'de> for #name {
                 fn deserialize<#deserializer_ty>(#deserializer: #deserializer_ty) -> ::core::result::Result<Self, #deserializer_ty::Error>
-                where #deserializer_ty: qapi::serde::Deserializer<'de> {
+                where #deserializer_ty: ::qapi::__private::serde::Deserializer<'de> {
                     #type_guard
-                    let #wire_var = <::std::string::String as qapi::serde::Deserialize>::deserialize(#deserializer)?;
+                    let #wire_var = <::std::string::String as ::qapi::__private::serde::Deserialize>::deserialize(#deserializer)?;
                     match #wire_var.as_str() {
                         #(#arms)*
                         #(#unavailable)*
@@ -388,9 +388,9 @@ impl EnumExpansion<'_> {
             };
             let serialize = match qapi_name {
                 Some(qapi_name) => quote! {
-                    qapi::serde::Serializer::serialize_newtype_struct(#serializer, #qapi_name, #value)
+                    ::qapi::__private::serde::Serializer::serialize_newtype_struct(#serializer, #qapi_name, #value)
                 },
-                None => quote! { qapi::serde::Serialize::serialize(#value, #serializer) },
+                None => quote! { ::qapi::__private::serde::Serialize::serialize(#value, #serializer) },
             };
             quote! {
                 #pattern => {
@@ -401,9 +401,9 @@ impl EnumExpansion<'_> {
         });
         quote! {
             #[allow(deprecated)]
-            impl qapi::serde::Serialize for #name {
+            impl ::qapi::__private::serde::Serialize for #name {
                 fn serialize<#serializer_ty>(&self, #serializer: #serializer_ty) -> ::core::result::Result<#serializer_ty::Ok, #serializer_ty::Error>
-                where #serializer_ty: qapi::serde::Serializer {
+                where #serializer_ty: ::qapi::__private::serde::Serializer {
                     #type_guard
                     match *self { #(#arms)* }
                 }
@@ -453,7 +453,7 @@ impl EnumExpansion<'_> {
                 && !integer_selected.is_empty()
             {
                 quote! {
-                    !(qapi::scoped_qemu_version().is_some()
+                    !(::qapi::scoped_qemu_version().is_some()
                         && (#value.is_i64() || #value.is_u64())
                         && (false #(|| #integer_selected)*))
                 }
@@ -462,14 +462,14 @@ impl EnumExpansion<'_> {
             };
             let accepts = match &variant.kind {
                 VariantKind::Tuple(ty) => quote! {
-                    qapi::serde_json::from_value::<#ty>(::core::clone::Clone::clone(&#value)).is_ok()
+                    ::qapi::__private::serde_json::from_value::<#ty>(::core::clone::Clone::clone(&#value)).is_ok()
                 },
                 VariantKind::Unit => quote! { #value.is_null() },
             };
             tries.push(match &variant.kind {
                 VariantKind::Tuple(ty) => quote! {
                     if #selected && #eligible {
-                        match qapi::serde_json::from_value::<#ty>(::core::clone::Clone::clone(&#value)) {
+                        match ::qapi::__private::serde_json::from_value::<#ty>(::core::clone::Clone::clone(&#value)) {
                             ::core::result::Result::Ok(#inner) => return ::core::result::Result::Ok(#name::#ident(#inner)),
                             ::core::result::Result::Err(#error) => #errors.push(::std::format!("{}: {}", #label, #error)),
                         }
@@ -486,30 +486,30 @@ impl EnumExpansion<'_> {
             });
             let error = unavailable_decode_error(&variant.path(name), self.bounds);
             unavailable.push(quote! {
-                if qapi::scoped_qemu_version().is_some() && !#selected && #eligible && #accepts {
+                if ::qapi::scoped_qemu_version().is_some() && !#selected && #eligible && #accepts {
                     return ::core::result::Result::Err(#error);
                 }
             });
         }
         quote! {
             #[allow(deprecated)]
-            impl<'de> qapi::serde::Deserialize<'de> for #name {
+            impl<'de> ::qapi::__private::serde::Deserialize<'de> for #name {
                 fn deserialize<#deserializer_ty>(#deserializer: #deserializer_ty) -> ::core::result::Result<Self, #deserializer_ty::Error>
-                where #deserializer_ty: qapi::serde::Deserializer<'de> {
+                where #deserializer_ty: ::qapi::__private::serde::Deserializer<'de> {
                     #type_guard
-                    let #value = <qapi::serde_json::Value as qapi::serde::Deserialize>::deserialize(#deserializer)?;
+                    let #value = <::qapi::__private::serde_json::Value as ::qapi::__private::serde::Deserialize>::deserialize(#deserializer)?;
                     let mut #errors: ::std::vec::Vec<::std::string::String> = ::std::vec::Vec::new();
                     #(#tries)*
                     #(#unavailable)*
                     let mut #message = ::std::format!("no variant of {} accepts {}", #name_str, #value);
-                    if let ::core::option::Option::Some(#version) = qapi::scoped_qemu_version() {
+                    if let ::core::option::Option::Some(#version) = ::qapi::scoped_qemu_version() {
                         #message.push_str(&::std::format!(" in QEMU {}.{}.{}", #version.0, #version.1, #version.2));
                         #outside
                     }
                     if !#errors.is_empty() {
                         #message.push_str(&::std::format!(" ({})", #errors.join("; ")));
                     }
-                    ::core::result::Result::Err(qapi::serde::de::Error::custom(#message))
+                    ::core::result::Result::Err(::qapi::__private::serde::de::Error::custom(#message))
                 }
             }
         }
@@ -551,9 +551,9 @@ impl EnumExpansion<'_> {
                 let path = variant.path(name);
                 let decode = match variant.kind {
                     VariantKind::Tuple(_) => quote! {
-                        qapi::serde_json::from_value(#value)
+                        ::qapi::__private::serde_json::from_value(#value)
                             .map(#name::#ident)
-                            .map_err(|#error| qapi::serde::de::Error::custom(::std::format!("{}: {}", #path, #error)))
+                            .map_err(|#error| ::qapi::__private::serde::de::Error::custom(::std::format!("{}: {}", #path, #error)))
                     },
                     VariantKind::Unit => quote! { ::core::result::Result::Ok(#name::#ident) },
                 };
@@ -574,14 +574,14 @@ impl EnumExpansion<'_> {
         );
         quote! {
             #[allow(deprecated)]
-            impl qapi::QapiFlatUnion for #name {
+            impl ::qapi::QapiFlatUnion for #name {
                 fn wire_tag(&self) -> ::core::option::Option<&'static str> {
                     match *self { #(#tags)* }
                 }
-                fn deserialize_variant(#discriminator: &str, #map: qapi::serde_json::Map<::std::string::String, qapi::serde_json::Value>) -> ::core::result::Result<Self, qapi::serde_json::Error> {
-                    <Self as qapi::QapiFlatUnion>::deserialize_variant_value(#discriminator, qapi::serde_json::Value::Object(#map))
+                fn deserialize_variant(#discriminator: &str, #map: ::qapi::__private::serde_json::Map<::std::string::String, ::qapi::__private::serde_json::Value>) -> ::core::result::Result<Self, ::qapi::__private::serde_json::Error> {
+                    <Self as ::qapi::QapiFlatUnion>::deserialize_variant_value(#discriminator, ::qapi::__private::serde_json::Value::Object(#map))
                 }
-                fn deserialize_variant_value(#discriminator: &str, #value: qapi::serde_json::Value) -> ::core::result::Result<Self, qapi::serde_json::Error> {
+                fn deserialize_variant_value(#discriminator: &str, #value: ::qapi::__private::serde_json::Value) -> ::core::result::Result<Self, ::qapi::__private::serde_json::Error> {
                     #type_guard
                     match #discriminator {
                         #(#arms)*

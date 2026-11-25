@@ -137,9 +137,10 @@ fn helper_type_names_cannot_shadow_referenced_schema_types() {
     assert_eq!(serde_json::to_value(value).unwrap(), wire);
 }
 
-/// The expansion names what it uses by absolute path or through `qapi`, so
-/// it compiles where the prelude's names, `std`, `serde` and `serde_json`
-/// mean something else, as in a crate that depends only on qrab-qapi.
+/// The expansion names what it uses by absolute path, qrab-qapi's items as
+/// `::qapi`, so it compiles where the prelude's names, `std`, `serde`,
+/// `serde_json` and `qapi` mean something else, as in a crate that depends
+/// only on qrab-qapi.
 mod shadowed {
     #![allow(dead_code, unused_macros)]
 
@@ -151,6 +152,7 @@ mod shadowed {
     pub struct None;
     pub struct Ok;
     pub struct Err;
+    mod qapi {}
     mod serde {}
     mod serde_json {}
     mod std {}
@@ -180,7 +182,7 @@ mod shadowed {
         };
     }
 
-    #[qapi::qapi]
+    #[::qapi::qapi]
     pub enum Kind {
         #[qapi(name = "one")]
         One,
@@ -188,12 +190,12 @@ mod shadowed {
         Two,
     }
 
-    #[qapi::qapi]
+    #[::qapi::qapi]
     pub struct Payload {
         pub text: ::std::string::String,
     }
 
-    #[qapi::qapi(union_branch)]
+    #[::qapi::qapi(union_branch)]
     pub enum Branch {
         #[qapi(name = "one")]
         One(Payload),
@@ -201,14 +203,14 @@ mod shadowed {
         Two(Payload),
     }
 
-    #[qapi::qapi]
+    #[::qapi::qapi]
     pub enum Alternate {
         Number(i64),
         Text(::std::string::String),
         Object(Payload),
     }
 
-    #[qapi::qapi(simple_union(removed = "2.0.0"))]
+    #[::qapi::qapi(simple_union(removed = "2.0.0"))]
     pub struct Union {
         #[qapi(name = "type", discriminator)]
         pub kind: Kind,
@@ -216,7 +218,7 @@ mod shadowed {
         pub u: ::core::option::Option<Branch>,
     }
 
-    #[qapi::qapi(
+    #[::qapi::qapi(
         command,
         name = "do-it",
         returns = "Payload",
@@ -236,7 +238,7 @@ mod shadowed {
         pub list: ::std::vec::Vec<i64>,
     }
 
-    #[qapi::qapi(event, name = "DONE")]
+    #[::qapi::qapi(event, name = "DONE")]
     pub struct Done {
         pub payload: Payload,
     }

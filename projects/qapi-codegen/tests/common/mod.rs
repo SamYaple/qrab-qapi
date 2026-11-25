@@ -67,7 +67,7 @@ version = "0.0.0"
 edition = "2024"
 [workspace]
 [dependencies]
-qapi_runtime = {{ package = "qrab-qapi", path = {:?} }}
+qapi = {{ package = "qrab-qapi", path = {:?} }}
 qapi-macros = {{ package = "qrab-qapi-macros", path = {:?} }}
 {}
 {}

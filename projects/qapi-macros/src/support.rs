@@ -55,10 +55,10 @@ pub(crate) fn version_range_check(
 ) -> Option<TokenStream2> {
     match (since, until) {
         (Some(s), Some(u)) => {
-            Some(quote! { (qapi::qemu_version() >= #s && qapi::qemu_version() < #u) })
+            Some(quote! { (::qapi::qemu_version() >= #s && ::qapi::qemu_version() < #u) })
         }
-        (Some(s), None) => Some(quote! { (qapi::qemu_version() >= #s) }),
-        (None, Some(u)) => Some(quote! { (qapi::qemu_version() < #u) }),
+        (Some(s), None) => Some(quote! { (::qapi::qemu_version() >= #s) }),
+        (None, Some(u)) => Some(quote! { (::qapi::qemu_version() < #u) }),
         (None, None) => None,
     }
 }
@@ -73,7 +73,7 @@ pub(crate) fn active_check(since: Option<Version>, until: Option<Version>) -> To
 /// the process-wide default, which only serialization uses, takes the newest
 /// (`latest`), so that recorded and newer replies stay readable.
 pub(crate) fn decoding_selects(latest: TokenStream2, active: TokenStream2) -> TokenStream2 {
-    quote! { (if qapi::scoped_qemu_version().is_none() { #latest } else { #active }) }
+    quote! { (if ::qapi::scoped_qemu_version().is_none() { #latest } else { #active }) }
 }
 
 /// Order the representations of one wire name newest first: those never
@@ -200,7 +200,7 @@ pub(crate) fn type_serialization_guard(name: &syn::Ident, ta: &TypeAttrs) -> Tok
 /// The serialization error of a type or member outside its lifetime,
 /// which `qapi::to_value` reports as unavailable under this name.
 pub(crate) fn unavailable_error(name: &str) -> TokenStream2 {
-    quote! { qapi::unavailable_error(#name) }
+    quote! { ::qapi::__private::unavailable_error(#name) }
 }
 
 /// The decoding error of a type or member outside its lifetime in the
@@ -209,13 +209,15 @@ pub(crate) fn unavailable_error(name: &str) -> TokenStream2 {
 pub(crate) fn unavailable_decode_error(name: &str, bounds: &VersionBounds) -> TokenStream2 {
     match outside_bounds_clause(bounds) {
         Some(clause) => quote! {
-            qapi::serde::de::Error::custom(::std::format!(
+            ::qapi::__private::serde::de::Error::custom(::std::format!(
                 "{}{}",
-                qapi::unavailable_type_message(#name),
+                ::qapi::__private::unavailable_type_message(#name),
                 #clause,
             ))
         },
-        None => quote! { qapi::serde::de::Error::custom(qapi::unavailable_type_message(#name)) },
+        None => {
+            quote! { ::qapi::__private::serde::de::Error::custom(::qapi::__private::unavailable_type_message(#name)) }
+        }
     }
 }
 
@@ -227,8 +229,8 @@ pub(crate) fn outside_bounds_clause(bounds: &VersionBounds) -> Option<TokenStrea
     let earlier = bounds.min.map(|min| {
         let clause = format!(", which is earlier than this build's QEMU_MIN_VERSION {min}");
         quote! {
-            if qapi::scoped_qemu_version().is_some()
-                && qapi::scoped_qemu_version() < ::core::option::Option::Some(#min)
+            if ::qapi::scoped_qemu_version().is_some()
+                && ::qapi::scoped_qemu_version() < ::core::option::Option::Some(#min)
             {
                 #clause
             } else
@@ -237,7 +239,7 @@ pub(crate) fn outside_bounds_clause(bounds: &VersionBounds) -> Option<TokenStrea
     let later = bounds.max.map(|max| {
         let clause = format!(", which is later than this build's QEMU_MAX_VERSION {max}");
         quote! {
-            if qapi::scoped_qemu_version() > ::core::option::Option::Some(#max) {
+            if ::qapi::scoped_qemu_version() > ::core::option::Option::Some(#max) {
                 #clause
             } else
         }
@@ -256,7 +258,7 @@ pub(crate) fn type_deserialization_guard(
         .map(|active| {
             let error = unavailable_decode_error(&name.unraw().to_string(), bounds);
             quote! {
-                if qapi::scoped_qemu_version().is_some() && !#active {
+                if ::qapi::scoped_qemu_version().is_some() && !#active {
                     return ::core::result::Result::Err(#error);
                 }
             }

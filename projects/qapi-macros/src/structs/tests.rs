@@ -392,7 +392,7 @@ fn deprecation_of_fields_takes_effect_by_feature_or_minimum() {
     for warning in [
         "qapi warning: Example.value is deprecated since QEMU 8.0.0",
         "qapi warning: Example.value is deprecated since QEMU 10.0.0",
-        "qapi :: qemu_version () < (9u32 , 0u32 , 0u32)",
+        ":: qapi :: qemu_version () < (9u32 , 0u32 , 0u32)",
     ] {
         assert!(rest.contains(warning), "{warning}: {rest}");
     }

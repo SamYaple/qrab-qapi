@@ -1,4 +1,3 @@
-use crate as qapi;
 use qapi_macros::qapi;
 use std::collections::HashMap;
 use super::*;

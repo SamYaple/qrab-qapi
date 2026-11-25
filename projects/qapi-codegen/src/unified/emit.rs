@@ -404,7 +404,6 @@ fn format_rust_file(
 ) -> Result<String, GenerateError> {
     let mut source = String::new();
     if !tokens.is_empty() {
-        source.push_str("use crate as qapi;\n");
         source.push_str("use qapi_macros::qapi;\n");
         if mentions_ident(tokens.clone(), "HashMap") {
             source.push_str("use std::collections::HashMap;\n");
@@ -674,7 +673,7 @@ mod tests {
         else {
             panic!("{error:?}")
         };
-        assert_eq!((*file, *line, *column), ("commands.rs", 5, 33), "{error}");
+        assert_eq!((*file, *line, *column), ("commands.rs", 4, 33), "{error}");
         assert_eq!(message, "expected identifier");
         assert_eq!(near, ";");
 
@@ -698,7 +697,7 @@ mod tests {
         assert!(
             matches!(
                 &error,
-                GenerateError::InvalidRust { file: "mod.rs", line: 4, column: 13, message, near }
+                GenerateError::InvalidRust { file: "mod.rs", line: 3, column: 13, message, near }
                     if message.starts_with("unexpected end of input") && near.is_empty()
             ),
             "{error:?}"

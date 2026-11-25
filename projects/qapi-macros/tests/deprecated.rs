@@ -3,7 +3,10 @@
 //! code that names the type does.
 #![deny(deprecated)]
 
-mod qapi;
+// The stand-in runtime, which the expansion names `::qapi`.
+extern crate self as qapi;
+mod runtime;
+use runtime::*;
 
 use qapi_macros::qapi;
 use serde_json::json;

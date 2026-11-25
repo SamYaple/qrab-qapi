@@ -1,7 +1,4 @@
-pub use qapi_runtime::{
-    PreconfigSafe, QapiCommand, QapiEvent, QapiFlatUnion, qemu_version, scoped_qemu_version, serde,
-    serde_json, unavailable_error, unavailable_type_message, with_version,
-};
+use qapi::{QapiCommand, with_version};
 mod generated;
 use generated::*;
 

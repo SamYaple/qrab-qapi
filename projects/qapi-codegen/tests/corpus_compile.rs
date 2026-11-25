@@ -40,9 +40,7 @@ fn upstream_positive_schema_fixtures_generate_compilable_rust() {
     copy_tree(&source, &repo.join("qapi"));
     git(&repo, &["init", "-q"]);
     let fixture = temp.path().join("fixture");
-    let mut main = String::from(
-        "pub use qapi_runtime::{QapiCommand, QapiEvent, QapiFlatUnion, PreconfigSafe, qemu_version, scoped_qemu_version, serde, serde_json, with_version, unavailable_error, unavailable_type_message};\nfn main() {}\n",
-    );
+    let mut main = String::from("fn main() {}\n");
     for (index, name) in fixtures.iter().enumerate() {
         let schema = format!("{{'include':'{}'}}\n", name.to_str().unwrap());
         std::fs::write(repo.join("qapi/qapi-schema.json"), schema).unwrap();

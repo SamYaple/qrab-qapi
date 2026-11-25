@@ -599,7 +599,13 @@ the item's own `removed` (9.1).
 ## The generated code at run time
 
 The `#[qapi]` attribute of `qrab-qapi-macros` expands the generated items, and
-`qrab-qapi` provides the version context they check against.
+`qrab-qapi` provides the version context they check against. The expansion
+names `qrab-qapi` by the absolute path `::qapi`: its public runtime items, and
+Serde and the helpers that only the expansion uses through the hidden
+`qapi::__private` module, which is not part of the public API. A crate that
+uses the attribute depends on `qrab-qapi` under its library name, and
+`qrab-qapi` declares `extern crate self as qapi` for its own generated
+modules, which therefore import no alias.
 
 Generated command constants describe the newest schema flags. The
 `allows_oob`, `allows_preconfig` and `sends_success_response` trait methods

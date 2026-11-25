@@ -62,8 +62,8 @@ impl StructExpansion<'_> {
                 );
                 let active = field.active();
                 quote! {
-                    if qapi::scoped_qemu_version().is_some() && #active && #result.#ident.is_none() {
-                        return ::core::result::Result::Err(<#error_ty as qapi::serde::de::Error>::custom(#message));
+                    if ::qapi::scoped_qemu_version().is_some() && #active && #result.#ident.is_none() {
+                        return ::core::result::Result::Err(<#error_ty as ::qapi::__private::serde::de::Error>::custom(#message));
                     }
                 }
             });
@@ -91,8 +91,8 @@ impl StructExpansion<'_> {
                 quote! {
                     if #selected {
                         #slot = ::core::option::Option::Some(
-                            qapi::serde_json::from_value::<#inner>(#raw_value).map_err(|#error| {
-                                <#error_ty as qapi::serde::de::Error>::custom(::std::format!(#context, #error))
+                            ::qapi::__private::serde_json::from_value::<#inner>(#raw_value).map_err(|#error| {
+                                <#error_ty as ::qapi::__private::serde::de::Error>::custom(::std::format!(#context, #error))
                             })?,
                         );
                     } else
@@ -144,7 +144,7 @@ impl StructExpansion<'_> {
     /// the expansion's other errors are.
     fn missing_field(&self, wire: &str, error_ty: &TokenStream2) -> TokenStream2 {
         let message = format!("{}: missing field `{wire}`", self.name_str);
-        quote! { <#error_ty as qapi::serde::de::Error>::custom(#message) }
+        quote! { <#error_ty as ::qapi::__private::serde::de::Error>::custom(#message) }
     }
 
     /// A struct without flattened fields: decoded as a map, key by key.
@@ -177,13 +177,13 @@ impl StructExpansion<'_> {
             let ty = inner_option_type(&field.ty).unwrap_or(&field.ty);
             declarations.push(quote! { let mut #slot: ::core::option::Option<#ty> = ::core::option::Option::None; });
             arms.push(quote! {
-                #wire => { #slot = ::core::option::Option::Some(qapi::serde::de::MapAccess::next_value::<#ty>(&mut #access)?); }
+                #wire => { #slot = ::core::option::Option::Some(::qapi::__private::serde::de::MapAccess::next_value::<#ty>(&mut #access)?); }
             });
         }
         for (wire, raw) in &slots.raw {
-            declarations.push(quote! { let mut #raw: ::core::option::Option<qapi::serde_json::Value> = ::core::option::Option::None; });
+            declarations.push(quote! { let mut #raw: ::core::option::Option<::qapi::__private::serde_json::Value> = ::core::option::Option::None; });
             arms.push(quote! {
-                #wire => { #raw = ::core::option::Option::Some(qapi::serde::de::MapAccess::next_value::<qapi::serde_json::Value>(&mut #access)?); }
+                #wire => { #raw = ::core::option::Option::Some(::qapi::__private::serde::de::MapAccess::next_value::<::qapi::__private::serde_json::Value>(&mut #access)?); }
             });
         }
         let alternate_slots = self.alternate_slots(&slots);
@@ -196,23 +196,23 @@ impl StructExpansion<'_> {
         let required = self.required_checks(&result, &error_ty);
         Ok(quote! {
             #[allow(deprecated)]
-            impl<'de> qapi::serde::Deserialize<'de> for #name {
+            impl<'de> ::qapi::__private::serde::Deserialize<'de> for #name {
                 fn deserialize<#deserializer_ty>(#deserializer: #deserializer_ty) -> ::core::result::Result<Self, #deserializer_ty::Error>
-                where #deserializer_ty: qapi::serde::Deserializer<'de> {
+                where #deserializer_ty: ::qapi::__private::serde::Deserializer<'de> {
                     #type_guard
                     struct #visitor_ty;
-                    impl<'de> qapi::serde::de::Visitor<'de> for #visitor_ty {
+                    impl<'de> ::qapi::__private::serde::de::Visitor<'de> for #visitor_ty {
                         type Value = #name;
                         fn expecting(&self, #formatter: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
                             ::core::fmt::Formatter::write_str(#formatter, #name_str)
                         }
                         fn visit_map<#access_ty>(self, mut #access: #access_ty) -> ::core::result::Result<Self::Value, #access_ty::Error>
-                        where #access_ty: qapi::serde::de::MapAccess<'de> {
+                        where #access_ty: ::qapi::__private::serde::de::MapAccess<'de> {
                             #(#declarations)*
-                            while let ::core::option::Option::Some(#key) = qapi::serde::de::MapAccess::next_key::<::std::string::String>(&mut #access)? {
+                            while let ::core::option::Option::Some(#key) = ::qapi::__private::serde::de::MapAccess::next_key::<::std::string::String>(&mut #access)? {
                                 match #key.as_str() {
                                     #(#arms)*
-                                    _ => { let _ = qapi::serde::de::MapAccess::next_value::<qapi::serde::de::IgnoredAny>(&mut #access)?; }
+                                    _ => { let _ = ::qapi::__private::serde::de::MapAccess::next_value::<::qapi::__private::serde::de::IgnoredAny>(&mut #access)?; }
                                 }
                             }
                             #alternate_slots
@@ -222,7 +222,7 @@ impl StructExpansion<'_> {
                             ::core::result::Result::Ok(#result)
                         }
                     }
-                    qapi::serde::Deserializer::deserialize_map(#deserializer, #visitor_ty)
+                    ::qapi::__private::serde::Deserializer::deserialize_map(#deserializer, #visitor_ty)
                 }
             }
         })
@@ -249,7 +249,7 @@ impl StructExpansion<'_> {
         let error_ty = quote! { #deserializer_ty::Error };
         let type_guard = type_deserialization_guard(name, self.ta, self.bounds);
         let custom = |message: TokenStream2| {
-            quote! { <#error_ty as qapi::serde::de::Error>::custom(#message) }
+            quote! { <#error_ty as ::qapi::__private::serde::de::Error>::custom(#message) }
         };
         let shared = self.shared_wires();
 
@@ -264,7 +264,7 @@ impl StructExpansion<'_> {
                 let #payload = if #simple {
                     #map.get("data").cloned().ok_or_else(|| #missing)?
                 } else {
-                    qapi::serde_json::Value::Object(::core::clone::Clone::clone(&#map))
+                    ::qapi::__private::serde_json::Value::Object(::core::clone::Clone::clone(&#map))
                 };
             }
         });
@@ -282,7 +282,7 @@ impl StructExpansion<'_> {
                 quote! {
                     let #slot: ::core::option::Option<#inner> = match #map.remove(#wire) {
                         ::core::option::Option::Some(#raw_value) => ::core::option::Option::Some(
-                            qapi::serde_json::from_value::<#inner>(#raw_value).map_err(|#error| #failed)?,
+                            ::qapi::__private::serde_json::from_value::<#inner>(#raw_value).map_err(|#error| #failed)?,
                         ),
                         ::core::option::Option::None => ::core::option::Option::None,
                     };
@@ -292,7 +292,7 @@ impl StructExpansion<'_> {
                 quote! {
                     let #slot: ::core::option::Option<#ty> = match #map.remove(#wire) {
                         ::core::option::Option::Some(#raw_value) => ::core::option::Option::Some(
-                            qapi::serde_json::from_value::<#ty>(#raw_value).map_err(|#error| #failed)?,
+                            ::qapi::__private::serde_json::from_value::<#ty>(#raw_value).map_err(|#error| #failed)?,
                         ),
                         ::core::option::Option::None => ::core::option::Option::None,
                     };
@@ -315,7 +315,7 @@ impl StructExpansion<'_> {
                 let dispatch = |tag_value: TokenStream2| {
                     let failed = custom(quote! { #error });
                     quote! {
-                        <#branch_ty as qapi::QapiFlatUnion>::deserialize_variant_value(
+                        <#branch_ty as ::qapi::QapiFlatUnion>::deserialize_variant_value(
                             #tag_value,
                             ::core::clone::Clone::clone(&#payload),
                         ).map_err(|#error| #failed)?
@@ -367,8 +367,8 @@ impl StructExpansion<'_> {
                         ::std::format!(#message, #version.0, #version.1, #version.2, #clause)
                     });
                     quote! {
-                        if qapi::scoped_qemu_version().is_some() && !(false #(|| #discriminates)*) {
-                            let #version = qapi::qemu_version();
+                        if ::qapi::scoped_qemu_version().is_some() && !(false #(|| #discriminates)*) {
+                            let #version = ::qapi::qemu_version();
                             return ::core::result::Result::Err(#failed);
                         }
                     }
@@ -406,7 +406,7 @@ impl StructExpansion<'_> {
                 let context = format!("{name_str}: {{}}");
                 let failed = custom(quote! { ::std::format!(#context, #error) });
                 quote! {
-                    qapi::serde_json::from_value::<#ty>(qapi::serde_json::Value::Object(::core::clone::Clone::clone(&#map)))
+                    ::qapi::__private::serde_json::from_value::<#ty>(::qapi::__private::serde_json::Value::Object(::core::clone::Clone::clone(&#map)))
                         .map_err(|#error| #failed)?
                 }
             };
@@ -440,13 +440,13 @@ impl StructExpansion<'_> {
         });
         Ok(quote! {
             #[allow(deprecated)]
-            impl<'de> qapi::serde::Deserialize<'de> for #name {
+            impl<'de> ::qapi::__private::serde::Deserialize<'de> for #name {
                 fn deserialize<#deserializer_ty>(#deserializer: #deserializer_ty) -> ::core::result::Result<Self, #deserializer_ty::Error>
-                where #deserializer_ty: qapi::serde::Deserializer<'de> {
+                where #deserializer_ty: ::qapi::__private::serde::Deserializer<'de> {
                     #type_guard
-                    let #value = <qapi::serde_json::Value as qapi::serde::Deserialize>::deserialize(#deserializer)?;
+                    let #value = <::qapi::__private::serde_json::Value as ::qapi::__private::serde::Deserialize>::deserialize(#deserializer)?;
                     let #map_mut #map = match #value {
-                        qapi::serde_json::Value::Object(#map) => #map,
+                        ::qapi::__private::serde_json::Value::Object(#map) => #map,
                         #other => return ::core::result::Result::Err(#not_object),
                     };
                     #union_payload

@@ -33,7 +33,7 @@ impl StructExpansion<'_> {
                 let message = format!("{name_str}: missing required field `{}`", field.wire());
                 quote! {
                     if #active && self.#ident.is_none() {
-                        return ::core::result::Result::Err(qapi::serde::ser::Error::custom(#message));
+                        return ::core::result::Result::Err(::qapi::__private::serde::ser::Error::custom(#message));
                     }
                 }
             });
@@ -70,26 +70,26 @@ impl StructExpansion<'_> {
             if field.is_option() {
                 quote! {
                     if let ::core::option::Option::Some(ref #value) = self.#ident {
-                        qapi::serde::ser::SerializeStruct::serialize_field(&mut #state, #wire, #value)?;
+                        ::qapi::__private::serde::ser::SerializeStruct::serialize_field(&mut #state, #wire, #value)?;
                     }
                 }
             } else {
                 quote! {
-                    qapi::serde::ser::SerializeStruct::serialize_field(&mut #state, #wire, &self.#ident)?;
+                    ::qapi::__private::serde::ser::SerializeStruct::serialize_field(&mut #state, #wire, &self.#ident)?;
                 }
             }
         });
         let state_mut = (!self.fields.is_empty()).then(|| quote! { mut });
         quote! {
             #[allow(deprecated)]
-            impl qapi::serde::Serialize for #name {
+            impl ::qapi::__private::serde::Serialize for #name {
                 fn serialize<#serializer_ty>(&self, #serializer: #serializer_ty) -> ::core::result::Result<#serializer_ty::Ok, #serializer_ty::Error>
-                where #serializer_ty: qapi::serde::Serializer {
+                where #serializer_ty: ::qapi::__private::serde::Serializer {
                     #type_guard
                     #checks
-                    let #state_mut #state = qapi::serde::Serializer::serialize_struct(#serializer, #wire_name, 0usize #(#counts)*)?;
+                    let #state_mut #state = ::qapi::__private::serde::Serializer::serialize_struct(#serializer, #wire_name, 0usize #(#counts)*)?;
                     #(#fields)*
-                    qapi::serde::ser::SerializeStruct::end(#state)
+                    ::qapi::__private::serde::ser::SerializeStruct::end(#state)
                 }
             }
         }
@@ -116,9 +116,9 @@ impl StructExpansion<'_> {
         let emit = |key: TokenStream2, value: TokenStream2| {
             quote! {
                 if !#keys.insert(::std::string::String::from(#key)) {
-                    return ::core::result::Result::Err(qapi::serde::ser::Error::custom(::std::format!(#duplicate, #key)));
+                    return ::core::result::Result::Err(::qapi::__private::serde::ser::Error::custom(::std::format!(#duplicate, #key)));
                 }
-                qapi::serde::ser::SerializeMap::serialize_entry(&mut #state, #key, #value)?;
+                ::qapi::__private::serde::ser::SerializeMap::serialize_entry(&mut #state, #key, #value)?;
             }
         };
         let fields = self.fields.iter().map(|field| {
@@ -133,15 +133,15 @@ impl StructExpansion<'_> {
                     self.path(field)
                 );
                 quote! {
-                    let #flat = qapi::serde_json::to_value(#value).map_err(qapi::serde::ser::Error::custom)?;
+                    let #flat = ::qapi::__private::serde_json::to_value(#value).map_err(::qapi::__private::serde::ser::Error::custom)?;
                     if #nested {
                         #into_data
-                    } else if let qapi::serde_json::Value::Object(#flat) = #flat {
+                    } else if let ::qapi::__private::serde_json::Value::Object(#flat) = #flat {
                         for (#key, #member) in #flat {
                             #each
                         }
                     } else if !#flat.is_null() {
-                        return ::core::result::Result::Err(qapi::serde::ser::Error::custom(#not_object));
+                        return ::core::result::Result::Err(::qapi::__private::serde::ser::Error::custom(#not_object));
                     }
                 }
             } else {
@@ -155,7 +155,7 @@ impl StructExpansion<'_> {
                     let message = format!("{name_str}: missing simple union payload");
                     quote! {
                         if #nested && self.#ident.is_none() {
-                            return ::core::result::Result::Err(qapi::serde::ser::Error::custom(#message));
+                            return ::core::result::Result::Err(::qapi::__private::serde::ser::Error::custom(#message));
                         }
                     }
                 });
@@ -171,16 +171,16 @@ impl StructExpansion<'_> {
         });
         quote! {
             #[allow(deprecated)]
-            impl qapi::serde::Serialize for #name {
+            impl ::qapi::__private::serde::Serialize for #name {
                 fn serialize<#serializer_ty>(&self, #serializer: #serializer_ty) -> ::core::result::Result<#serializer_ty::Ok, #serializer_ty::Error>
-                where #serializer_ty: qapi::serde::Serializer {
+                where #serializer_ty: ::qapi::__private::serde::Serializer {
                     #type_guard
                     #checks
                     #union_checks
-                    let mut #state = qapi::serde::Serializer::serialize_map(#serializer, ::core::option::Option::None)?;
+                    let mut #state = ::qapi::__private::serde::Serializer::serialize_map(#serializer, ::core::option::Option::None)?;
                     let mut #keys = ::std::collections::BTreeSet::<::std::string::String>::new();
                     #(#fields)*
-                    qapi::serde::ser::SerializeMap::end(#state)
+                    ::qapi::__private::serde::ser::SerializeMap::end(#state)
                 }
             }
         }
@@ -218,9 +218,9 @@ impl StructExpansion<'_> {
                 // before, so those that are set are active.
                 checks_of_discriminators.push(quote! {
                     if #present {
-                        let #value = qapi::serde_json::to_value(&self.#disc).map_err(qapi::serde::ser::Error::custom)?;
+                        let #value = ::qapi::__private::serde_json::to_value(&self.#disc).map_err(::qapi::__private::serde::ser::Error::custom)?;
                         if #value.as_str() != ::core::option::Option::Some(#tag) {
-                            return ::core::result::Result::Err(qapi::serde::ser::Error::custom(::std::format!(
+                            return ::core::result::Result::Err(::qapi::__private::serde::ser::Error::custom(::std::format!(
                                 #message,
                                 #value.as_str().map_or_else(|| #value.to_string(), ::std::string::ToString::to_string),
                                 #tag,
@@ -233,7 +233,7 @@ impl StructExpansion<'_> {
             let check = if let Some(inner) = inner_option_type(&branch.ty) {
                 quote! {
                     if let ::core::option::Option::Some(ref #payload) = self.#ident {
-                        if let ::core::option::Option::Some(#tag) = <#inner as qapi::QapiFlatUnion>::wire_tag(#payload) {
+                        if let ::core::option::Option::Some(#tag) = <#inner as ::qapi::QapiFlatUnion>::wire_tag(#payload) {
                             #discriminators
                         }
                     }
@@ -241,7 +241,7 @@ impl StructExpansion<'_> {
             } else {
                 let ty = &branch.ty;
                 quote! {
-                    if let ::core::option::Option::Some(#tag) = <#ty as qapi::QapiFlatUnion>::wire_tag(&self.#ident) {
+                    if let ::core::option::Option::Some(#tag) = <#ty as ::qapi::QapiFlatUnion>::wire_tag(&self.#ident) {
                         #discriminators
                     }
                 }
