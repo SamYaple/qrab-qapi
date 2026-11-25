@@ -388,7 +388,7 @@ fn a_parse_error_names_its_position_once() {
     );
     let message = error.to_string();
     assert!(
-        message.contains("schema.json:2:24: QAPI parse error (Char)"),
+        message.contains(r#"schema.json:2:24: QAPI parse error: unexpected character: "'y'}""#),
         "{message}"
     );
     assert!(!message.contains("line 2"), "{message}");

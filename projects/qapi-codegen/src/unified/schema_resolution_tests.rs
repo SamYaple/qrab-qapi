@@ -379,10 +379,9 @@ fn upstream_negative_fixtures_never_panic_during_lowering_or_emission() {
         let sources = match read_fixture(path, version) {
             Ok(sources) => sources,
             Err(crate::ReadError::Parse { source, .. }) => {
-                return Ok(Some(match &source.documentation {
-                    Some(fault) => format!("Doc:{}", kind(format!("{fault:?}"))),
-                    None => "Parse".to_owned(),
-                }));
+                return Ok(Some(crate::schema_validation::tests::parse_kind_name(
+                    &source.kind,
+                )));
             }
             Err(crate::ReadError::Include { kind: fault, .. }) => {
                 return Ok(Some(format!("Include:{}", kind(format!("{fault:?}")))));

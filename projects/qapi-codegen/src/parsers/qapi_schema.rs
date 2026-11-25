@@ -231,10 +231,12 @@ fn invalid_documentation(input: &str) -> IResult<&str, QapiSchemaToken<'_>> {
     };
     if super::parser_version() >= (2, 9, 0) && (shorthand || symbol) {
         // A comment that QEMU reads without fault: what follows it fails.
+        // Otherwise the documentation check reports the comment's fault in
+        // place of this error, whose kind no message shows.
         let error = match super::doc_comment::read(input.trim_start_matches(is_whitespace), &mut ())
         {
             Ok((_, rest)) => nom::error::Error::new(rest, nom::error::ErrorKind::Eof),
-            Err(_) => nom::error::Error::new(input, nom::error::ErrorKind::Verify),
+            Err(_) => nom::error::Error::new(input, nom::error::ErrorKind::Fail),
         };
         return Err(nom::Err::Failure(error));
     }

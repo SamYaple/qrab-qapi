@@ -4,7 +4,8 @@
 //! input.
 use qapi_codegen::versions::{PINNED_VERSIONS, parse_pinned_versions, parse_version_tag};
 use qapi_codegen::{
-    DocumentationError, ReadError, parse_schema_with_version, read_schema_with_version,
+    DocumentationError, ParseErrorKind, ReadError, parse_schema_with_version,
+    read_schema_with_version,
 };
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -119,7 +120,7 @@ fn malformed_schema_diagnostics_locate_later_definitions() {
     .to_string();
     // At the value of the duplicate key, as QEMU reports it.
     assert!(error.contains("line 4, column 51"), "{error}");
-    assert!(error.contains("Verify"), "{error}");
+    assert!(error.contains("duplicate key"), "{error}");
 }
 
 #[test]
@@ -129,10 +130,10 @@ fn duplicate_doc_sections_report_the_original_source_location() {
         let error = parse_schema_with_version(&input.replace('\n', ending), CURRENT).unwrap_err();
         assert_eq!((error.line, error.column), (5, 1), "{error}");
         assert_eq!(
-            error.documentation.as_deref(),
-            Some(&DocumentationError::DuplicateSection {
+            error.kind,
+            ParseErrorKind::Documentation(Box::new(DocumentationError::DuplicateSection {
                 section: "Since".into()
-            })
+            }))
         );
     }
 }
@@ -353,7 +354,9 @@ fn invalid_definition_documentation_cannot_fall_back_to_plain_comments() {
         let line: usize = expected.split(':').nth(1).unwrap().parse().unwrap();
         // A documentation fault, at the line QEMU names.
         match read_schema_with_version(&root.join(fixture), Some(version)) {
-            Err(ReadError::Parse { source, .. }) if source.documentation.is_some() => {
+            Err(ReadError::Parse { source, .. })
+                if matches!(source.kind, ParseErrorKind::Documentation(_)) =>
+            {
                 assert_eq!(source.line, line, "{fixture}: {source} (QEMU: {expected})");
             }
             other => panic!("{fixture}: {other:?} (QEMU: {expected})"),

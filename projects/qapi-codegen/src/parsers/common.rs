@@ -1,5 +1,6 @@
 //! Shared nom parser helpers used across all parser versions.
 
+use crate::ParseErrorKind;
 use nom::IResult;
 use nom::Parser;
 use nom::branch::alt;
@@ -227,11 +228,12 @@ where
         let mut entry = |input| {
             let (after_key, key) = qstring(input)?;
             if !keys.insert(key.clone()) && super::parser_version() >= (2, 0, 0) {
-                // QEMU reports a duplicate key at its value.
-                return Err(nom::Err::Failure(match qtag(":").parse(after_key) {
-                    Ok((value, _)) => Error::new(value, ErrorKind::Verify),
-                    Err(_) => Error::new(after_key, ErrorKind::Char),
-                }));
+                // QEMU reports a duplicate key at its value. Without the
+                // colon before one, no item parses, and QEMU's parser
+                // reports the token after the key as for any other key.
+                if let Ok((value, _)) = qtag(":").parse(after_key) {
+                    return Err(nom::Err::Failure(Error::new(value, ErrorKind::Verify)));
+                }
             }
             item_parser
                 .parse(input)
@@ -362,7 +364,7 @@ pub(crate) fn other_key<'i>(
         lexer
             .advance()
             .and_then(|()| lexer.value())
-            .map_err(|(at, kind)| nom::Err::Error(Error::new(at, kind)))?;
+            .map_err(|(at, _)| nom::Err::Error(Error::new(at, ErrorKind::Fail)))?;
         clean_lines.map(|_| ()).parse(lexer.token.1)
     }
 }
@@ -650,7 +652,7 @@ fn legacy_value(tokens: &[(String, bool)], position: &mut usize) -> Option<Legac
 /// the token it stops at, and the kind of fault. `None` when the expression
 /// is well formed, or for a release before 1.6, whose parser reported no
 /// position.
-pub(crate) fn syntax_error(input: &str) -> Option<(&str, ErrorKind)> {
+pub(crate) fn syntax_error(input: &str) -> Option<Fault<'_>> {
     if super::parser_version() < (1, 6, 0) {
         return None;
     }
@@ -665,7 +667,7 @@ pub(crate) fn syntax_error(input: &str) -> Option<(&str, ErrorKind)> {
 #[allow(clippy::type_complexity)]
 pub(crate) fn top_level_expression(
     input: &str,
-) -> Result<(Option<Vec<QapiString<'_>>>, &str), (&str, ErrorKind)> {
+) -> Result<(Option<Vec<QapiString<'_>>>, &str), Fault<'_>> {
     let mut lexer = Lexer::new(input);
     lexer.advance()?;
     let value = lexer.value()?;
@@ -686,8 +688,19 @@ pub(crate) fn expression_value(input: &str) -> Option<RawValue<'_>> {
 
 /// Where QEMU's lexer rejects the token that starts `input`: a stray
 /// character or a malformed string.
-pub(crate) fn token_error(input: &str) -> Option<(&str, ErrorKind)> {
+pub(crate) fn token_error(input: &str) -> Option<Fault<'_>> {
     Lexer::new(input).advance().err()
+}
+
+/// The input from the token that QEMU's lexer reads next in `input`, after
+/// space and comments, or from where it rejects one. The end of the input
+/// is the newline that ends the file.
+pub(crate) fn next_token(input: &str) -> &str {
+    let mut lexer = Lexer::new(input);
+    match lexer.advance() {
+        Ok(()) => lexer.token.1,
+        Err((at, _)) => at,
+    }
 }
 
 #[derive(PartialEq, Eq)]
@@ -755,7 +768,7 @@ pub(crate) fn raw_value(input: &str) -> IResult<&str, RawValue<'_>> {
     let value = lexer
         .advance()
         .and_then(|()| lexer.value())
-        .map_err(|(at, kind)| nom::Err::Error(Error::new(at, kind)))?;
+        .map_err(|(at, _)| nom::Err::Error(Error::new(at, ErrorKind::Fail)))?;
     Ok((lexer.token.1, value))
 }
 
@@ -805,7 +818,8 @@ struct Lexer<'i> {
     token: (Token<'i>, &'i str),
 }
 
-type Fault<'i> = (&'i str, ErrorKind);
+/// Where QEMU's parser stops on a malformed expression, and why.
+pub(crate) type Fault<'i> = (&'i str, ParseErrorKind);
 
 impl<'i> Lexer<'i> {
     fn new(input: &'i str) -> Self {
@@ -838,7 +852,8 @@ impl<'i> Lexer<'i> {
             let (rest, token) = if "{}:,[]".contains(c) {
                 (&start[1..], Token::Punct(c))
             } else if c == '\'' {
-                let (rest, value) = qstring(start).map_err(|_| (start, ErrorKind::Escaped))?;
+                let (rest, value) =
+                    qstring(start).map_err(|_| (start, ParseErrorKind::MalformedString))?;
                 (rest, Token::String(value))
             } else if let Some((word, value)) =
                 [("true", Raw::Bool(true)), ("false", Raw::Bool(false))]
@@ -849,7 +864,7 @@ impl<'i> Lexer<'i> {
             {
                 (&start[word.len()..], Token::Literal(value))
             } else {
-                return Err((start, ErrorKind::Char));
+                return Err((start, ParseErrorKind::UnexpectedCharacter));
             };
             self.rest = rest;
             self.token = (token, start);
@@ -857,8 +872,12 @@ impl<'i> Lexer<'i> {
         }
     }
 
+    /// The fault of a current token that is out of its place.
     fn fault<T>(&self) -> Result<T, Fault<'i>> {
-        Err((self.token.1, ErrorKind::Char))
+        Err(match self.token.0 {
+            Token::End => (self.token.1, ParseErrorKind::UnexpectedEnd),
+            _ => (self.token.1, ParseErrorKind::UnexpectedCharacter),
+        })
     }
 
     /// The value that starts at the current token; the token after it
@@ -902,8 +921,12 @@ impl<'i> Lexer<'i> {
         }
         let mut keys = HashSet::new();
         loop {
-            let Token::String(key) = std::mem::replace(&mut self.token.0, Token::End) else {
-                return self.fault();
+            let key = match std::mem::replace(&mut self.token.0, Token::End) {
+                Token::String(key) => key,
+                token => {
+                    self.token.0 = token;
+                    return self.fault();
+                }
             };
             self.advance()?;
             if self.token.0 != Token::Punct(':') {
@@ -911,7 +934,7 @@ impl<'i> Lexer<'i> {
             }
             self.advance()?;
             if !keys.insert(key.clone()) && super::parser_version() >= (2, 0, 0) {
-                return Err((self.token.1, ErrorKind::Verify));
+                return Err((self.token.1, ParseErrorKind::DuplicateKey));
             }
             entries.push((key, self.value()?));
             match self.token.0 {
@@ -947,8 +970,16 @@ impl<'i> Lexer<'i> {
 
 #[cfg(test)]
 mod tests {
-    use crate::parse_schema;
     use crate::set_parser_version;
+    use crate::{ParseError, ParseErrorKind, ParserCrash, parse_schema};
+
+    /// What the release's parser fails on, if the error is its crash.
+    fn crash(error: ParseError) -> Option<ParserCrash> {
+        match error.kind {
+            ParseErrorKind::Crash(crash) => Some(crash),
+            _ => None,
+        }
+    }
 
     #[test]
     fn strings_follow_qemu_lexical_rules() {
@@ -1004,66 +1035,67 @@ mod tests {
 
     #[test]
     fn malformed_expressions_are_reported_where_qemus_parser_stops() {
-        use nom::error::ErrorKind;
+        use crate::ParseErrorKind::*;
         // Positions as QEMU 4.1 and 11.1 report them.
         for (version, input, position, kind) in [
             (
                 (4, 1, 0),
                 "{ 'enum': 'E', 'data': [ 'a', ] }",
                 (1, 31),
-                ErrorKind::Char,
+                UnexpectedCharacter,
             ),
             (
                 (11, 1, 3),
                 "{ 'enum': 'E',\n  'enum': 'F' }",
                 (2, 11),
-                ErrorKind::Verify,
+                DuplicateKey,
             ),
             (
                 (11, 1, 3),
                 r"{ 'enum': 'E\x', 'data': [] }",
                 (1, 11),
-                ErrorKind::Escaped,
+                MalformedString,
             ),
             (
                 (11, 1, 3),
                 "{ 'enum': 'E', 'data': [ 1 ] }",
                 (1, 26),
-                ErrorKind::Char,
+                UnexpectedCharacter,
             ),
-            ((11, 1, 3), "{ 'enum': 'E',\n", (1, 15), ErrorKind::Char),
-            ((11, 1, 3), "{ 'enum': 'E',", (1, 15), ErrorKind::Char),
+            ((11, 1, 3), "{ 'enum': 'E', }", (1, 16), UnexpectedCharacter),
+            ((11, 1, 3), "{ 'enum': 'E',\n", (1, 15), UnexpectedEnd),
+            ((11, 1, 3), "{ 'enum': 'E',", (1, 15), UnexpectedEnd),
             (
                 (11, 1, 3),
                 "{ 'enum': 'E', 'data': null }",
                 (1, 24),
-                ErrorKind::Char,
+                UnexpectedCharacter,
             ),
             (
                 (11, 1, 3),
                 "{ 'enum': 'F'\n  'data': [] }",
                 (2, 3),
-                ErrorKind::Char,
+                UnexpectedCharacter,
             ),
             // Well formed, so only the grammar of a directive rejects it.
             (
                 (11, 1, 3),
                 "{ 'pragma': { 'doc-required': 'x' } }",
                 (1, 1),
-                ErrorKind::Eof,
+                NoDefinition,
             ),
             // Before 1.6 QEMU's parser reported no position.
             (
                 (2, 3, 0),
                 "{ 'enum': 'E', 'data': [ 1 ] }",
                 (1, 26),
-                ErrorKind::Char,
+                UnexpectedCharacter,
             ),
             (
                 (1, 5, 0),
                 "{ 'enum': 'E', 'data': [ 1 ] }",
                 (1, 1),
-                ErrorKind::Eof,
+                NoDefinition,
             ),
         ] {
             set_parser_version(version);
@@ -1121,7 +1153,7 @@ mod tests {
             ((1, 6, 0), indented, false),
         ] {
             set_parser_version(version);
-            let crash = parse_schema(input).err().and_then(|error| error.crash);
+            let crash = parse_schema(input).err().and_then(crash);
             assert_eq!(crash.is_some(), crashes, "{version:?} {input}");
         }
         set_parser_version((1, 1, 0));
@@ -1131,13 +1163,13 @@ mod tests {
         let unindented = "{ 'type': 'Foo',\n## x\n'data': {} }";
         for (version, crashes) in [((1, 5, 0), true), ((1, 6, 0), false)] {
             set_parser_version(version);
-            let crash = parse_schema(unindented).err().and_then(|error| error.crash);
+            let crash = parse_schema(unindented).err().and_then(crash);
             assert_eq!(crash.is_some(), crashes, "{version:?}");
         }
         set_parser_version((1, 5, 0));
         let error = parse_schema(unindented).unwrap_err();
         assert_eq!(
-            (error.line, error.column, error.crash),
+            (error.line, error.column, crash(error)),
             (3, 1, Some(crate::ParserCrash::UnindentedLine))
         );
     }
@@ -1178,7 +1210,7 @@ mod tests {
             ((1, 6, 0), missing, None),
         ] {
             set_parser_version(version);
-            let found = parse_schema(input).err().and_then(|error| error.crash);
+            let found = parse_schema(input).err().and_then(self::crash);
             assert_eq!(found, crash, "{version:?} {input}");
         }
         // From 1.2 the letters go, so 'gen' takes the comma for its value.
@@ -1198,7 +1230,6 @@ mod tests {
 
     #[test]
     fn separators_and_duplicate_keys_follow_each_release() {
-        use nom::error::ErrorKind;
         // Commas from 1.6.
         let commas = "{ 'enum': 'E' 'data': ['a'] }";
         set_parser_version((1, 5, 0));
@@ -1215,7 +1246,7 @@ mod tests {
             parse_schema(input).unwrap();
             set_parser_version((2, 0, 0));
             let error = parse_schema(input).unwrap_err();
-            assert_eq!(error.kind, ErrorKind::Verify, "{input}");
+            assert_eq!(error.kind, crate::ParseErrorKind::DuplicateKey, "{input}");
         }
         set_parser_version((11, 1, 3));
     }

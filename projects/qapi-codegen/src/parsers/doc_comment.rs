@@ -9,20 +9,22 @@
 //! the rules QEMU checks on the whole comment.
 use super::common::{QapiString, is_whitespace};
 use super::parser_version;
-use nom::error::ErrorKind;
+use crate::ParseErrorKind;
 
 /// A rule of documentation comments, as QEMU's parser applies it in the
 /// release being read.
 ///
 /// ```
-/// use qapi_codegen::DocumentationError;
+/// use qapi_codegen::{DocumentationError, ParseErrorKind};
 ///
 /// let schema = "##\n# @Example:\n#\n# @member:\n##\n{ 'struct': 'Example', 'data': { 'member': 'int' } }\n";
 /// let error = qapi_codegen::parse_schema_with_version(schema, (11, 1, 3)).unwrap_err();
 /// assert_eq!(error.line, 4);
 /// assert_eq!(
-///     error.documentation.as_deref(),
-///     Some(&DocumentationError::EmptySection { section: "Member".into() })
+///     error.kind,
+///     ParseErrorKind::Documentation(Box::new(DocumentationError::EmptySection {
+///         section: "Member".into()
+///     }))
 /// );
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -135,10 +137,9 @@ pub(crate) struct Fault<'i> {
     /// The input from the comment the fault belongs to: QEMU finds it no
     /// later than there.
     pub(crate) comment: &'i str,
-    /// The rule, or `None` for a malformed token.
-    pub(crate) error: Option<DocumentationError>,
-    /// The kind of a malformed token.
-    pub(crate) kind: ErrorKind,
+    /// The rule that the comment breaks, or what is wrong with a token
+    /// that interrupts it.
+    pub(crate) kind: ParseErrorKind,
 }
 
 /// What a definition's documentation describes, as QEMU's parser reads it,
@@ -239,8 +240,7 @@ fn fault<'i>(at: &'i str, comment: &'i str, error: DocumentationError) -> Fault<
     Fault {
         at,
         comment,
-        error: Some(error),
-        kind: ErrorKind::Verify,
+        kind: ParseErrorKind::Documentation(Box::new(error)),
     }
 }
 
@@ -434,7 +434,6 @@ impl<'i> Reader<'i> {
                 Some((at, kind)) => Err(Fault {
                     at,
                     comment: self.comment,
-                    error: None,
                     kind,
                 }),
                 None => self.fail(DocumentationError::Unterminated),
@@ -1774,9 +1773,9 @@ mod tests {
         ] {
             let result = parse_schema_with_version(input, version);
             let actual = result.err().map(|error| {
-                let rule = format!("{:?}", error.documentation);
+                let rule = format!("{:?}", error.kind);
                 let rule = rule
-                    .trim_start_matches("Some(")
+                    .trim_start_matches("Documentation(")
                     .split([' ', '(', ')'])
                     .next()
                     .unwrap_or_default()

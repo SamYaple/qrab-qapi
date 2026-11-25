@@ -1,4 +1,11 @@
 #![doc = include_str!("../README.md")]
+//!
+//! ## Generated code
+//!
+//! Code that this crate generates is an output: fix generation bugs here,
+//! never in the generated files, and regenerate them. The repository's
+//! `docs/codegen.md` describes how to run the generator, the pipeline and its
+//! correctness boundaries.
 #![forbid(unsafe_code)]
 
 mod arrays;
@@ -47,19 +54,23 @@ pub use parsers::{
 pub use parsers::common::QapiString;
 pub use parsers::doc_comment::DocumentationError;
 
-use nom::{Parser, combinator::all_consuming, error::ErrorKind};
+use nom::{Finish, Parser, combinator::all_consuming, error::ErrorKind};
 use std::path::{Path, PathBuf};
 
 /// Schema text that the QAPI grammar of the current [`parser_version`] rejects.
 ///
 /// ```
-/// use nom::error::ErrorKind;
+/// use qapi_codegen::ParseErrorKind;
 ///
-/// let schema = "{ 'enum': 'E', 'data': ['a'] }\n  { 'pragma': { 'doc-required': 'x' } }";
+/// let schema = "{ 'enum': 'E', 'data': ['a'] }\n  { 'enum': 'F' 'data': [] }";
 /// let error = qapi_codegen::parse_schema_with_version(schema, (11, 1, 3)).unwrap_err();
-/// assert_eq!((error.line, error.column), (2, 3));
-/// assert_eq!(error.kind, ErrorKind::Eof);
-/// assert_eq!(error.near, "{ 'pragma': { 'doc-required': 'x' } }");
+/// assert_eq!((error.line, error.column), (2, 17));
+/// assert_eq!(error.kind, ParseErrorKind::UnexpectedCharacter);
+/// assert_eq!(error.near, "'data': [] }");
+/// assert_eq!(
+///     error.to_string(),
+///     r#"QAPI parse error at line 2, column 17: unexpected character: "'data': [] }""#
+/// );
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("{}", describe(self))]
@@ -69,26 +80,61 @@ pub struct ParseError {
     pub line: usize,
     /// The 1-based column on that line, counted in characters.
     pub column: usize,
-    /// The nom parser that rejected the input: [`ErrorKind::Eof`] when no
-    /// definition parses at that position, the kind of a parser that commits
-    /// to a definition and then fails (such as [`ErrorKind::Verify`] for a
-    /// duplicate key), or [`ErrorKind::Complete`] for truncated input. An
-    /// expression that QEMU's parser finds malformed is reported where that
-    /// parser stops, as [`ErrorKind::Escaped`] for a bad string,
-    /// [`ErrorKind::Verify`] for a duplicate key and [`ErrorKind::Char`] for
-    /// any other unexpected character.
-    pub kind: ErrorKind,
-    /// Up to 160 characters of the input from that position.
+    /// What is wrong there.
+    pub kind: ParseErrorKind,
+    /// Up to 160 characters of the input from that position, which the
+    /// message quotes unless they are only space.
     pub near: String,
-    /// The rule of documentation comments that the input breaks, from
-    /// QEMU 2.9; `kind` is then [`ErrorKind::Verify`].
-    pub documentation: Option<Box<DocumentationError>>,
-    /// Input on which the release's own parser fails instead of reporting
-    /// an error; `kind` is then [`ErrorKind::Fail`].
-    pub crash: Option<ParserCrash>,
 }
 
-/// What a release's QAPI parser fails on, in [`ParseError::crash`].
+/// What is wrong with schema text, in [`ParseError::kind`].
+///
+/// An expression that QEMU's parser finds malformed is reported where that
+/// parser stops: [`UnexpectedCharacter`], [`UnexpectedEnd`],
+/// [`MalformedString`] or, from 2.0, [`DuplicateKey`]. Before 1.6 that
+/// parser reports no position, so such an expression is [`NoDefinition`]
+/// at its start, unless the release's parser fails on it ([`Crash`]).
+///
+/// [`UnexpectedCharacter`]: ParseErrorKind::UnexpectedCharacter
+/// [`UnexpectedEnd`]: ParseErrorKind::UnexpectedEnd
+/// [`MalformedString`]: ParseErrorKind::MalformedString
+/// [`DuplicateKey`]: ParseErrorKind::DuplicateKey
+/// [`NoDefinition`]: ParseErrorKind::NoDefinition
+/// [`Crash`]: ParseErrorKind::Crash
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
+pub enum ParseErrorKind {
+    /// An expression that no definition or directive of the release's
+    /// grammar reads, such as a `pragma` whose value has the wrong shape.
+    #[error("no definition or directive parses here")]
+    NoDefinition,
+    /// A character that QEMU's parser does not expect: one outside strings
+    /// that is no token, or a token out of its place in the expression.
+    /// Before 2.4, `true` and `false` are such characters.
+    #[error("unexpected character")]
+    UnexpectedCharacter,
+    /// Input that ends inside an expression.
+    #[error("unexpected end of input")]
+    UnexpectedEnd,
+    /// A string that QEMU's lexer refuses: one without its closing quote,
+    /// or with an escape or a character that the release does not allow.
+    #[error("malformed string")]
+    MalformedString,
+    /// From QEMU 2.0, a key that its object has already, at the key's value
+    /// as QEMU reports it.
+    #[error("duplicate key")]
+    DuplicateKey,
+    /// From QEMU 2.9, a documentation comment that breaks a rule of the
+    /// release's parser.
+    #[error("{0}")]
+    Documentation(Box<DocumentationError>),
+    /// Before 1.6, input on which the release's own parser fails instead of
+    /// reporting an error.
+    #[error("QEMU's QAPI parser fails on {0}")]
+    Crash(ParserCrash),
+}
+
+/// What a release's QAPI parser fails on, in [`ParseErrorKind::Crash`].
 ///
 /// The parsers before 1.6 skip only the lines that start with `#` and the
 /// empty ones, and read the rest as tokens of punctuation and strings.
@@ -122,27 +168,37 @@ pub enum ParserCrash {
 
 fn describe(error: &ParseError) -> String {
     let (line, column) = (error.line, error.column);
-    if let Some(crash) = &error.crash {
-        return format!("QEMU's QAPI parser fails at line {line}, column {column} on {crash}");
-    }
-    match &error.documentation {
-        Some(rule) => format!("QAPI documentation error at line {line}, column {column}: {rule}"),
-        None => format!(
-            "QAPI parse error at line {line}, column {column} ({:?}): {:?}",
-            error.kind, error.near
+    match &error.kind {
+        ParseErrorKind::Crash(crash) => {
+            format!("QEMU's QAPI parser fails at line {line}, column {column} on {crash}")
+        }
+        ParseErrorKind::Documentation(rule) => {
+            format!("QAPI documentation error at line {line}, column {column}: {rule}")
+        }
+        kind => format!(
+            "QAPI parse error at line {line}, column {column}: {kind}{}",
+            quoted_near(error)
         ),
+    }
+}
+
+/// The input near a syntax error, quoted after a colon; nothing when only
+/// space is left, as at the end of the input.
+fn quoted_near(error: &ParseError) -> String {
+    if error.near.chars().all(parsers::common::is_whitespace) {
+        String::new()
+    } else {
+        format!(": {:?}", error.near)
     }
 }
 
 impl ParseError {
     /// The fault without its position, for a message that gives it already.
     pub(crate) fn fault(&self) -> String {
-        if let Some(crash) = &self.crash {
-            return format!("QEMU's QAPI parser fails on {crash}");
-        }
-        match &self.documentation {
-            Some(rule) => format!("QAPI documentation error: {rule}"),
-            None => format!("QAPI parse error ({:?}): {:?}", self.kind, self.near),
+        match &self.kind {
+            ParseErrorKind::Crash(_) => self.kind.to_string(),
+            ParseErrorKind::Documentation(rule) => format!("QAPI documentation error: {rule}"),
+            kind => format!("QAPI parse error: {kind}{}", quoted_near(self)),
         }
     }
 }
@@ -232,58 +288,54 @@ pub fn parse_schema_with_version(
 /// in documentation.
 pub fn parse_schema(input: &str) -> Result<QapiSchema<'_>, ParseError> {
     if let Some((at, crash)) = parsers::common::unreadable_line(input) {
-        return Err(ParseError {
-            crash: Some(crash),
-            ..parse_error(input, at, ErrorKind::Fail)
-        });
+        return Err(parse_error(input, at, ParseErrorKind::Crash(crash)));
     }
-    let parsed = all_consuming(take_schema).parse(input);
+    // The grammar's parsers are complete: they never ask for more input.
+    let parsed = all_consuming(take_schema).parse(input).finish();
     let documentation = parsers::doc_comment::check(input);
     let offset = |at: &str| input.len() - at.len();
     let failure = match parsed {
         Ok((_, schema)) => match documentation {
             None => return Ok(schema),
-            Some(fault) => return Err(documentation_error(input, fault)),
+            Some(fault) => return Err(parse_error(input, fault.at, fault.kind)),
         },
-        Err(nom::Err::Error(error) | nom::Err::Failure(error)) => {
+        Err(error) => {
             let at = error
                 .input
                 .trim_start_matches(parsers::common::is_whitespace);
-            // No definition parses here: report where QEMU's parser
-            // stops, if it finds the expression malformed.
             match error.code {
+                // No definition parses here: report where QEMU's parser
+                // stops, if it finds the expression malformed.
                 ErrorKind::Eof => parsers::common::syntax_error(at),
+                // A definition's grammar commits to it, refusing a key
+                // that it has already, or before 2.4 a boolean value.
+                // QEMU reports the duplicate at the token after its colon.
+                ErrorKind::Verify => Some((
+                    parsers::common::next_token(error.input),
+                    ParseErrorKind::DuplicateKey,
+                )),
+                ErrorKind::Char => Some((at, ParseErrorKind::UnexpectedCharacter)),
                 _ => None,
             }
-            .unwrap_or((at, error.code))
+            .unwrap_or((at, ParseErrorKind::NoDefinition))
         }
-        Err(nom::Err::Incomplete(_)) => (&input[input.len()..], ErrorKind::Complete),
     };
     // QEMU reads a comment before the expressions after it.
     Err(match documentation {
         Some(fault) if offset(fault.comment) <= offset(failure.0) => {
-            documentation_error(input, fault)
+            parse_error(input, fault.at, fault.kind)
         }
         _ => parse_error(input, failure.0, failure.1),
     })
 }
 
-fn documentation_error(input: &str, fault: parsers::doc_comment::Fault<'_>) -> ParseError {
-    ParseError {
-        documentation: fault.error.map(Box::new),
-        ..parse_error(input, fault.at, fault.kind)
-    }
-}
-
-fn parse_error(input: &str, remainder: &str, kind: ErrorKind) -> ParseError {
+fn parse_error(input: &str, remainder: &str, kind: ParseErrorKind) -> ParseError {
     let (line, column) = position(input, input.len().saturating_sub(remainder.len()));
     ParseError {
         line,
         column,
         kind,
         near: remainder.chars().take(160).collect(),
-        documentation: None,
-        crash: None,
     }
 }
 
@@ -403,4 +455,142 @@ fn read_schema_file(
     }
     active.pop();
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ParseErrorKind, ParserCrash, parse_schema_with_version};
+
+    /// Each kind of parse error where it arises, with its message.
+    #[test]
+    fn each_kind_of_parse_error_names_its_fault_in_words() {
+        let documented = "##\n# @Example:\n#\n# @member:\n##\n{ 'struct': 'Example', 'data': { 'member': 'int' } }\n";
+        for (version, input, kind, message) in [
+            (
+                (11, 1, 3),
+                "{ 'pragma': { 'doc-required': 'x' } }",
+                ParseErrorKind::NoDefinition,
+                r#"QAPI parse error at line 1, column 1: no definition or directive parses here: "{ 'pragma': { 'doc-required': 'x' } }""#,
+            ),
+            (
+                (11, 1, 3),
+                "{ 'enum': 'E' 'data': [] }",
+                ParseErrorKind::UnexpectedCharacter,
+                r#"QAPI parse error at line 1, column 15: unexpected character: "'data': [] }""#,
+            ),
+            (
+                (2, 3, 0),
+                "{ 'command': 'c', 'gen': false }",
+                ParseErrorKind::UnexpectedCharacter,
+                r#"QAPI parse error at line 1, column 26: unexpected character: "false }""#,
+            ),
+            (
+                (11, 1, 3),
+                "{ 'enum': 'E',",
+                ParseErrorKind::UnexpectedEnd,
+                "QAPI parse error at line 1, column 15: unexpected end of input",
+            ),
+            (
+                (11, 1, 3),
+                r"{ 'enum': 'E\x', 'data': [] }",
+                ParseErrorKind::MalformedString,
+                r#"QAPI parse error at line 1, column 11: malformed string: "'E\\x', 'data': [] }""#,
+            ),
+            (
+                (11, 1, 3),
+                "{ 'enum': 'E', 'enum': 'F', 'data': [] }",
+                ParseErrorKind::DuplicateKey,
+                r#"QAPI parse error at line 1, column 24: duplicate key: "'F', 'data': [] }""#,
+            ),
+            (
+                (11, 1, 3),
+                documented,
+                ParseErrorKind::Documentation(Box::new(crate::DocumentationError::EmptySection {
+                    section: "Member".into(),
+                })),
+                "QAPI documentation error at line 4, column 1: text required after 'Member:'",
+            ),
+            (
+                (1, 1, 0),
+                "{ 'type': 'Foo', 'data': {} } # plain words",
+                ParseErrorKind::Crash(ParserCrash::StrayCharacter),
+                "QEMU's QAPI parser fails at line 1, column 31 on a character outside strings that it never reads past",
+            ),
+        ] {
+            let error = parse_schema_with_version(input, version).unwrap_err();
+            assert_eq!(error.kind, kind, "{version:?} {input}");
+            assert_eq!(error.to_string(), message, "{version:?} {input}");
+        }
+    }
+
+    /// A key without its colon at the end of the input, a duplicate or not,
+    /// in an object of a definition or one nested in it, and a duplicate
+    /// key, where QEMU's parser reports them: a key's colon is expected at
+    /// the end, after space and comments.
+    #[test]
+    fn keys_without_colons_and_duplicate_keys_are_reported_where_qemu_does() {
+        for (input, (line, column)) in [
+            ("{ 'enum': 'E', 'enum'", (1, 22)),
+            ("{ 'enum': 'E', 'enum' ", (1, 23)),
+            ("{ 'enum': 'E', 'enum'\n", (1, 22)),
+            ("{ 'enum': 'E', 'enum'\r\n", (1, 22)),
+            ("{ 'enum': 'E', 'enum' \n\n", (2, 1)),
+            ("{ 'enum': 'E', 'enum' # comment", (1, 32)),
+            ("{ 'enum': 'E', 'enum' # comment\n", (1, 32)),
+            ("{ 'enum': 'E', 'b'", (1, 19)),
+            ("{ 'enum': 'E', 'b' # comment\n", (1, 29)),
+            ("{ 'struct': 'S', 'data': { 'a': 'int', 'a'", (1, 43)),
+            ("{ 'struct': 'S', 'data': { 'a': 'int', 'b'", (1, 43)),
+            ("{ 'command': 'c', 'data': { 'a': 'int' }, 'data'", (1, 49)),
+            ("{ 'union': 'U', 'base': { 'a': 'int', 'a'", (1, 42)),
+            ("{ 'alternate': 'A', 'data': { 'a': 'int', 'a'", (1, 46)),
+            ("{ 'enum': 'E', 'data': [ { 'name': 'a', 'name'", (1, 47)),
+        ] {
+            let error = parse_schema_with_version(input, (11, 1, 3)).unwrap_err();
+            assert_eq!(error.kind, ParseErrorKind::UnexpectedEnd, "{input:?}");
+            assert_eq!(
+                error.to_string(),
+                format!(
+                    "QAPI parse error at line {line}, column {column}: unexpected end of input"
+                ),
+                "{input:?}"
+            );
+        }
+        // Before the colon of a duplicate key, a token is out of its place.
+        let error =
+            parse_schema_with_version("{ 'enum': 'E', 'enum' 'x' }", (11, 1, 3)).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            r#"QAPI parse error at line 1, column 23: unexpected character: "'x' }""#
+        );
+        // A duplicate key is reported at the token after its colon, as for
+        // QEMU: past space and comments, or at the end of the input.
+        for (input, (line, column), near) in [
+            ("{ 'enum': 'E', 'enum':\n", (1, 23), String::new()),
+            ("{ 'enum': 'E', 'enum': # c\n", (1, 27), String::new()),
+            ("{ 'enum': 'E', 'enum':  \n", (1, 25), String::new()),
+            (
+                "{ 'enum': 'E', 'enum': # c\n  'F' }",
+                (2, 3),
+                r#": "'F' }""#.to_owned(),
+            ),
+            (
+                "{ 'enum': 'E', 'enum':\n##\n'F' }",
+                (2, 1),
+                r###": "##\n'F' }""###.to_owned(),
+            ),
+        ] {
+            let error = parse_schema_with_version(input, (11, 1, 3)).unwrap_err();
+            assert_eq!(
+                (error.to_string(), error.kind),
+                (
+                    format!(
+                        "QAPI parse error at line {line}, column {column}: duplicate key{near}"
+                    ),
+                    ParseErrorKind::DuplicateKey,
+                ),
+                "{input:?}"
+            );
+        }
+    }
 }

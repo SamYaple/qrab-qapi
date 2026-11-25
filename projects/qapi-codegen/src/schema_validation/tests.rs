@@ -1376,6 +1376,17 @@ pub(crate) fn kind_name(debug: String) -> String {
     }
 }
 
+/// A parse error's kind as the fixture tables write it: `Doc:` and the
+/// variant of a documentation fault, or `Parse:` and the kind's variant.
+pub(crate) fn parse_kind_name(kind: &crate::ParseErrorKind) -> String {
+    match kind {
+        crate::ParseErrorKind::Documentation(fault) => {
+            format!("Doc:{}", kind_name(format!("{fault:?}")))
+        }
+        kind => format!("Parse:{}", kind_name(format!("{kind:?}"))),
+    }
+}
+
 /// Where an error is: the file's name, the line and the column.
 type At = Option<(String, usize, usize)>;
 
@@ -1391,13 +1402,10 @@ fn at(file: &Path, line: usize, column: usize) -> At {
 fn fixture_outcome(path: &Path) -> (String, At) {
     crate::set_parser_version((11, 1, 3));
     match crate::read_schema_with_version(path, None) {
-        Err(crate::ReadError::Parse { source, path, .. }) => {
-            let kind = match &source.documentation {
-                Some(fault) => format!("Doc:{}", kind_name(format!("{fault:?}"))),
-                None => "Parse".to_owned(),
-            };
-            (kind, at(&path, source.line, source.column))
-        }
+        Err(crate::ReadError::Parse { source, path, .. }) => (
+            parse_kind_name(&source.kind),
+            at(&path, source.line, source.column),
+        ),
         Err(crate::ReadError::Include {
             from,
             line,
@@ -1423,9 +1431,9 @@ fn fixture_outcome(path: &Path) -> (String, At) {
 
 /// The kind of error that each of QEMU's own negative test schemas gets at
 /// the pinned release, in the file and at the line (and column, where QEMU
-/// gives one) of its `.err` file: `Parse` for an expression that the
-/// parser refuses, `Doc:` for a fault of a documentation comment,
-/// `Include:` for an include directive.
+/// gives one) of its `.err` file: `Parse:` and the kind of a syntax
+/// error, `Doc:` for a fault of a documentation comment, `Include:` for an
+/// include directive.
 pub(crate) const FIXTURES: &[(&str, &str)] = &[
     ("allow-preconfig-test", "FlagValue"),
     ("alternate-any", "TypeNotAllowed"),
@@ -1473,7 +1481,7 @@ pub(crate) const FIXTURES: &[(&str, &str)] = &[
     ("bad-if-not", "InvalidCondition"),
     ("bad-type-bool", "NameNotString"),
     ("bad-type-dict", "NameNotString"),
-    ("bad-type-int", "Parse"),
+    ("bad-type-int", "Parse:UnexpectedCharacter"),
     ("base-cycle-direct", "InheritanceCycle"),
     ("base-cycle-indirect", "InheritanceCycle"),
     ("command-int", "Predefined"),
@@ -1512,7 +1520,7 @@ pub(crate) const FIXTURES: &[(&str, &str)] = &[
     ("doc-no-symbol", "Doc:DefinitionDocumentationRequired"),
     ("doc-undoc-feature", "UndocumentedFeature"),
     ("double-type", "Metatypes"),
-    ("duplicate-key", "Parse"),
+    ("duplicate-key", "Parse:DuplicateKey"),
     ("enum-bad-member", "NameNotString"),
     ("enum-bad-name", "InvalidName"),
     ("enum-bad-prefix", "ValueShape::String"),
@@ -1520,7 +1528,7 @@ pub(crate) const FIXTURES: &[(&str, &str)] = &[
     ("enum-dict-member-unknown", "UnknownKey"),
     ("enum-dict-no-name", "MissingKey"),
     ("enum-if-invalid", "UnknownKey"),
-    ("enum-int-member", "Parse"),
+    ("enum-int-member", "Parse:UnexpectedCharacter"),
     ("enum-member-case", "NameCase"),
     ("enum-missing-data", "MissingKey"),
     ("enum-wrong-data", "ValueShape::Array"),
@@ -1538,36 +1546,36 @@ pub(crate) const FIXTURES: &[(&str, &str)] = &[
     ("features-no-list", "ValueShape::Array"),
     ("features-too-many", "TooManyFeatures"),
     ("features-unknown-key", "UnknownKey"),
-    ("funny-char", "Parse"),
-    ("funny-word", "Parse"),
-    ("ident-with-escape", "Parse"),
-    ("include-before-err", "Parse"),
+    ("funny-char", "Parse:UnexpectedCharacter"),
+    ("funny-word", "Parse:UnexpectedCharacter"),
+    ("ident-with-escape", "Parse:MalformedString"),
+    ("include-before-err", "Parse:UnexpectedCharacter"),
     ("include-cycle", "Include:Loop"),
-    ("include-extra-junk", "Parse"),
-    ("include-nested-err", "Parse"),
+    ("include-extra-junk", "Parse:NoDefinition"),
+    ("include-nested-err", "Parse:UnexpectedCharacter"),
     ("include-no-file", "Include:Unreadable"),
-    ("include-non-file", "Parse"),
+    ("include-non-file", "Parse:NoDefinition"),
     ("include-self-cycle", "Include:Loop"),
-    ("leading-comma-list", "Parse"),
-    ("leading-comma-object", "Parse"),
-    ("missing-array-rsqb", "Parse"),
-    ("missing-colon", "Parse"),
-    ("missing-comma-list", "Parse"),
-    ("missing-comma-object", "Parse"),
-    ("missing-object-member-element", "Parse"),
+    ("leading-comma-list", "Parse:UnexpectedCharacter"),
+    ("leading-comma-object", "Parse:UnexpectedCharacter"),
+    ("missing-array-rsqb", "Parse:UnexpectedEnd"),
+    ("missing-colon", "Parse:UnexpectedCharacter"),
+    ("missing-comma-list", "Parse:UnexpectedCharacter"),
+    ("missing-comma-object", "Parse:UnexpectedCharacter"),
+    ("missing-object-member-element", "Parse:UnexpectedEnd"),
     ("missing-type", "Metatypes"),
     ("nested-struct-data", "ValueShape::TypeNameOrArray"),
     ("nested-struct-data-invalid-dict", "MissingKey"),
-    ("non-objects", "Parse"),
+    ("non-objects", "Parse:NoDefinition"),
     ("oob-coroutine", "IncompatibleFlags"),
     ("oob-test", "FlagValue"),
-    ("pragma-extra-junk", "Parse"),
-    ("pragma-non-dict", "Parse"),
-    ("pragma-unknown", "Parse"),
-    ("pragma-value-not-bool", "Parse"),
-    ("pragma-value-not-list", "Parse"),
-    ("pragma-value-not-list-of-str", "Parse"),
-    ("quoted-structural-chars", "Parse"),
+    ("pragma-extra-junk", "Parse:NoDefinition"),
+    ("pragma-non-dict", "Parse:NoDefinition"),
+    ("pragma-unknown", "Parse:NoDefinition"),
+    ("pragma-value-not-bool", "Parse:NoDefinition"),
+    ("pragma-value-not-list", "Parse:NoDefinition"),
+    ("pragma-value-not-list-of-str", "Parse:NoDefinition"),
+    ("quoted-structural-chars", "Parse:NoDefinition"),
     ("redefined-command", "Duplicate"),
     ("redefined-event", "Duplicate"),
     ("redefined-predefined", "Predefined"),
@@ -1584,8 +1592,8 @@ pub(crate) const FIXTURES: &[(&str, &str)] = &[
     ("returns-bad-type", "TypeNotAllowed"),
     ("returns-dict", "ValueShape::TypeNameOrArray"),
     ("returns-unknown", "UnknownType"),
-    ("string-code-point-127", "Parse"),
-    ("string-code-point-31", "Parse"),
+    ("string-code-point-127", "Parse:MalformedString"),
+    ("string-code-point-31", "Parse:MalformedString"),
     ("struct-base-clash", "MemberClash"),
     ("struct-base-clash-deep", "MemberClash"),
     ("struct-data-invalid", "ValueShape::ObjectOrTypeName"),
@@ -1594,13 +1602,13 @@ pub(crate) const FIXTURES: &[(&str, &str)] = &[
     ("struct-member-invalid", "ValueShape::TypeNameOrArray"),
     ("struct-member-invalid-dict", "MissingKey"),
     ("struct-member-name-clash", "MemberClash"),
-    ("trailing-comma-list", "Parse"),
-    ("trailing-comma-object", "Parse"),
+    ("trailing-comma-list", "Parse:UnexpectedCharacter"),
+    ("trailing-comma-object", "Parse:UnexpectedCharacter"),
     ("type-bypass-bad-gen", "FlagValue"),
     ("type-case", "NameCase"),
-    ("unclosed-list", "Parse"),
-    ("unclosed-object", "Parse"),
-    ("unclosed-string", "Parse"),
+    ("unclosed-list", "Parse:UnexpectedCharacter"),
+    ("unclosed-object", "Parse:UnexpectedEnd"),
+    ("unclosed-string", "Parse:MalformedString"),
     ("union-array-branch", "ValueShape::TypeName"),
     ("union-bad-base", "MemberClash"),
     ("union-bad-discriminator", "NameNotString"),
@@ -1626,7 +1634,7 @@ pub(crate) const FIXTURES: &[(&str, &str)] = &[
     ("union-optional-discriminator", "OptionalDiscriminator"),
     ("union-string-discriminator", "DiscriminatorNotEnum"),
     ("union-unknown", "UnknownType"),
-    ("unknown-escape", "Parse"),
+    ("unknown-escape", "Parse:MalformedString"),
     ("unknown-expr-key", "UnknownKey"),
 ];
 
