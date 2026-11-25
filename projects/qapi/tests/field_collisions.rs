@@ -19,13 +19,13 @@ fn cpu_info_preserves_both_instruction_pointer_fields() {
     let fields: Vec<_> = qapi::metadata::STRUCTS
         .get("CpuInfo")
         .unwrap()
-        .fields
+        .fields()
         .iter()
-        .filter(|field| matches!(field.wire_name, "pc" | "PC"))
+        .filter(|field| matches!(field.wire_name(), "pc" | "PC"))
         .collect();
     assert_eq!(fields.len(), 2);
     for field in fields {
-        assert_eq!(field.since, (1, 0, 0));
-        assert_eq!(field.until, Some((2, 6, 0)));
+        assert_eq!(field.since(), (1, 0, 0));
+        assert_eq!(field.until(), Some((2, 6, 0)));
     }
 }

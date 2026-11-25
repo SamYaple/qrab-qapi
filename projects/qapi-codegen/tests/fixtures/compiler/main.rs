@@ -78,11 +78,11 @@ fn main() {
         assert!(serde_json::to_value(GappedEnumGenerated::Value).is_err());
     });
     assert_eq!(
-        metadata::ENUMS.get("GappedEnumGenerated").unwrap().since,
+        metadata::ENUMS.get("GappedEnumGenerated").unwrap().since(),
         (6, 1, 0)
     );
     assert_eq!(
-        metadata::ENUMS.get("GappedEnum").unwrap().until,
+        metadata::ENUMS.get("GappedEnum").unwrap().until(),
         Some((2, 9, 0))
     );
     with_version((2, 3, 0), || {
@@ -164,7 +164,7 @@ fn main() {
     for (name, expected) in [("changing-flags", false), ("late-flags", true)] {
         let command = metadata::COMMANDS
             .iter()
-            .find(|command| command.wire_name == name)
+            .find(|command| command.wire_name() == name)
             .unwrap();
         assert_eq!(command.allows_oob((6, 1, 0)), !expected);
         assert_eq!(command.allows_preconfig((6, 1, 0)), !expected);
@@ -205,20 +205,20 @@ fn main() {
     let qtype = metadata::ENUMS.get("QType").unwrap();
     assert_eq!(
         qtype
-            .variants
+            .variants()
             .iter()
-            .find(|variant| variant.wire_name == "qint")
+            .find(|variant| variant.wire_name() == "qint")
             .unwrap()
-            .until,
+            .until(),
         Some((2, 10, 0))
     );
     assert_eq!(
         qtype
-            .variants
+            .variants()
             .iter()
-            .find(|variant| variant.wire_name == "qnum")
+            .find(|variant| variant.wire_name() == "qnum")
             .unwrap()
-            .since,
+            .since(),
         (2, 10, 0)
     );
     with_version((11, 1, 3), || {
@@ -228,23 +228,23 @@ fn main() {
         assert_eq!(serde_json::to_value(value).unwrap(), wire);
     });
     assert_eq!(
-        metadata::ENUMS.get("KindFlagGenerated").unwrap().wire_name,
+        metadata::ENUMS.get("KindFlagGenerated").unwrap().wire_name(),
         "KindFLAG"
     );
     assert_eq!(
-        metadata::ENUMS.get("KindFlag").unwrap().wire_name,
+        metadata::ENUMS.get("KindFlag").unwrap().wire_name(),
         "KindFlag"
     );
     assert_eq!(
-        metadata::ENUMS.get("ChangingType").unwrap().wire_name,
+        metadata::ENUMS.get("ChangingType").unwrap().wire_name(),
         "ChangingType"
     );
     assert_eq!(
-        metadata::STRUCTS.get("ChangingTypeGenerated").unwrap().wire_name,
+        metadata::STRUCTS.get("ChangingTypeGenerated").unwrap().wire_name(),
         "ChangingType"
     );
     assert_eq!(
-        metadata::ENUMS.get("VariantUnionBranch").unwrap().wire_name,
+        metadata::ENUMS.get("VariantUnionBranch").unwrap().wire_name(),
         "VariantUnionBranch"
     );
     with_version((11, 1, 3), || {
@@ -274,8 +274,8 @@ fn main() {
     for name in ["CaseTag", "VariantAlt", "VariantUnionBranch"] {
         let info = metadata::ENUMS.get(name).unwrap();
         let names: std::collections::BTreeSet<_> =
-            info.variants.iter().map(|variant| variant.name).collect();
-        assert_eq!(names.len(), info.variants.len());
+            info.variants().iter().map(|variant| variant.name()).collect();
+        assert_eq!(names.len(), info.variants().len());
     }
     for version in [(6, 1, 0), (11, 1, 3)] {
         with_version(version, || {
@@ -376,10 +376,10 @@ fn main() {
         assert_eq!(value.u, "named");
         assert_eq!(serde_json::to_value(value).unwrap(), wire);
         let info = metadata::STRUCTS.get("VirtualOwner").unwrap();
-        assert!(info.is_union);
-        assert_eq!(info.fields.len(), 2);
+        assert!(info.is_union());
+        assert_eq!(info.fields().len(), 2);
         assert_eq!(
-            metadata::ENUMS.get(info.branch_enum.unwrap()).unwrap().kind,
+            metadata::ENUMS.get(info.branch_enum().unwrap()).unwrap().kind(),
             metadata::EnumKind::UnionBranch
         );
     });
@@ -395,18 +395,18 @@ fn main() {
         assert_eq!(serde_json::to_value(command).unwrap(), wire);
         let command = metadata::COMMANDS
             .iter()
-            .find(|command| command.wire_name == "manual-arguments")
+            .find(|command| command.wire_name() == "manual-arguments")
             .unwrap();
-        assert!(command.args.is_free_form((11, 1, 3)));
-        assert_eq!(command.args.fields.len(), 1);
-        assert_eq!(command.args.fields[0].wire_name, "arguments");
+        assert!(command.args().is_free_form((11, 1, 3)));
+        assert_eq!(command.args().fields().len(), 1);
+        assert_eq!(command.args().fields()[0].wire_name(), "arguments");
     });
     with_version((11, 1, 3), || {
         let wire = serde_json::json!({"FooBAR":"first","FooBar":"second","foo_bar_alt":"third","FooBAR_alt":"fourth"});
         let value: CollisionFields = serde_json::from_value(wire.clone()).unwrap();
         assert_eq!(serde_json::to_value(value).unwrap(), wire);
-        let fields = metadata::STRUCTS.get("CollisionFields").unwrap().fields;
-        let names: std::collections::BTreeSet<_> = fields.iter().map(|field| field.name).collect();
+        let fields = metadata::STRUCTS.get("CollisionFields").unwrap().fields();
+        let names: std::collections::BTreeSet<_> = fields.iter().map(|field| field.name()).collect();
         assert_eq!(names.len(), fields.len());
     });
     for (version, wire) in [
@@ -429,7 +429,7 @@ fn main() {
         assert_eq!(serde_json::to_value(value).unwrap(), wire);
     });
     assert_eq!(
-        metadata::STRUCTS.get("CycleShapeGenerated").unwrap().wire_name,
+        metadata::STRUCTS.get("CycleShapeGenerated").unwrap().wire_name(),
         "CycleShape"
     );
     for (version, wire) in [
@@ -504,7 +504,7 @@ fn main() {
             serde_json::json!({"kind":"none"})
         );
         assert_eq!(
-            metadata::ENUMS.get("EmptyUnionBranch").unwrap().kind,
+            metadata::ENUMS.get("EmptyUnionBranch").unwrap().kind(),
             metadata::EnumKind::UnionBranch
         );
         let _: Option<<commands::PeerWindowsCommand as QapiCommand>::Returns> = Some(PeerWindows {
@@ -530,9 +530,9 @@ fn main() {
             metadata::STRUCTS
                 .get("PeerFields")
                 .unwrap()
-                .fields
+                .fields()
                 .iter()
-                .all(|field| !field.optional)
+                .all(|field| !field.is_optional())
         );
         with_version((2, 3, 0), || {
             for wire in [
@@ -555,10 +555,10 @@ fn main() {
             let wire = serde_json::json!({"visitor":[1,2],"dict":false,"wildcard":null});
             let opaque: OpaqueReferences = serde_json::from_value(wire.clone()).unwrap();
             assert_eq!(serde_json::to_value(opaque).unwrap(), wire);
-            for field in metadata::STRUCTS.get("OpaqueReferences").unwrap().fields {
-                let ty = &metadata::TYPE_REFS[field.ty as usize];
-                assert_eq!(ty.kind, metadata::TypeKind::Primitive);
-                assert_eq!(ty.prim, Some(metadata::Prim::Any));
+            for field in metadata::STRUCTS.get("OpaqueReferences").unwrap().fields() {
+                let ty = field.type_ref();
+                assert_eq!(ty.kind(), metadata::TypeKind::Primitive);
+                assert_eq!(ty.prim(), Some(metadata::Prim::Any));
             }
         });
         with_version((6, 1, 0), || {
@@ -571,20 +571,20 @@ fn main() {
                 assert_eq!(serde_json::to_value(value).unwrap(), wire);
             }
         });
-        for variant in metadata::ENUMS.get("ArrayPayloadBranch").unwrap().variants {
-            assert_eq!(variant.payload_struct, None);
-            let list = &metadata::TYPE_REFS[variant.payload_type.unwrap() as usize];
-            assert_eq!(list.kind, metadata::TypeKind::List);
-            let element = &metadata::TYPE_REFS[list.inner.unwrap() as usize];
-            match variant.wire_name {
-                "strings" => assert_eq!(element.prim, Some(metadata::Prim::Str)),
+        for variant in metadata::ENUMS.get("ArrayPayloadBranch").unwrap().variants() {
+            assert_eq!(variant.payload_struct(), None);
+            let list = variant.payload_type().unwrap();
+            assert_eq!(list.kind(), metadata::TypeKind::List);
+            let element = list.element().unwrap();
+            match variant.wire_name() {
+                "strings" => assert_eq!(element.prim(), Some(metadata::Prim::Str)),
                 "objects" => {
-                    assert_eq!(element.kind, metadata::TypeKind::Struct);
-                    assert_eq!(element.name, "QapiStringGenerated");
+                    assert_eq!(element.kind(), metadata::TypeKind::Struct);
+                    assert_eq!(element.name(), "QapiStringGenerated");
                 }
                 "kinds" => {
-                    assert_eq!(element.kind, metadata::TypeKind::Enum);
-                    assert_eq!(element.name, "Tag");
+                    assert_eq!(element.kind(), metadata::TypeKind::Enum);
+                    assert_eq!(element.name(), "Tag");
                 }
                 _ => unreachable!(),
             }
@@ -618,59 +618,59 @@ fn main() {
         let field = metadata::STRUCTS
             .get("Holder")
             .unwrap()
-            .fields
+            .fields()
             .iter()
-            .find(|field| field.name == "self_")
+            .find(|field| field.name() == "self_")
             .unwrap();
-        assert_eq!(field.wire_name, "self");
+        assert_eq!(field.wire_name(), "self");
         let field = metadata::STRUCTS
             .get("Holder")
             .unwrap()
-            .fields
+            .fields()
             .iter()
-            .find(|field| field.name == "string")
+            .find(|field| field.name() == "string")
             .unwrap();
-        let ty = &metadata::TYPE_REFS[field.ty as usize];
-        assert_eq!(ty.kind, metadata::TypeKind::Struct);
-        assert_eq!(ty.name, "QapiStringGenerated");
+        let ty = field.type_ref();
+        assert_eq!(ty.kind(), metadata::TypeKind::Struct);
+        assert_eq!(ty.name(), "QapiStringGenerated");
         let command = metadata::COMMANDS
             .iter()
-            .find(|command| command.wire_name == "read-string")
+            .find(|command| command.wire_name() == "read-string")
             .unwrap();
-        let ty = &metadata::TYPE_REFS[command.returns.unwrap() as usize];
-        assert_eq!(ty.kind, metadata::TypeKind::Primitive);
-        assert_eq!(ty.prim, Some(metadata::Prim::Str));
+        let ty = command.returns().unwrap();
+        assert_eq!(ty.kind(), metadata::TypeKind::Primitive);
+        assert_eq!(ty.prim(), Some(metadata::Prim::Str));
         let command = metadata::COMMANDS
             .iter()
-            .find(|command| command.wire_name == "read-strings")
+            .find(|command| command.wire_name() == "read-strings")
             .unwrap();
-        let ty = &metadata::TYPE_REFS[command.returns.unwrap() as usize];
-        assert_eq!(ty.kind, metadata::TypeKind::List);
+        let ty = command.returns().unwrap();
+        assert_eq!(ty.kind(), metadata::TypeKind::List);
         assert_eq!(
-            metadata::TYPE_REFS[ty.inner.unwrap() as usize].prim,
+            ty.element().unwrap().prim(),
             Some(metadata::Prim::Str)
         );
         for variant in metadata::ENUMS
             .get("PeerPayload")
             .unwrap()
-            .variants
+            .variants()
             .iter()
-            .chain(metadata::ENUMS.get("PeerNumber").unwrap().variants)
+            .chain(metadata::ENUMS.get("PeerNumber").unwrap().variants())
         {
-            let ty = &metadata::TYPE_REFS[variant.payload_type.unwrap() as usize];
-            match variant.wire_name {
+            let ty = variant.payload_type().unwrap();
+            match variant.wire_name() {
                 "object" => {
-                    assert_eq!(ty.kind, metadata::TypeKind::Struct);
-                    assert_eq!(variant.payload_struct, Some("QapiStringGenerated"));
+                    assert_eq!(ty.kind(), metadata::TypeKind::Struct);
+                    assert_eq!(variant.payload_struct(), Some("QapiStringGenerated"));
                 }
-                "text" => assert_eq!(ty.prim, Some(metadata::Prim::Str)),
+                "text" => assert_eq!(ty.prim(), Some(metadata::Prim::Str)),
                 "kind" => {
-                    assert_eq!(ty.kind, metadata::TypeKind::Enum);
-                    assert_eq!(ty.name, "Tag");
-                    assert_eq!(variant.payload_struct, None);
+                    assert_eq!(ty.kind(), metadata::TypeKind::Enum);
+                    assert_eq!(ty.name(), "Tag");
+                    assert_eq!(variant.payload_struct(), None);
                 }
-                "number" => assert_eq!(ty.prim, Some(metadata::Prim::I64)),
-                "nothing" => assert_eq!(ty.prim, Some(metadata::Prim::Null)),
+                "number" => assert_eq!(ty.prim(), Some(metadata::Prim::I64)),
+                "nothing" => assert_eq!(ty.prim(), Some(metadata::Prim::Null)),
                 _ => unreachable!(),
             }
         }

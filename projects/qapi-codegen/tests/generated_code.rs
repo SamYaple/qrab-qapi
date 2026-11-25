@@ -322,9 +322,18 @@ fn generated_code_compiles_and_its_metadata_is_true() {
         ("qga_docs_unindented", pinned(Qga, Schema)),
         ("history_docs_unindented", &history("qmp", Schema)),
     ];
+    // The types that the generated metadata re-exports, as qrab-qapi has
+    // them.
+    std::fs::create_dir_all(fixture.join("src")).unwrap();
+    std::fs::write(
+        fixture.join("src/metadata_types.rs"),
+        include_str!("../../qapi/src/metadata_types.rs"),
+    )
+    .unwrap();
     let mut lib = String::from(
         "//! The generated modules without their `#[qapi]` attributes.\n\
-         #![allow(dead_code, unused_imports)]\n",
+         #![allow(dead_code, unused_imports)]\n\
+         mod metadata_types;\n",
     );
     for (name, output) in modules {
         let dir = fixture.join("src").join(name);

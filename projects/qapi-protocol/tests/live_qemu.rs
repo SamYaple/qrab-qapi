@@ -112,7 +112,7 @@ async fn smoke(binary: &OsStr, frontend: MonitorFrontend, pretty: bool) {
     let commands = qmp.execute(&QueryCommands {}).await.unwrap();
     let known: BTreeSet<_> = qapi::metadata::COMMANDS
         .iter()
-        .map(|c| c.wire_name)
+        .map(|c| c.wire_name())
         .collect();
     let missing: Vec<_> = commands
         .iter()

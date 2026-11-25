@@ -565,21 +565,27 @@ names, spelled as the newest release with the field, variant or return spells
 them: a command that returns `int` refers to the builtin `int`, as a field of
 that type does, a declared `String` stays distinct from the builtin `str`, and
 a field typed `visitor`, `dict` or `**` before QEMU 2.5 and `any` later refers
-to `any`. One entry of `TYPE_REFS` names one type for every release. Enum variants expose `payload_type`
-indices into `TYPE_REFS` for scalar, null, enum, struct and list payloads;
-`payload_struct` is retained
+to `any`. One entry of `TYPE_REFS` names one type for every release. A
+field's `type_ref()`, a variant's `payload_type()` and a command's `returns()`
+are references to entries of the `TYPE_REFS` of their own module, for scalar,
+null, enum, struct and list payloads; `payload_struct()` is retained
 for direct struct payloads.
-`StructMeta::name` and `EnumMeta::name` are the Rust lookup identities;
-`wire_name` retains the QAPI spelling through alias and legacy-type
+`StructMeta::name()` and `EnumMeta::name()` are the Rust lookup identities;
+`wire_name()` retains the QAPI spelling through alias and legacy-type
 allocation, the wire name of a command or event. Synthesized types fall back
-to their generated name. A `TypeRef` has a `prim` only as a primitive and an
-`inner` element only as a list.
+to their generated name. A `TypeRef` has a `prim()` only as a primitive and an
+`element()` only as a list.
+The generator writes only the tables: `qapi::metadata` and
+`qapi::qga::metadata` re-export one set of their types, which `qrab-qapi`
+defines by hand in its `metadata_types` module. The types are
+`#[non_exhaustive]` and read through methods, and only the generated statics
+construct them.
 Union metadata selects the newest observed discriminator and branch fields.
 Historical discriminator representations remain ordinary versioned fields;
-every generated branch enum is a `UnionBranch`, and `StructMeta::simple_union`
-lists the releases in which its union has the simple layout, as `free_form`
+every generated branch enum is a `UnionBranch`, and `StructMeta::simple_union()`
+lists the releases in which its union has the simple layout, as `free_form()`
 lists those in which a `gen: false` command takes undeclared arguments.
-The flags of commands (`allow_oob`, `allow_preconfig`, `success_response`)
+The flags of commands (`allow_oob()`, `allow_preconfig()`, `success_response()`)
 and the `deprecated` and `unstable` features of structs, enums, commands,
 events, fields and variants are such lists of releases as well, so the tables
 describe every release; `CommandMeta::allows_oob(version)`,

@@ -51,7 +51,9 @@ fn dependency(manifest: &Path, name: &str) -> String {
 
 /// Build and run a fixture crate against the workspace's qrab-qapi. It
 /// resolves its dependencies from a copy of the workspace's `Cargo.lock`,
-/// offline, and builds under this test's target directory.
+/// offline, and builds under this test's target directory. Its root
+/// declares, before `main`, the `metadata_types` module that the generated
+/// metadata re-exports, a copy of qrab-qapi's.
 pub fn run_fixture_with_bounds(
     workspace: &Path,
     fixture: &Path,
@@ -77,7 +79,16 @@ qapi-macros = {{ package = "qrab-qapi-macros", path = {:?} }}
     );
     let fixture_manifest = fixture.join("Cargo.toml");
     std::fs::write(&fixture_manifest, manifest).unwrap();
-    std::fs::write(fixture.join("src/main.rs"), main).unwrap();
+    std::fs::write(
+        fixture.join("src/main.rs"),
+        format!("mod metadata_types;\n{main}"),
+    )
+    .unwrap();
+    std::fs::copy(
+        workspace.join("projects/qapi/src/metadata_types.rs"),
+        fixture.join("src/metadata_types.rs"),
+    )
+    .unwrap();
     std::fs::copy(workspace.join("Cargo.lock"), fixture.join("Cargo.lock")).unwrap();
     let target = Path::new(env!("CARGO_TARGET_TMPDIR")).join("qapi-codegen-fixtures");
     let target = bounds.map_or(target.clone(), |(min, max)| {

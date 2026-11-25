@@ -1,12 +1,13 @@
 /// Every type that a field, variant payload or command return refers to.
-pub static TYPE_REFS: &[TypeRef] = &[
-    TypeRef { kind: TypeKind::Primitive, name: "str", prim: Some(Prim::Str), inner: None },
-    TypeRef { kind: TypeKind::Struct, name: "GuestInfo", prim: None, inner: None },
-    TypeRef { kind: TypeKind::Primitive, name: "int", prim: Some(Prim::I64), inner: None },
+pub static TYPE_REFS: &[TypeRef] = &TYPES;
+static TYPES: [TypeRef; 3] = [
+    TypeRef { kind: TypeKind::Primitive, name: "str", prim: Some(Prim::Str), element: None },
+    TypeRef { kind: TypeKind::Struct, name: "GuestInfo", prim: None, element: None },
+    TypeRef { kind: TypeKind::Primitive, name: "int", prim: Some(Prim::I64), element: None },
 ];
 
 static FIELDS_GuestInfo: &[FieldMeta] = &[
-    FieldMeta { name: "version", wire_name: "version", ty: 0, optional: false, discriminator: &[], boxed: false, since: (7u32, 0u32, 0u32), until: None, deprecated: &[], unstable: &[] },
+    FieldMeta { name: "version", wire_name: "version", ty: &TYPES[0], optional: false, discriminator: &[], boxed: false, since: (7u32, 0u32, 0u32), until: None, deprecated: &[], unstable: &[] },
 ];
 static STRUCT_GuestInfo: StructMeta = StructMeta {
     name: "GuestInfo",
@@ -39,7 +40,7 @@ static STRUCT_GuestInfoCommand: StructMeta = StructMeta {
     unstable: &[],
 };
 static FIELDS_GuestShutdown: &[FieldMeta] = &[
-    FieldMeta { name: "mode", wire_name: "mode", ty: 0, optional: true, discriminator: &[], boxed: false, since: (6u32, 2u32, 0u32), until: None, deprecated: &[], unstable: &[] },
+    FieldMeta { name: "mode", wire_name: "mode", ty: &TYPES[0], optional: true, discriminator: &[], boxed: false, since: (6u32, 2u32, 0u32), until: None, deprecated: &[], unstable: &[] },
 ];
 static STRUCT_GuestShutdown: StructMeta = StructMeta {
     name: "GuestShutdown",
@@ -56,7 +57,7 @@ static STRUCT_GuestShutdown: StructMeta = StructMeta {
     unstable: &[],
 };
 static FIELDS_GuestSync: &[FieldMeta] = &[
-    FieldMeta { name: "id", wire_name: "id", ty: 2, optional: false, discriminator: &[], boxed: false, since: (6u32, 2u32, 0u32), until: Some((7u32, 0u32, 0u32)), deprecated: &[], unstable: &[] },
+    FieldMeta { name: "id", wire_name: "id", ty: &TYPES[2], optional: false, discriminator: &[], boxed: false, since: (6u32, 2u32, 0u32), until: Some((7u32, 0u32, 0u32)), deprecated: &[], unstable: &[] },
 ];
 static STRUCT_GuestSync: StructMeta = StructMeta {
     name: "GuestSync",
@@ -75,9 +76,9 @@ static STRUCT_GuestSync: StructMeta = StructMeta {
 
 /// The commands, sorted by wire name.
 pub static COMMANDS: &[CommandMeta] = &[
-    CommandMeta { name: "GuestInfoCommand", wire_name: "guest-info", args: &STRUCT_GuestInfoCommand, returns: Some(1), allow_oob: &[], allow_preconfig: &[], success_response: &[Releases { since: (7u32, 0u32, 0u32), until: None }], since: (7u32, 0u32, 0u32), until: None, deprecated: &[], unstable: &[] },
+    CommandMeta { name: "GuestInfoCommand", wire_name: "guest-info", args: &STRUCT_GuestInfoCommand, returns: Some(&TYPES[1]), allow_oob: &[], allow_preconfig: &[], success_response: &[Releases { since: (7u32, 0u32, 0u32), until: None }], since: (7u32, 0u32, 0u32), until: None, deprecated: &[], unstable: &[] },
     CommandMeta { name: "GuestShutdown", wire_name: "guest-shutdown", args: &STRUCT_GuestShutdown, returns: None, allow_oob: &[], allow_preconfig: &[], success_response: &[], since: (6u32, 2u32, 0u32), until: None, deprecated: &[], unstable: &[] },
-    CommandMeta { name: "GuestSync", wire_name: "guest-sync", args: &STRUCT_GuestSync, returns: Some(2), allow_oob: &[], allow_preconfig: &[], success_response: &[Releases { since: (6u32, 2u32, 0u32), until: Some((7u32, 0u32, 0u32)) }], since: (6u32, 2u32, 0u32), until: Some((7u32, 0u32, 0u32)), deprecated: &[], unstable: &[] },
+    CommandMeta { name: "GuestSync", wire_name: "guest-sync", args: &STRUCT_GuestSync, returns: Some(&TYPES[2]), allow_oob: &[], allow_preconfig: &[], success_response: &[Releases { since: (6u32, 2u32, 0u32), until: Some((7u32, 0u32, 0u32)) }], since: (6u32, 2u32, 0u32), until: Some((7u32, 0u32, 0u32)), deprecated: &[], unstable: &[] },
 ];
 
 /// The structs, unions, and command and event structs, by Rust name.

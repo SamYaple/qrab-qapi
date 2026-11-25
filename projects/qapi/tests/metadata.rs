@@ -15,7 +15,7 @@ fn tables_are_sorted_and_find_every_entry_by_name() {
         "STRUCTS names are not strictly sorted"
     );
     for (name, info) in STRUCTS.iter() {
-        assert_eq!(info.name, name);
+        assert_eq!(info.name(), name);
         assert!(std::ptr::eq(STRUCTS.get(name).unwrap(), info), "{name}");
     }
     let names: Vec<_> = ENUMS.keys().collect();
@@ -24,7 +24,7 @@ fn tables_are_sorted_and_find_every_entry_by_name() {
         "ENUMS names are not strictly sorted"
     );
     for (name, info) in ENUMS.iter() {
-        assert_eq!(info.name, name);
+        assert_eq!(info.name(), name);
         assert!(std::ptr::eq(ENUMS.get(name).unwrap(), info), "{name}");
     }
     assert!(STRUCTS.get("NoSuchType").is_none());
@@ -45,52 +45,63 @@ fn historical_discriminator_fields_do_not_hide_current_unions() {
         ("InputEvent", "type"),
     ] {
         let info = STRUCTS.get(name).unwrap();
-        assert!(info.is_union, "{name}");
-        assert!(info.discriminator_field.is_some(), "{name}");
-        let branch = ENUMS.get(info.branch_enum.unwrap()).unwrap();
-        assert_eq!(branch.kind, EnumKind::UnionBranch, "{name}");
+        assert!(info.is_union(), "{name}");
+        assert!(info.discriminator_field().is_some(), "{name}");
+        let branch = ENUMS.get(info.branch_enum().unwrap()).unwrap();
+        assert_eq!(branch.kind(), EnumKind::UnionBranch, "{name}");
         let discriminator = info
-            .fields
+            .fields()
             .iter()
-            .find(|field| Some(field.name) == info.discriminator_field)
+            .find(|field| Some(field.name()) == info.discriminator_field())
             .unwrap();
-        assert_eq!(discriminator.wire_name, wire_name);
+        assert_eq!(discriminator.wire_name(), wire_name);
         // The newest representation lasts as long as its union.
-        assert_eq!(discriminator.until, info.until, "{name}");
+        assert_eq!(discriminator.until(), info.until(), "{name}");
     }
 }
 
 #[test]
 fn metadata_references_resolve_including_enum_payloads() {
-    use qapi::metadata::{TYPE_REFS, TypeKind};
-    for (index, ty) in TYPE_REFS.iter().enumerate() {
-        match ty.kind {
-            TypeKind::Struct => assert!(STRUCTS.contains_key(ty.name), "{}", ty.name),
-            TypeKind::Enum => assert!(ENUMS.contains_key(ty.name), "{}", ty.name),
-            TypeKind::List => assert!((ty.inner.unwrap() as usize) < index),
+    use qapi::metadata::{TYPE_REFS, TypeKind, TypeRef};
+    // A reference into the pool, as an index.
+    let index = |ty: &TypeRef| {
+        TYPE_REFS
+            .iter()
+            .position(|entry| std::ptr::eq(entry, ty))
+            .unwrap_or_else(|| panic!("{ty:?} is not an entry of TYPE_REFS"))
+    };
+    for (at, ty) in TYPE_REFS.iter().enumerate() {
+        match ty.kind() {
+            TypeKind::Struct => assert!(STRUCTS.contains_key(ty.name()), "{}", ty.name()),
+            TypeKind::Enum => assert!(ENUMS.contains_key(ty.name()), "{}", ty.name()),
+            TypeKind::List => assert!(index(ty.element().unwrap()) < at),
             TypeKind::Primitive => {}
+            other => panic!("{other:?}"),
         }
     }
     for metadata in STRUCTS.values() {
-        for field in metadata.fields {
-            assert!((field.ty as usize) < TYPE_REFS.len());
+        for field in metadata.fields() {
+            index(field.type_ref());
         }
     }
     for metadata in ENUMS.values() {
-        for variant in metadata.variants {
-            if metadata.kind == EnumKind::Unit {
-                assert!(variant.payload_type.is_none());
+        for variant in metadata.variants() {
+            if metadata.kind() == EnumKind::Unit {
+                assert!(variant.payload_type().is_none());
             }
-            if let Some(payload) = variant.payload_type {
-                let ty = &TYPE_REFS[payload as usize];
-                if let Some(name) = variant.payload_struct {
-                    assert_eq!(ty.kind, TypeKind::Struct);
-                    assert_eq!(ty.name, name);
+            if let Some(ty) = variant.payload_type() {
+                index(ty);
+                if let Some(name) = variant.payload_struct() {
+                    assert_eq!(ty.kind(), TypeKind::Struct);
+                    assert_eq!(ty.name(), name);
                 }
             } else {
-                assert!(variant.payload_struct.is_none());
+                assert!(variant.payload_struct().is_none());
             }
         }
+    }
+    for command in COMMANDS {
+        command.returns().map(index);
     }
 }
 
@@ -150,7 +161,7 @@ fn every_command_and_event_is_in_its_module() {
     // The transaction action's data is that same struct.
     let _: fn(qapi::DriveBackupWrapper) -> DriveBackup = |wrapper| wrapper.data;
 
-    let names: Vec<_> = COMMANDS.iter().map(|command| command.name).collect();
+    let names: Vec<_> = COMMANDS.iter().map(|command| command.name()).collect();
     assert_in_their_modules(
         "QMP",
         &names,
@@ -162,7 +173,7 @@ fn every_command_and_event_is_in_its_module() {
     );
     let names: Vec<_> = qapi::qga::metadata::COMMANDS
         .iter()
-        .map(|command| command.name)
+        .map(|command| command.name())
         .collect();
     assert_in_their_modules(
         "QGA",
@@ -192,13 +203,13 @@ fn structs_and_enums_populated() {
 #[test]
 fn blockdev_add_is_a_flat_union() {
     let s = STRUCTS.get("BlockdevAdd").expect("BlockdevAdd missing");
-    assert!(s.is_union, "BlockdevAdd should be detected as a union");
+    assert!(s.is_union(), "BlockdevAdd should be detected as a union");
     assert!(
-        s.discriminator_field.is_some(),
+        s.discriminator_field().is_some(),
         "BlockdevAdd should expose its discriminator field"
     );
     assert!(
-        s.branch_enum.is_some(),
+        s.branch_enum().is_some(),
         "BlockdevAdd should reference a branch enum"
     );
 }
@@ -208,16 +219,16 @@ fn empty_args_command_present() {
     // `query-status` returns StatusInfo and takes no arguments.
     let cmd = COMMANDS
         .iter()
-        .find(|c| c.wire_name == "query-status")
+        .find(|c| c.wire_name() == "query-status")
         .expect("query-status command missing");
     assert_eq!(
-        cmd.args.fields.len(),
+        cmd.args().fields().len(),
         0,
         "query-status should have zero fields, got {}",
-        cmd.args.fields.len()
+        cmd.args().fields().len()
     );
     assert!(
-        cmd.returns.is_some(),
+        cmd.returns().is_some(),
         "query-status should have a return type"
     );
 }
@@ -228,7 +239,7 @@ fn alternate_enum_classified() {
         .get("StrOrNull")
         .expect("StrOrNull alternate missing from ENUMS");
     assert_eq!(
-        e.kind,
+        e.kind(),
         EnumKind::Alternate,
         "StrOrNull should be classified as Alternate"
     );
@@ -240,12 +251,12 @@ fn flat_union_branch_enum_classified() {
         .get("BlockdevOptionsBranch")
         .expect("BlockdevOptionsBranch missing from ENUMS");
     assert_eq!(
-        e.kind,
+        e.kind(),
         EnumKind::UnionBranch,
         "BlockdevOptionsBranch should be classified as UnionBranch"
     );
     assert!(
-        e.variants.iter().any(|v| v.payload_struct.is_some()),
+        e.variants().iter().any(|v| v.payload_struct().is_some()),
         "at least one BlockdevOptionsBranch variant should carry a payload struct"
     );
 }
@@ -257,40 +268,40 @@ fn unit_enum_classified() {
         .get("RunState")
         .or_else(|| ENUMS.get("BlockdevDriver"))
         .expect("expected at least one unit enum");
-    assert_eq!(e.kind, EnumKind::Unit);
+    assert_eq!(e.kind(), EnumKind::Unit);
 }
 
 #[test]
 fn changed_branch_payloads_expose_distinct_lifetimes_and_original_wire_tags() {
     let branches = ENUMS.get("SocketAddressLegacyBranch").unwrap();
     let current = branches
-        .variants
+        .variants()
         .iter()
-        .find(|variant| variant.name == "Inet")
+        .find(|variant| variant.name() == "Inet")
         .unwrap();
     let historical = branches
-        .variants
+        .variants()
         .iter()
-        .find(|variant| variant.name == "InetLegacy")
+        .find(|variant| variant.name() == "InetLegacy")
         .unwrap();
-    assert_eq!(current.wire_name, "inet");
-    assert_eq!(historical.wire_name, "inet");
-    assert_eq!(current.since, (6, 2, 0));
-    assert_eq!(historical.until, Some((6, 2, 0)));
-    assert_eq!(current.payload_struct, Some("InetSocketAddressWrapper"));
-    assert_eq!(historical.payload_struct, Some("InetSocketAddress"));
+    assert_eq!(current.wire_name(), "inet");
+    assert_eq!(historical.wire_name(), "inet");
+    assert_eq!(current.since(), (6, 2, 0));
+    assert_eq!(historical.until(), Some((6, 2, 0)));
+    assert_eq!(current.payload_struct(), Some("InetSocketAddressWrapper"));
+    assert_eq!(historical.payload_struct(), Some("InetSocketAddress"));
 }
 
 #[test]
 fn required_wire_fields_stay_required_in_metadata_after_version_merging() {
     let info = STRUCTS.get("VersionInfo").unwrap();
     let qemu = info
-        .fields
+        .fields()
         .iter()
-        .find(|field| field.name == "qemu")
+        .find(|field| field.name() == "qemu")
         .unwrap();
     assert!(
-        !qemu.optional,
+        !qemu.is_optional(),
         "version merging must not turn wire-required into schema-optional"
     );
     let value: qapi::VersionInfo = serde_json::from_value(serde_json::json!({
@@ -309,21 +320,17 @@ fn flags_and_features_describe_every_release() {
     let command = |wire_name| {
         COMMANDS
             .iter()
-            .find(|command| command.wire_name == wire_name)
+            .find(|command| command.wire_name() == wire_name)
             .unwrap()
+    };
+    let runs = |runs: &[Releases]| -> Vec<_> {
+        runs.iter().map(|run| (run.since(), run.until())).collect()
     };
     // QEMU 3.0 added migrate-pause, out of band from the start, and 7.1
     // allowed block-job-complete before the machine is configured. 10.1
     // deprecates it.
     let pause = command("migrate-pause");
-    assert_eq!(
-        pause.allow_oob,
-        [Releases {
-            since: (3, 0, 0),
-            until: None
-        }]
-        .as_slice()
-    );
+    assert_eq!(runs(pause.allow_oob()), [((3, 0, 0), None)]);
     let complete = command("block-job-complete");
     assert!(!complete.allows_preconfig((7, 0, 0)) && complete.allows_preconfig((7, 1, 0)));
     assert!(!complete.is_deprecated((10, 0, 0)) && complete.is_deprecated((10, 1, 0)));
@@ -332,32 +339,34 @@ fn flags_and_features_describe_every_release() {
     let detach = STRUCTS
         .get("Migrate")
         .unwrap()
-        .fields
+        .fields()
         .iter()
-        .find(|field| field.wire_name == "detach")
+        .find(|field| field.wire_name() == "detach")
         .unwrap();
-    assert_eq!(
-        detach.deprecated,
-        [Releases {
-            since: (10, 1, 0),
-            until: Some((11, 0, 0))
-        }]
-        .as_slice()
-    );
+    assert_eq!(runs(detach.deprecated()), [((10, 1, 0), Some((11, 0, 0)))]);
     assert!(!detach.is_deprecated((10, 0, 0)) && detach.is_deprecated((10, 2, 0)));
     // The guest agent replied to guest-shutdown until 1.1, and its replies
     // name their builtins as the newest release does.
     let qga = |wire_name| {
         qapi::qga::metadata::COMMANDS
             .iter()
-            .find(|command| command.wire_name == wire_name)
+            .find(|command| command.wire_name() == wire_name)
             .unwrap()
     };
     let shutdown = qga("guest-shutdown");
     assert!(shutdown.sends_success_response((1, 0, 0)));
     assert!(!shutdown.sends_success_response((1, 1, 0)));
-    let time = &qapi::qga::metadata::TYPE_REFS[qga("guest-get-time").returns.unwrap() as usize];
-    assert_eq!(time.name, "int");
-    let status = &TYPE_REFS[command("query-status").returns.unwrap() as usize];
-    assert_eq!(status.name, "StatusInfo");
+    let time = qga("guest-get-time").returns().unwrap();
+    assert_eq!(time.name(), "int");
+    // It resolves against the guest agent's pool, not that of QMP.
+    assert!(
+        qapi::qga::metadata::TYPE_REFS
+            .iter()
+            .any(|entry| std::ptr::eq(entry, time))
+    );
+    assert!(!TYPE_REFS.iter().any(|entry| std::ptr::eq(entry, time)));
+    let status = command("query-status").returns().unwrap();
+    assert_eq!(status.name(), "StatusInfo");
+    // One set of types describes both protocols.
+    let _: &qapi::metadata::CommandMeta = qga("guest-get-time");
 }

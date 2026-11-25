@@ -127,9 +127,9 @@ fn main() {
     assert!(!commands::Flip::SUCCESS_RESPONSE);
     assert!(commands::FeatureFlip::UNSTABLE);
     assert!(!commands::Stabilized::UNSTABLE);
-    let command = metadata::COMMANDS.iter().find(|command| command.wire_name == "flip").unwrap();
-    let feature_flip = metadata::COMMANDS.iter().find(|command| command.wire_name == "feature-flip").unwrap();
-    let stabilized = metadata::COMMANDS.iter().find(|command| command.wire_name == "stabilized").unwrap();
+    let command = metadata::COMMANDS.iter().find(|command| command.wire_name() == "flip").unwrap();
+    let feature_flip = metadata::COMMANDS.iter().find(|command| command.wire_name() == "feature-flip").unwrap();
+    let stabilized = metadata::COMMANDS.iter().find(|command| command.wire_name() == "stabilized").unwrap();
     for (version, enabled) in [((6,1,0),true), ((8,0,0),false), ((11,1,3),true)] {
         assert_eq!(command.allows_oob(version), enabled);
         assert_eq!(command.allows_preconfig(version), enabled);
