@@ -223,12 +223,8 @@ fn flattened_maps_capture_only_unclaimed_keys_and_follow_their_lifetime() {
 
 #[test]
 fn synthetic_gen_false_catchall_is_not_a_required_wire_property() {
-    let value = qapi::commands::QomSet {
-        path: "/object".into(),
-        property: "property".into(),
-        value: serde_json::Value::Null,
-        arguments: None,
-    };
+    let value =
+        qapi::commands::QomSet::new("/object".into(), "property".into(), serde_json::Value::Null);
     assert_eq!(
         qapi::to_value((2, 4, 0), &value).unwrap(),
         json!({"path":"/object","property":"property","value":null})

@@ -18,7 +18,7 @@ use std::path::Path;
 
 async fn print_status() -> qapi_protocol::Result<()> {
     let (qmp, _events) = qapi_protocol::Qmp::new(Path::new("/run/vm/qmp.sock")).await?;
-    let status = qmp.execute(&qapi::commands::QueryStatus {}).await?;
+    let status = qmp.execute(&qapi::commands::QueryStatus::default()).await?;
     println!("running: {}", status.running);
     qmp.shutdown().await;
     Ok(())

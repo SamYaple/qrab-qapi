@@ -333,6 +333,7 @@ fn gen_returns_enum(
         #[doc = #doc]
         #[allow(deprecated, clippy::large_enum_variant)]
         #[derive(::core::fmt::Debug, ::core::clone::Clone)]
+        #[non_exhaustive]
         #vis enum #enum_name {
             #(#variants)*
         }

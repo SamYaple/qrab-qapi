@@ -690,6 +690,18 @@ uses the attribute depends on `qrab-qapi` under its library name, and
 `qrab-qapi` declares `extern crate self as qapi` for its own generated
 modules, which therefore import no alias.
 
+The expansion marks every item `#[non_exhaustive]`, and the `Returns` enum
+of a command too, so that a baseline that adds fields or variants does not
+break code outside the crate. It gives a struct its construction API instead:
+`Default`, with every field `None`, where every field is an `Option` or there
+is none, and otherwise `new`, which takes the non-`Option` fields in
+declaration order and sets the others to `None`. Both cover the fields that
+the build range keeps, and `new` always takes the same arguments, since a
+field with a lifetime is an `Option`. A field that newer releases require is
+an `Option` too, so `Default` leaves it `None` and serialization for such a
+peer reports it. Enum variants, union branches among them, hold their payload
+as a tuple variant and are built as usual.
+
 QAPI's untyped values, `any` and the `visitor`, `dict` and `**` of the
 oldest schemas, are `serde_json::Value`. A `gen: false` command, whose
 schema declares only some of its arguments, takes the others in a

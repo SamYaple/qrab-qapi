@@ -38,22 +38,14 @@ async fn real_guest_agent_sync_ping_and_large_typed_file_read() {
     .expect("guest agent did not open its socket");
     let mut client = Qga::new(&socket).await.unwrap();
     eprintln!("Validated guest-agent version: {:?}", client.version());
-    client.execute(&GuestPing {}).await.unwrap();
-    let handle = client
-        .execute(&GuestFileOpen {
-            path: payload.to_str().unwrap().into(),
-            mode: Some("r".into()),
-        })
-        .await
-        .unwrap();
+    client.execute(&GuestPing::default()).await.unwrap();
+    let mut open = GuestFileOpen::new(payload.to_str().unwrap().into());
+    open.mode = Some("r".into());
+    let handle = client.execute(&open).await.unwrap();
+    let mut read = GuestFileReadCommand::new(handle);
+    read.count = Some(2 * 1024 * 1024);
     let result = client
-        .execute_with_reply_limit(
-            &GuestFileReadCommand {
-                handle,
-                count: Some(2 * 1024 * 1024),
-            },
-            FILE_READ_REPLY_BYTES,
-        )
+        .execute_with_reply_limit(&read, FILE_READ_REPLY_BYTES)
         .await
         .unwrap();
     assert_eq!(result.count, 2 * 1024 * 1024);
@@ -61,25 +53,18 @@ async fn real_guest_agent_sync_ping_and_large_typed_file_read() {
     // All bytes are x; check the exact base64 shape without another dependency.
     let expected = "eHh4".repeat((2 * 1024 * 1024) / 3) + "eHg=";
     assert_eq!(result.buf_b64, expected);
-    client.execute(&GuestFileClose { handle }).await.unwrap();
+    client.execute(&GuestFileClose::new(handle)).await.unwrap();
     // Alternates use their actual scalar wire shape (capture-output: "none").
-    let process = client
-        .execute(&GuestExecCommand {
-            path: "/usr/bin/test".into(),
-            arg: Some(vec!["-e".into(), payload.to_str().unwrap().into()]),
-            capture_output: Some(qapi::qga::GuestExecCaptureOutput::Mode(
-                qapi::qga::GuestExecCaptureOutputMode::None,
-            )),
-            capture_output_legacy: None,
-            env: None,
-            input_data: None,
-        })
-        .await
-        .unwrap();
+    let mut exec = GuestExecCommand::new("/usr/bin/test".into());
+    exec.arg = Some(vec!["-e".into(), payload.to_str().unwrap().into()]);
+    exec.capture_output = Some(qapi::qga::GuestExecCaptureOutput::Mode(
+        qapi::qga::GuestExecCaptureOutputMode::None,
+    ));
+    let process = client.execute(&exec).await.unwrap();
     tokio::time::timeout(Duration::from_secs(5), async {
         loop {
             let status = client
-                .execute(&GuestExecStatusCommand { pid: process.pid })
+                .execute(&GuestExecStatusCommand::new(process.pid))
                 .await
                 .unwrap();
             if status.exited {

@@ -13,10 +13,8 @@ use tokio::{
 async fn timed_out_response_closes_session_and_cannot_be_reused() {
     let options = ClientOptions::default().with_command_timeout(Duration::from_millis(20));
     let (mut client, mut peer) = support::qga(options).await;
-    let (result, _) = tokio::join!(
-        client.execute(&qapi::qga::commands::GuestPing {}),
-        peer.recv_command()
-    );
+    let guest_ping = qapi::qga::commands::GuestPing::default();
+    let (result, _) = tokio::join!(client.execute(&guest_ping), peer.recv_command());
     assert!(matches!(
         result,
         Err(Error::Timeout {
@@ -26,7 +24,9 @@ async fn timed_out_response_closes_session_and_cannot_be_reused() {
     ));
     assert!(client.is_closed());
     assert!(matches!(
-        client.execute(&qapi::qga::commands::GuestPing {}).await,
+        client
+            .execute(&qapi::qga::commands::GuestPing::default())
+            .await,
         Err(Error::Closed)
     ));
     assert!(peer.recv_command().await.is_err());
@@ -57,7 +57,7 @@ async fn cancelling_a_partially_read_response_closes_session() {
     assert!(
         tokio::time::timeout(
             Duration::from_millis(30),
-            client.execute(&qapi::qga::commands::GuestPing {})
+            client.execute(&qapi::qga::commands::GuestPing::default())
         )
         .await
         .is_err()
@@ -143,7 +143,8 @@ async fn an_agent_that_cannot_sync_fails_the_handshake_with_its_error() {
 #[tokio::test]
 async fn error_responses_preserve_unknown_classes_and_allow_reuse() {
     let (mut client, mut peer) = support::qga(ClientOptions::default()).await;
-    let (result, ()) = tokio::join!(client.execute(&qapi::qga::commands::GuestPing {}), async {
+    let guest_ping = qapi::qga::commands::GuestPing::default();
+    let (result, ()) = tokio::join!(client.execute(&guest_ping), async {
         peer.recv_command().await.unwrap();
         peer.send_error("NewAgentError", "exact").await.unwrap();
     });
@@ -152,7 +153,8 @@ async fn error_responses_preserve_unknown_classes_and_allow_reuse() {
         e => panic!("{e:?}"),
     }
     assert!(!client.is_closed());
-    let (result, ()) = tokio::join!(client.execute(&qapi::qga::commands::GuestPing {}), async {
+    let guest_ping = qapi::qga::commands::GuestPing::default();
+    let (result, ()) = tokio::join!(client.execute(&guest_ping), async {
         peer.recv_command().await.unwrap();
         peer.send_return(json!({})).await.unwrap();
     });
@@ -190,7 +192,7 @@ async fn malformed_reply_is_not_success_and_invalid_arguments_are_not_sent() {
 #[tokio::test]
 async fn response_less_shutdown_is_an_explicit_delivery_only_operation() {
     let (mut client, mut peer) = support::qga(ClientOptions::default()).await;
-    let command = qapi::qga::commands::GuestShutdown { mode: None };
+    let command = qapi::qga::commands::GuestShutdown::default();
     assert!(matches!(
         client.execute(&command).await,
         Err(Error::InvalidRequest(InvalidRequestKind::NoSuccessResponse { ref command, .. }))
@@ -229,7 +231,8 @@ fn hostile_reply(bytes: usize) -> Value {
 async fn a_reply_over_the_limit_is_refused_at_the_limit_and_closes_the_session() {
     let options = ClientOptions::default().with_max_message_bytes(4096);
     let (mut client, mut peer) = support::qga(options).await;
-    let (result, ()) = tokio::join!(client.execute(&qapi::qga::commands::GuestPing {}), async {
+    let guest_ping = qapi::qga::commands::GuestPing::default();
+    let (result, ()) = tokio::join!(client.execute(&guest_ping), async {
         peer.recv_command().await.unwrap();
         peer.send_return(hostile_reply(64 * 1024)).await.unwrap();
     });
@@ -243,10 +246,7 @@ async fn a_reply_over_the_limit_is_refused_at_the_limit_and_closes_the_session()
 #[tokio::test]
 async fn a_large_reply_of_the_wrong_shape_is_a_decode_error_and_keeps_the_session() {
     let (mut client, mut peer) = support::qga(ClientOptions::default()).await;
-    let read = qapi::qga::commands::GuestFileReadCommand {
-        handle: 1,
-        count: None,
-    };
+    let read = qapi::qga::commands::GuestFileReadCommand::new(1);
     let (result, ()) = tokio::join!(client.execute(&read), async {
         peer.recv_command().await.unwrap();
         peer.send_return(hostile_reply(1024 * 1024)).await.unwrap();
@@ -259,10 +259,8 @@ async fn a_large_reply_of_the_wrong_shape_is_a_decode_error_and_keeps_the_sessio
 async fn a_per_call_reply_limit_admits_a_large_file_read_only_for_that_call() {
     let options = ClientOptions::default().with_max_message_bytes(4096);
     let (mut client, mut peer) = support::qga(options).await;
-    let read = qapi::qga::commands::GuestFileReadCommand {
-        handle: 1,
-        count: Some(12 * 1024),
-    };
+    let mut read = qapi::qga::commands::GuestFileReadCommand::new(1);
+    read.count = Some(12 * 1024);
     let data = "eHh4".repeat(4 * 1024);
     let (result, ()) = tokio::join!(client.execute_with_reply_limit(&read, 64 * 1024), async {
         peer.recv_command().await.unwrap();
@@ -288,10 +286,13 @@ async fn a_per_call_reply_limit_admits_a_large_file_read_only_for_that_call() {
 /// `guest-file-write` chunk that fits the default limit.
 #[tokio::test]
 async fn a_file_write_chunk_must_fit_the_request_limit() {
-    let write = |bytes: usize| qapi::qga::commands::GuestFileWriteCommand {
-        buf_b64: "A".repeat(bytes.div_ceil(3) * 4),
-        count: Some(bytes as i64),
-        handle: i64::MIN,
+    let write = |bytes: usize| {
+        let mut write = qapi::qga::commands::GuestFileWriteCommand::new(
+            "A".repeat(bytes.div_ceil(3) * 4),
+            i64::MIN,
+        );
+        write.count = Some(bytes as i64);
+        write
     };
     let (mut client, mut peer) = support::qga(ClientOptions::default()).await;
     let chunk = 6 * 1024 * 1024 - 1024;
@@ -344,11 +345,11 @@ async fn a_reply_that_is_not_a_valid_response_closes_the_session() {
         ),
     ] {
         let (mut client, mut read, mut write) = raw_qga(ClientOptions::default()).await;
-        let (result, ()) =
-            tokio::join!(client.execute(&qapi::qga::commands::GuestPing {}), async {
-                support::read(&mut read).await;
-                write.write_all(reply).await.unwrap();
-            });
+        let guest_ping = qapi::qga::commands::GuestPing::default();
+        let (result, ()) = tokio::join!(client.execute(&guest_ping), async {
+            support::read(&mut read).await;
+            write.write_all(reply).await.unwrap();
+        });
         match result {
             Err(Error::Malformed(_)) if malformed => {}
             Err(Error::Protocol(_)) if !malformed => {}
@@ -415,14 +416,17 @@ async fn a_timeout_before_any_byte_is_written_keeps_the_session() {
         }
     }
     assert!(matches!(
-        client.execute(&qapi::qga::commands::GuestPing {}).await,
+        client
+            .execute(&qapi::qga::commands::GuestPing::default())
+            .await,
         Err(Error::Timeout {
             phase: TimeoutPhase::BeforeDispatch,
             ..
         })
     ));
     assert!(!client.is_closed());
-    let (result, ()) = tokio::join!(client.execute(&qapi::qga::commands::GuestPing {}), async {
+    let guest_ping = qapi::qga::commands::GuestPing::default();
+    let (result, ()) = tokio::join!(client.execute(&guest_ping), async {
         assert_eq!(peer.recv_command().await.unwrap().0, "guest-ping");
         peer.send_return(json!({})).await.unwrap();
     });

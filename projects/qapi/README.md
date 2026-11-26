@@ -18,9 +18,47 @@ use qapi::QapiCommand;
 use qapi::commands::QueryStatus;
 
 assert_eq!(QueryStatus::NAME, "query-status");
-let request = qapi::to_value((11, 1, 0), &QueryStatus {}).unwrap();
+let request = qapi::to_value((11, 1, 0), &QueryStatus::default()).unwrap();
 assert_eq!(request, serde_json::json!({}));
 ```
+
+## Building values
+
+Every generated struct and enum is `#[non_exhaustive]`, so that a new QEMU
+release can add fields and variants in a compatible release of this crate.
+Outside the crate, a struct is therefore built with a constructor rather
+than a struct literal, and a `match` on an enum has a wildcard arm:
+
+- A struct whose fields are all `Option`, or that has none, implements
+  `Default`, with every field `None`; set the fields you need afterwards.
+- Any other struct has `new`, which takes its non-`Option` fields in their
+  declaration order (the order of the struct's documentation) and leaves the
+  optional ones `None`.
+- Enum variants, union branches included, are constructed as usual.
+
+```rust
+use qapi::commands::DeviceAdd;
+
+let mut device = DeviceAdd::new("virtio-rng-pci".into());
+device.id = Some("rng0".into());
+assert_eq!(
+    qapi::to_value((11, 1, 0), &device).unwrap(),
+    serde_json::json!({"driver": "virtio-rng-pci", "id": "rng0"}),
+);
+
+fn describe(state: &qapi::RunState) -> &'static str {
+    match state {
+        qapi::RunState::Running => "running",
+        qapi::RunState::Paused => "paused",
+        _ => "another state",
+    }
+}
+assert_eq!(describe(&qapi::RunState::Paused), "paused");
+```
+
+A struct field that newer QEMU releases require is still an `Option`, so
+`Default` leaves it `None`: serialization for such a peer reports the
+missing field as an error.
 
 `qrab-qapi-protocol` provides async QMP and QGA clients for these types.
 

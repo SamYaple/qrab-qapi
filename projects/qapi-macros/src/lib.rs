@@ -63,7 +63,17 @@ use syn::{DeriveInput, parse_macro_input};
 /// The expansion derives `Debug` and `Clone` and implements `Serialize` and
 /// `Deserialize`, so the item must not derive them itself: a derive below the
 /// attribute is an error at its path, and one above it conflicts with the
-/// expansion. String enums also implement `Display`, writing the wire name.
+/// expansion.
+///
+/// The item is `#[non_exhaustive]`, so that a new QEMU release can add
+/// fields and variants without breaking code outside the crate: such code
+/// matches an enum with a wildcard arm and builds a struct with one of the
+/// constructors the expansion gives it. A struct whose fields are all
+/// `Option`, or that has none, implements `Default`, with every field
+/// `None`, and the fields are then assigned. Any other struct has
+/// `new`, which takes its non-`Option` fields in declaration order and
+/// leaves the others `None`; a struct does not derive `Default` itself.
+/// Enum variants are constructed as usual. String enums also implement `Display`, writing the wire name.
 /// Structs implement it as their QAPI name; a struct with fields that is
 /// not a command follows it with the fields that are set, as
 /// `name(wire=value, ...)` with each value in its `Debug` form.
@@ -149,7 +159,10 @@ pub(crate) fn expand(
     let ta = TypeAttrs::parse(&qapi_args, &input_ast.attrs)?;
     input_ast.attrs.retain(|a| !a.path().is_ident("qapi"));
     reject_generics(&input_ast.generics)?;
-    reject_own_derives(&input_ast.attrs)?;
+    reject_own_derives(
+        &input_ast.attrs,
+        matches!(input_ast.data, syn::Data::Struct(_)),
+    )?;
 
     let impls = match input_ast.data {
         syn::Data::Enum(_) => gen_enum(&mut input_ast, &ta, bounds)?,
@@ -175,7 +188,8 @@ pub(crate) fn expand(
 }
 
 /// Document an unstable type and its build condition, mark it deprecated,
-/// and derive `Debug` and `Clone`, which every QAPI type has.
+/// derive `Debug` and `Clone`, which every QAPI type has, and mark it
+/// `#[non_exhaustive]`, so that a QEMU release may add fields and variants.
 fn annotate_type(attrs: &mut Vec<syn::Attribute>, ta: &TypeAttrs, bounds: &VersionBounds) {
     let mut notes = Vec::new();
     // Unstable is not deprecated, so it is a doc line, not #[deprecated].
@@ -202,6 +216,12 @@ fn annotate_type(attrs: &mut Vec<syn::Attribute>, ta: &TypeAttrs, bounds: &Versi
         "type",
     ));
     attrs.push(syn::parse_quote! { #[derive(::core::fmt::Debug, ::core::clone::Clone)] });
+    if !attrs
+        .iter()
+        .any(|attr| attr.path().is_ident("non_exhaustive"))
+    {
+        attrs.push(syn::parse_quote! { #[non_exhaustive] });
+    }
 }
 
 fn reject_generics(generics: &syn::Generics) -> syn::Result<()> {
@@ -221,17 +241,22 @@ fn reject_generics(generics: &syn::Generics) -> syn::Result<()> {
 }
 
 /// Refuse a derive of a trait that the expansion provides, at the derive's
-/// path rather than at the conflicting impl.
-fn reject_own_derives(attrs: &[syn::Attribute]) -> syn::Result<()> {
+/// path rather than at the conflicting impl: for a struct also `Default`,
+/// which it implements where every field is an `Option` and leaves out
+/// where it has `new`.
+fn reject_own_derives(attrs: &[syn::Attribute], is_struct: bool) -> syn::Result<()> {
+    let provided: &[&str] = if is_struct {
+        &["Debug", "Clone", "Serialize", "Deserialize", "Default"]
+    } else {
+        &["Debug", "Clone", "Serialize", "Deserialize"]
+    };
     for attr in attrs.iter().filter(|attr| attr.path().is_ident("derive")) {
         let paths = attr.parse_args_with(
             syn::punctuated::Punctuated::<syn::Path, syn::Token![,]>::parse_terminated,
         )?;
         for path in paths {
             if let Some(last) = path.segments.last()
-                && ["Debug", "Clone", "Serialize", "Deserialize"]
-                    .iter()
-                    .any(|name| last.ident == name)
+                && provided.iter().any(|name| last.ident == name)
             {
                 return Err(syn::Error::new_spanned(
                     &path,

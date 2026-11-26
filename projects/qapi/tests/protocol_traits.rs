@@ -203,9 +203,7 @@ fn alternate_str_or_null() {
 
 #[test]
 fn struct_field_renames() {
-    let val = HumanReadableText {
-        human_readable_text: "test".to_string(),
-    };
+    let val = HumanReadableText::new("test".to_string());
     let json = to_json(&val).unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
     assert!(
@@ -213,9 +211,7 @@ fn struct_field_renames() {
         "Expected 'human-readable-text' key"
     );
 
-    let val = UuidInfo {
-        uuid: "abc".to_string(),
-    };
+    let val = UuidInfo::new("abc".to_string());
     let json = to_json(&val).unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
     assert!(parsed.get("UUID").is_some(), "Expected 'UUID' key");

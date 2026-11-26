@@ -17,36 +17,9 @@ const BELOW_LIMITS: (u32, u32, u32) = (10, 1, 0);
 /// Build a representative `ImageInfo` with the gated `limits` field
 /// populated. Required fields kept minimal.
 fn image_info_with_limits() -> ImageInfo {
-    ImageInfo {
-        actual_size: None,
-        backing_filename: None,
-        backing_filename_format: None,
-        backing_image: None,
-        cluster_size: None,
-        compressed: None,
-        dirty_flag: None,
-        encrypted: None,
-        filename: "test.qcow2".to_string(),
-        format: "qcow2".to_string(),
-        format_specific: None,
-        full_backing_filename: None,
-        limits: Some(BlockLimitsInfo {
-            discard_alignment: None,
-            max_discard: None,
-            max_hw_iov: None,
-            max_hw_transfer: None,
-            max_iov: 1024,
-            max_transfer: None,
-            max_write_zeroes: None,
-            min_mem_alignment: 512,
-            opt_mem_alignment: 4096,
-            opt_transfer: None,
-            request_alignment: 512,
-            write_zeroes_alignment: None,
-        }),
-        snapshots: None,
-        virtual_size: 1 << 30,
-    }
+    let mut info = ImageInfo::new("test.qcow2".to_string(), "qcow2".to_string(), 1 << 30);
+    info.limits = Some(BlockLimitsInfo::new(1024, 512, 4096, 512));
+    info
 }
 
 /// When the peer version is below a field's `since`, serializing a value

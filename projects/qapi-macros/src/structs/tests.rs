@@ -452,6 +452,100 @@ fn the_bounds_keep_the_return_types_of_their_releases() {
     );
 }
 
+/// Every struct and enum is `#[non_exhaustive]`, the `Returns` enum of a
+/// command too, once.
+#[test]
+fn every_item_is_non_exhaustive() {
+    let count = |text: &str| text.matches("non_exhaustive").count();
+    for item in ["struct S { a: u8 }", "struct S {}", "enum E { A }"] {
+        let (item, rest) = expanded("", item, &VersionBounds::default());
+        let attrs = &item.attrs;
+        let attrs = quote::quote!(#(#attrs)*).to_string();
+        assert_eq!(count(&attrs), 1, "{attrs}");
+        assert_eq!(count(&rest), 0, "{rest}");
+    }
+    let (item, _) = expanded(
+        "",
+        "#[non_exhaustive] struct S {}",
+        &VersionBounds::default(),
+    );
+    let attrs = &item.attrs;
+    let attrs = quote::quote!(#(#attrs)*).to_string();
+    assert_eq!(count(&attrs), 1, "{attrs}");
+    let (_, rest) = expanded(
+        r#"command, added = "1.0.0", returns = "B", returns(added = "1.0.0", value = "A"),
+            returns(added = "2.0.0", value = "B"), returns_enum = "R""#,
+        "struct C {}",
+        &VersionBounds::default(),
+    );
+    assert!(
+        rest.contains("# [non_exhaustive] pub enum R")
+            || rest.contains("# [non_exhaustive] enum R"),
+        "{rest}"
+    );
+}
+
+/// A struct of `Option` fields, or of none, implements `Default`; any other
+/// has `new`, which takes the fields that are no `Option` in declaration
+/// order, of those the bounds keep.
+#[test]
+fn a_struct_has_default_or_new() {
+    use crate::support::Version;
+    let construction = |item: &str, bounds: &VersionBounds| {
+        let (_, rest) = expanded("", item, bounds);
+        let default = rest.contains("impl :: core :: default :: Default for S");
+        let new = rest
+            .split("fn new (")
+            .nth(1)
+            .map(|tail| tail.split(") -> Self").next().unwrap().to_owned());
+        (default, new)
+    };
+    let unbounded = VersionBounds::default();
+    assert_eq!(construction("struct S {}", &unbounded), (true, None));
+    assert_eq!(
+        construction(
+            "pub struct S { a: Option<u8>, #[qapi(required)] b: Option<String> }",
+            &unbounded
+        ),
+        (true, None)
+    );
+    assert_eq!(
+        construction(
+            "pub struct S { z: String, a: Option<u8>, r#type: Vec<u8> }",
+            &unbounded
+        ),
+        (false, Some("z : String , r#type : Vec < u8 >".to_owned()))
+    );
+    let (_, rest) = expanded("", "pub struct S { z: String, a: Option<u8> }", &unbounded);
+    assert!(rest.contains("pub fn new"), "{rest}");
+    assert!(
+        rest.contains("Self { z , a : :: core :: option :: Option :: None , }"),
+        "{rest}"
+    );
+    assert!(
+        rest.contains(
+            "A `S` with its required fields, `z`, in declaration order, and every optional \
+             field `None`."
+        ),
+        "{rest}"
+    );
+    // A gated field is an `Option`, and one the bounds leave out is no
+    // field.
+    let gated = r#"struct S { #[qapi(removed = "2.0.0")] old: Option<u8>, a: Option<u8> }"#;
+    let (_, rest) = expanded(
+        "",
+        gated,
+        &VersionBounds {
+            min: Some(Version(3, 0, 0)),
+            max: None,
+        },
+    );
+    assert!(
+        rest.contains("Self { a : :: core :: option :: Option :: None , }"),
+        "{rest}"
+    );
+}
+
 /// The generator names the enum of a command's return types, as
 /// `returns_enum`, which a history needs and nothing else takes.
 #[test]

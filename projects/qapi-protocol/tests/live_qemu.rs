@@ -91,7 +91,7 @@ async fn smoke(binary: &OsStr, frontend: MonitorFrontend, pretty: bool) {
     .await
     .expect("QEMU did not open QMP socket");
     let (qmp, _) = Qmp::new(&socket).await.unwrap();
-    let version = qmp.execute(&QueryVersion {}).await.unwrap();
+    let version = qmp.execute(&QueryVersion::default()).await.unwrap();
     let triple = version
         .qemu
         .expect("modern query-version must include VersionTriple");
@@ -107,9 +107,9 @@ async fn smoke(binary: &OsStr, frontend: MonitorFrontend, pretty: bool) {
         "Validated QMP peer version: {:?}, frontend={frontend:?}, pretty={pretty}",
         qmp.version()
     );
-    let status = qmp.execute(&QueryStatus {}).await.unwrap();
+    let status = qmp.execute(&QueryStatus::default()).await.unwrap();
     assert!(!status.running);
-    let commands = qmp.execute(&QueryCommands {}).await.unwrap();
+    let commands = qmp.execute(&QueryCommands::default()).await.unwrap();
     let known: BTreeSet<_> = qapi::metadata::COMMANDS
         .iter()
         .map(|c| c.wire_name())
@@ -123,17 +123,18 @@ async fn smoke(binary: &OsStr, frontend: MonitorFrontend, pretty: bool) {
         missing.is_empty(),
         "Live QEMU commands missing from generated metadata: {missing:?}"
     );
-    let schema = qmp
-        .execute(&QueryQmpSchema { arguments: None })
-        .await
-        .unwrap();
+    let schema = qmp.execute(&QueryQmpSchema::default()).await.unwrap();
     assert!(schema.iter().any(|s| s.name == QueryStatus::NAME));
     // Real pipelining and OOB execution against the current QEMU monitor.
+    let query_name = QueryName::default();
+    let query_status = QueryStatus::default();
+    let query_version = QueryVersion::default();
+    let query_yank = QueryYank::default();
     let replies = tokio::join!(
-        qmp.execute(&QueryVersion {}),
-        qmp.execute(&QueryStatus {}),
-        qmp.execute(&QueryName {}),
-        qmp.execute_oob(&QueryYank {})
+        qmp.execute(&query_version),
+        qmp.execute(&query_status),
+        qmp.execute(&query_name),
+        qmp.execute_oob(&query_yank)
     );
     replies.0.unwrap();
     replies.1.unwrap();
@@ -144,8 +145,8 @@ async fn smoke(binary: &OsStr, frontend: MonitorFrontend, pretty: bool) {
             .await,
         Err(qapi_protocol::Error::Remote(_))
     ));
-    qmp.execute(&QueryStatus {}).await.unwrap();
-    qmp.execute(&Quit {}).await.unwrap();
+    qmp.execute(&QueryStatus::default()).await.unwrap();
+    qmp.execute(&Quit::default()).await.unwrap();
     qmp.shutdown().await;
     let status = tokio::time::timeout(Duration::from_secs(5), child.wait())
         .await

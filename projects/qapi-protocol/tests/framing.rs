@@ -57,7 +57,8 @@ async fn malformed_envelopes_fail_the_connection_instead_of_becoming_success() {
         let (client, _, mut reader, mut writer) = support::raw_qmp(ClientOptions::default()).await;
         let client = Arc::new(client);
         let other = client.clone();
-        let call = tokio::spawn(async move { other.execute(&qapi::commands::Quit {}).await });
+        let call =
+            tokio::spawn(async move { other.execute(&qapi::commands::Quit::default()).await });
         support::read(&mut reader).await;
         support::write(&mut writer, malformed).await;
         assert!(
@@ -459,7 +460,8 @@ async fn event_data_must_be_an_object() {
 #[tokio::test]
 async fn a_unit_reply_must_be_an_empty_object() {
     let (client, _, mut peer) = support::qmp(ClientOptions::default()).await;
-    let (result, ()) = tokio::join!(client.execute(&qapi::commands::Stop {}), async {
+    let stop = qapi::commands::Stop::default();
+    let (result, ()) = tokio::join!(client.execute(&stop), async {
         peer.recv_command().await.unwrap();
         peer.send_return(json!({"unexpected": true})).await.unwrap();
     });

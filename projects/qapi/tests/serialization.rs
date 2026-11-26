@@ -83,9 +83,7 @@ fn alternate_null_roundtrip() {
 
 #[test]
 fn struct_serialize_with_rename() {
-    let val = HumanReadableText {
-        human_readable_text: "test output".to_string(),
-    };
+    let val = HumanReadableText::new("test output".to_string());
     let json = to_json(&val).unwrap();
     assert!(json.contains(r#""human-readable-text""#));
     assert!(json.contains(r#""test output""#));
@@ -99,16 +97,8 @@ fn struct_deserialize_with_rename() {
 }
 
 #[test]
-#[allow(
-    deprecated,
-    reason = "a struct literal must set the deprecated singlestep field"
-)]
 fn struct_roundtrip() {
-    let val = StatusInfo {
-        running: true,
-        singlestep: None,
-        status: RunState::Running,
-    };
+    let val = StatusInfo::new(true, RunState::Running);
     let json = to_json(&val).unwrap();
     let back: StatusInfo = serde_json::from_str(&json).unwrap();
     assert!(back.running);
@@ -146,14 +136,12 @@ fn event_trait() {
 
 #[test]
 fn command_serialize() {
-    let cmd = QmpCapabilities { enable: None };
+    let mut cmd = QmpCapabilities::default();
     let json = to_json(&cmd).unwrap();
     // Should serialize to an empty object (no enable field since it's None)
     assert_eq!(json, "{}");
 
-    let cmd = QmpCapabilities {
-        enable: Some(vec![QmpCapability::Oob]),
-    };
+    cmd.enable = Some(vec![QmpCapability::Oob]);
     let json = to_json(&cmd).unwrap();
     assert!(json.contains("\"enable\""));
     assert!(json.contains("\"oob\""));
@@ -161,10 +149,9 @@ fn command_serialize() {
 
 #[test]
 fn event_serialize() {
-    let evt = ShutdownEvent {
-        guest: Some(true),
-        reason: Some(ShutdownCause::HostSignal),
-    };
+    let mut evt = ShutdownEvent::default();
+    evt.guest = Some(true);
+    evt.reason = Some(ShutdownCause::HostSignal);
     let json = to_json(&evt).unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
     assert_eq!(parsed["guest"], true);
@@ -187,12 +174,10 @@ fn version_gating_rejects_old_version() {
 
 #[test]
 fn union_struct_serialize() {
-    let val = YankInstance {
-        r#type: YankInstanceType::Chardev,
-        u: Some(YankInstanceBranch::Chardev(YankInstanceChardev {
-            id: "serial0".to_string(),
-        })),
-    };
+    let mut val = YankInstance::new(YankInstanceType::Chardev);
+    val.u = Some(YankInstanceBranch::Chardev(YankInstanceChardev::new(
+        "serial0".to_string(),
+    )));
     let json = to_json(&val).unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
     assert_eq!(parsed["type"], "chardev");
@@ -334,20 +319,9 @@ fn sev_info_deser_pre_91() {
 
 #[test]
 fn sev_info_roundtrip_sev() {
-    let info = SevInfo {
-        api_major: 1,
-        api_minor: 55,
-        build_id: 49,
-        enabled: true,
-        handle: None,
-        policy: None,
-        sev_type: Some(SevGuestType::Sev),
-        state: SevState::Running,
-        u: Some(SevInfoBranch::Sev(SevGuestInfo {
-            handle: 1,
-            policy: 1,
-        })),
-    };
+    let mut info = SevInfo::new(1, 55, 49, true, SevState::Running);
+    info.sev_type = Some(SevGuestType::Sev);
+    info.u = Some(SevInfoBranch::Sev(SevGuestInfo::new(1, 1)));
     let json = to_json(&info).unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
     // Verify flat structure: handle/policy at top level, not nested
@@ -368,19 +342,9 @@ fn sev_info_roundtrip_sev() {
 
 #[test]
 fn sev_info_roundtrip_snp() {
-    let info = SevInfo {
-        api_major: 1,
-        api_minor: 55,
-        build_id: 49,
-        enabled: true,
-        handle: None,
-        policy: None,
-        sev_type: Some(SevGuestType::SevSnp),
-        state: SevState::Running,
-        u: Some(SevInfoBranch::SevSnp(SevSnpGuestInfo {
-            snp_policy: 196608,
-        })),
-    };
+    let mut info = SevInfo::new(1, 55, 49, true, SevState::Running);
+    info.sev_type = Some(SevGuestType::SevSnp);
+    info.u = Some(SevInfoBranch::SevSnp(SevSnpGuestInfo::new(196608)));
     let json = to_json(&info).unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
     assert_eq!(parsed["sev-type"], "sev-snp");

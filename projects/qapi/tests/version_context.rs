@@ -124,12 +124,11 @@ fn scoped_enum_and_alternate_decoding_enforces_unique_variant_lifetimes() {
 
 #[test]
 fn generated_migration_commands_cannot_send_capabilities_outside_their_lifetime() {
-    let command = qapi::commands::MigrateSetCapabilities {
-        capabilities: vec![qapi::MigrationCapabilityStatus {
-            capability: qapi::MigrationCapability::MappedRam,
-            state: true,
-        }],
-    };
+    let command =
+        qapi::commands::MigrateSetCapabilities::new(vec![qapi::MigrationCapabilityStatus::new(
+            qapi::MigrationCapability::MappedRam,
+            true,
+        )]);
     assert!(qapi::to_value((8, 2, 0), &command).is_err());
     assert_eq!(
         qapi::to_value((9, 0, 0), &command).unwrap(),
@@ -138,12 +137,11 @@ fn generated_migration_commands_cannot_send_capabilities_outside_their_lifetime(
         })
     );
     #[allow(deprecated)]
-    let retired = qapi::commands::MigrateSetCapabilities {
-        capabilities: vec![qapi::MigrationCapabilityStatus {
-            capability: qapi::MigrationCapability::ZeroBlocks,
-            state: true,
-        }],
-    };
+    let retired =
+        qapi::commands::MigrateSetCapabilities::new(vec![qapi::MigrationCapabilityStatus::new(
+            qapi::MigrationCapability::ZeroBlocks,
+            true,
+        )]);
     assert!(qapi::to_value((10, 2, 0), &retired).is_ok());
     assert!(qapi::to_value((11, 0, 0), &retired).is_err());
 }

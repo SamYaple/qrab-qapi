@@ -77,7 +77,7 @@ Query a running QEMU over its QMP socket, inside an async function:
 
 ```rust
 let (qmp, _events) = qapi_protocol::Qmp::new(std::path::Path::new("/run/vm/qmp.sock")).await?;
-let status = qmp.execute(&qapi::commands::QueryStatus {}).await?;
+let status = qmp.execute(&qapi::commands::QueryStatus::default()).await?;
 println!("running: {}", status.running);
 qmp.shutdown().await;
 ```

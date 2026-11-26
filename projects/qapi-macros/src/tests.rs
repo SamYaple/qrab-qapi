@@ -569,6 +569,21 @@ fn own_derives_of_the_expansions_traits_are_errors() {
             at,
         );
     }
+    // A struct implements `Default` or has `new`; an enum may derive it.
+    assert_error(
+        "",
+        "#[derive(Default)] struct S { a: Option<u8> }",
+        "qapi: #[qapi] provides `Default` itself",
+        "Default",
+    );
+    assert!(
+        expand(
+            "",
+            "#[derive(Default)] enum E { #[default] A }",
+            &VersionBounds::default()
+        )
+        .is_ok()
+    );
     let (item, rest) = expanded(
         "",
         "#[derive(PartialEq, Eq)] enum E { A }",

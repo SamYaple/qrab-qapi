@@ -14,6 +14,7 @@ use syn::ext::IdentExt;
 use syn::{DeriveInput, Fields, Type};
 
 mod alias;
+mod construct;
 mod de;
 mod ser;
 
@@ -207,12 +208,14 @@ pub(crate) fn gen_struct(
         TokenStream2::new()
     };
     let display = expansion.display();
+    let construction = construct::construction(&struct_name, &input_ast.vis, &fields);
     Ok(quote! {
         #ser
         #de
         #command
         #event
         #display
+        #construction
     })
 }
 

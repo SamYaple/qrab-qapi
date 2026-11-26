@@ -91,7 +91,13 @@ for qapi_series in 9.2 10.0 10.1 10.2 11.0 11.1; do
         cargo check --locked -p qrab-qapi
 done
 # Check the combined maintained range as well as each individual series.
-QEMU_MIN_VERSION=9.2.0 QEMU_MAX_VERSION="$qapi_max" cargo check --locked -p qrab-qapi
+# Code that builds the generated types with their constructors and matches
+# them with wildcard arms compiles there and with a lower minimum, which adds
+# fields and variants but keeps the shapes.
+QEMU_MIN_VERSION=9.2.0 QEMU_MAX_VERSION="$qapi_max" \
+    cargo test --locked -p qrab-qapi --test additive_use
+QEMU_MIN_VERSION=3.0.0 QEMU_MAX_VERSION="$qapi_max" \
+    cargo test --locked -p qrab-qapi --test additive_use
 
 # Opt-in exploratory coverage; older releases are outside the maintained matrix.
 if [[ ${QRAB_QAPI_HISTORICAL_BOUNDS:-0} == 1 ]]; then

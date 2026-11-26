@@ -131,13 +131,9 @@ async fn typed_guest_file_read_decodes_response_not_request() {
             .unwrap();
     });
     let mut client = Qga::new(&path).await.unwrap();
-    let reply: qapi::qga::GuestFileRead = client
-        .execute(&qapi::qga::commands::GuestFileReadCommand {
-            handle: 7,
-            count: Some(3),
-        })
-        .await
-        .unwrap();
+    let mut read = qapi::qga::commands::GuestFileReadCommand::new(7);
+    read.count = Some(3);
+    let reply: qapi::qga::GuestFileRead = client.execute(&read).await.unwrap();
     assert_eq!(reply.count, 3);
     assert_eq!(reply.buf_b64, "YWJj");
     assert!(reply.eof);
@@ -192,14 +188,14 @@ struct TestNestedCommand {
 #[tokio::test]
 async fn commands_types_variants_and_fields_the_peer_lacks_are_unavailable() {
     let (client, _, mut peer) = support::qmp_version(ClientOptions::default(), (10, 1, 0)).await;
-    match client.execute(&TestNewCommand {}).await {
+    match client.execute(&TestNewCommand::default()).await {
         Err(Error::Unavailable { name, version, .. }) => {
             assert_eq!(name, "test-new-command");
             assert_eq!(version, (10, 1, 0));
         }
         other => panic!("{other:?}"),
     }
-    match client.execute(&TestOldCommand {}).await {
+    match client.execute(&TestOldCommand::default()).await {
         Err(Error::Unavailable { name, version, .. }) => {
             assert_eq!(name, "test-old-command");
             assert_eq!(version, (10, 1, 0));
@@ -274,7 +270,8 @@ async fn replies_decode_into_the_return_type_of_the_peers_release() {
         ((10, 1, 0), serde_json::json!({"arch": "aarch64"})),
     ] {
         let (client, _, mut peer) = support::qmp_version(ClientOptions::default(), version).await;
-        let (result, ()) = tokio::join!(client.execute(&QueryTarget {}), async {
+        let query_target = QueryTarget::default();
+        let (result, ()) = tokio::join!(client.execute(&query_target), async {
             assert_eq!(peer.recv_command().await.unwrap().0, "query-target");
             peer.send_return(reply).await.unwrap();
         });
@@ -282,7 +279,9 @@ async fn replies_decode_into_the_return_type_of_the_peers_release() {
             QueryTargetReturns::V1_2_0(info) if version < (3, 0, 0) => {
                 assert_eq!(info.arch_legacy2.as_deref(), Some("x86_64"));
             }
-            QueryTargetReturns::V3_0_0(qapi::QemuTargetInfo { arch }) if version >= (3, 0, 0) => {
+            QueryTargetReturns::V3_0_0(qapi::QemuTargetInfo { arch, .. })
+                if version >= (3, 0, 0) =>
+            {
                 let expected = if version < (10, 1, 0) {
                     qapi::SysEmuTarget::X8664
                 } else {
@@ -329,10 +328,10 @@ async fn qmp_reply_layout_uses_each_peer_version_in_band_and_oob() {
                 peer.send_return(server_reply.clone()).await.unwrap();
             }
         });
-        let value = client.execute(&TestAddress {}).await.unwrap();
+        let value = client.execute(&TestAddress::default()).await.unwrap();
         assert_eq!(qapi::to_value(version, &value).unwrap(), reply);
         if version >= (2, 12, 0) {
-            let value = client.execute_oob(&TestAddress {}).await.unwrap();
+            let value = client.execute_oob(&TestAddress::default()).await.unwrap();
             assert_eq!(qapi::to_value(version, &value).unwrap(), reply);
         }
         client.shutdown().await;
@@ -356,7 +355,7 @@ async fn qga_reply_layout_uses_guest_version() {
         peer.send_return(server_reply).await.unwrap();
     });
     let mut client = Qga::from_stream(client).await.unwrap();
-    let value = client.execute(&TestAddress {}).await.unwrap();
+    let value = client.execute(&TestAddress::default()).await.unwrap();
     assert_eq!(qapi::to_value((2, 9, 0), &value).unwrap(), reply);
     server.await.unwrap();
 }
@@ -415,7 +414,8 @@ async fn guest_agent_replies_decode_into_the_return_type_of_its_release() {
         ),
     ] {
         let (mut client, mut peer) = support::qga_version(ClientOptions::default(), version).await;
-        let (result, ()) = tokio::join!(client.execute(&GuestFstrim { minimum: None }), async {
+        let guest_fstrim = GuestFstrim::default();
+        let (result, ()) = tokio::join!(client.execute(&guest_fstrim), async {
             assert_eq!(peer.recv_command().await.unwrap().0, "guest-fstrim");
             peer.send_return(reply).await.unwrap();
         });
