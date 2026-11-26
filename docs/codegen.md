@@ -466,11 +466,27 @@ guest-fsfreeze-status, whose response is an enum.
 A command whose return type changed across pins keeps each one in the
 registry as `UnifiedStruct::returns_history`, and the emitter writes them as
 `returns(added = "...", value = "...")` beside the newest, `returns`, with
-`returns_enum = "..."`, the name of their enum (see "Rust names"). The
-changes are pinned by a test: `device-list-properties` (`DevicePropertyInfo`
-until 2.12, then `ObjectPropertyInfo`), `query-target` (`TargetInfo` until
-10.1, then `QemuTargetInfo`) and `guest-fstrim` (unit until 2.4, then
-`GuestFilesystemTrimResponse`).
+`returns_enum = "..."`, the name of their enum (see "Rust names").
+
+The merge coalesces a new return type with its predecessor where the
+predecessor is the same on the wire: the same member wire names,
+optionality, arrays, build conditions and types, which are one Rust type
+or structs the same in turn. The new type then returns, and its Rust
+lifetime starts, from the earliest release from which the predecessor is
+the same as the new type in its first release, while its metadata keeps
+QAPI's release. The predecessor takes
+`alias(added = "...", value = "...")`: a build whose minimum is at or after
+that release has it as a deprecated alias of the new type, and other builds
+the struct. A type that two coalescings would move or alias in two ways is
+`RegistryError::CoalesceAmbiguous`.
+
+The changes are pinned by a test: `device-list-properties`
+(`DevicePropertyInfo` until 2.12, then `ObjectPropertyInfo`), `query-target`
+(`TargetInfo` until 3.0, then `QemuTargetInfo`, which QEMU returns from 10.1
+and `TargetInfo` is on the wire from 3.0, when its `arch` became a
+`SysEmuTarget`) and `guest-fstrim` (unit until 2.4, then
+`GuestFilesystemTrimResponse`). Only `query-target` coalesces; the test
+pins that too.
 
 The test suite compares definition sets with QEMU's own Python parser for both
 current QMP and QGA schemas.
@@ -646,7 +662,7 @@ alone, and pins the synthesized and escaped names of the full history in
 | `{Command}Command` | The request type of a command named like a data type, such as `GuestExecCommand` | Claimed like a declaration |
 | `{Event}Event` | An event's data | Claimed like a declaration |
 | `{Owner}{Member}`, then `Inline`, `Inline2` | An anonymous struct of a schema before 2.4 | Avoids every planned name |
-| `{Command}Returns` | The enum of the return types of a command whose return type changes | None: a type, command, event, reserved name or another enum that holds the name is `RegistryError::ReturnsNameTaken`, which an entry of `RETURNS_ENUM_NAMES` in `src/namespace.rs` resolves by naming the enum |
+| `{Command}Returns` | The enum of the return types of a command whose return type still changes after coalescing | None: a type, command, event, reserved name or another enum that holds the name is `RegistryError::ReturnsNameTaken`, which an entry of `RETURNS_ENUM_NAMES` in `src/namespace.rs` resolves by naming the enum |
 | `V{major}_{minor}_{patch}` | A variant of an enum of return types, by the release that introduced the type | Unique, as the releases increase; no QAPI value spells one, since PascalCase drops the underscores |
 | `{member}_alt`, `{member}_alt2`, `{Variant}Alt` | A member whose Rust name another member of the same release has, such as `PC` beside `pc` | The newest release's member keeps the plain name; the names avoid every member of the type in any release |
 | `{member}_legacy`, `{member}_legacy2`, ...; `{Variant}Legacy`, `{Variant}Legacy2`, ... | An earlier shape or wire spelling of a member, numbered in release order by its shape in the release that opens each series | A member of the type that holds a numbered name makes every earlier shape of that member take its series name, and one that holds that too is `RegistryError::NameCollision` |
@@ -700,9 +716,11 @@ A command whose return type changed across the releases that a build
 supports has an enum as its `Returns`, with a variant per return type named
 by the release that introduced it:
 `qapi::commands::QueryTargetReturns` is `V1_2_0(TargetInfo)` or
-`V10_1_0(QemuTargetInfo)`. A reply decoded in a peer's version scope, as the
+`V3_0_0(QemuTargetInfo)`. A reply decoded in a peer's version scope, as the
 protocol clients decode them, takes the variant of the peer's release, and
 unscoped decoding the newest. A variant whose type is unit reads QEMU's `{}`.
+A build whose minimum is 3.0 or later has `QemuTargetInfo` as the `Returns`
+of `query-target`, and `TargetInfo` as its deprecated alias until 10.1.
 
 Generated enum serializers enforce both type and variant lifetimes. The same
 checks apply to alternate values and union branch payloads, including scalar

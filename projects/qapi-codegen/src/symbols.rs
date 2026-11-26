@@ -98,8 +98,9 @@ enum RoleClaim<'a> {
 /// newer release therefore never renames a symbol of the older ones.
 ///
 /// The plan holds no name for the enum of a command's return types: only a
-/// command whose merged return type changes needs one, and
-/// [`crate::namespace`] gives it, refusing a name that another symbol holds.
+/// command whose return type still changes once the merge has coalesced the
+/// wire-identical successors needs one, and [`crate::namespace`] gives it,
+/// refusing a name that another symbol holds.
 #[derive(Default)]
 pub(crate) struct SchemaNames {
     versions: BTreeSet<Version>,

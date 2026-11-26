@@ -546,10 +546,33 @@ fn generate_unified_enum(ue: &UnifiedEnum, flavor: &Flavor) -> proc_macro2::Toke
 }
 
 /// Generate code for a unified struct, with the releases of the registry,
-/// making the fields that some releases lack optional.
+/// making the fields that some releases lack optional. A type that
+/// coalescing made a return type early starts its Rust lifetime there, with
+/// the members it had from its first release, and its predecessor names it
+/// as its alias.
 fn generate_unified_struct(us: &UnifiedStruct, flavor: &Flavor) -> proc_macro2::TokenStream {
     let mut ir = us.ir.clone();
-    item_lifecycle(&mut ir.meta.attributes, &us.versions);
+    let mut versions = us.versions.clone();
+    let mut field_versions = us.field_versions.clone();
+    if let Some(since) = us.rust_since {
+        for range in field_versions.values_mut() {
+            if range.since == versions.since {
+                range.since = since;
+            }
+        }
+        versions.since = since;
+    }
+    let versions = &versions;
+    item_lifecycle(&mut ir.meta.attributes, versions);
+    if let Some((since, target)) = &us.alias {
+        ir.meta.attributes.push(Attribute::nested(
+            "alias",
+            vec![
+                Attribute::with_value("added", version_str(*since)),
+                Attribute::with_value("value", target),
+            ],
+        ));
+    }
 
     // Version-tracked flags in nested syntax, one attribute per run:
     // #[qapi(allow_preconfig(added = "7.1.0", removed = "9.0.0"))]
@@ -564,7 +587,7 @@ fn generate_unified_struct(us: &UnifiedStruct, flavor: &Flavor) -> proc_macro2::
             .chain(std::iter::once(vr))
         {
             let mut inner = Vec::new();
-            if range.since > us.versions.since {
+            if range.since > versions.since {
                 inner.push(Attribute::with_value("added", version_str(range.since)));
             }
             if let Some(until) = range.until {
@@ -612,7 +635,7 @@ fn generate_unified_struct(us: &UnifiedStruct, flavor: &Flavor) -> proc_macro2::
             .attributes
             .iter()
             .position(|attr| *attr == discriminator)
-            && let Some(versions) = us.field_versions.get(&field.name)
+            && let Some(versions) = field_versions.get(&field.name)
         {
             field
                 .meta
@@ -622,8 +645,8 @@ fn generate_unified_struct(us: &UnifiedStruct, flavor: &Flavor) -> proc_macro2::
         let required = !field.optional;
         if member_lifecycle(
             &mut field.meta.attributes,
-            us.field_versions.get(&field.name),
-            &us.versions,
+            field_versions.get(&field.name),
+            versions,
         ) {
             field.optional = true;
         }

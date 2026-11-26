@@ -574,7 +574,7 @@ Escaped	fields of QueryRockerOfDpaGroups	r#type: member 'type' from 2.4.0
 Lowering	fields of QueryStats	u: member 'u' from 7.1.0
 Returns	items	QueryTargetReturns: the enum of return types of command 'query-target'
 ReturnsVariant	variants of QueryTargetReturns	V1_2_0: the return type TargetInfo from 1.2.0
-ReturnsVariant	variants of QueryTargetReturns	V10_1_0: the return type QemuTargetInfo from 10.1.0
+ReturnsVariant	variants of QueryTargetReturns	V3_0_0: the return type QemuTargetInfo from 3.0.0
 Escaped	fields of QuorumReportBadEvent	r#type: member 'type' from 2.6.0
 Lowering	fields of RbdEncryptionCreateOptions	u: member 'u' from 6.1.0
 Legacy	fields of RbdEncryptionCreateOptionsLuks	cipher_alg_legacy: member 'cipher-alg' from 6.1.0 until 9.2.0

@@ -266,7 +266,10 @@ async fn commands_types_variants_and_fields_the_peer_lacks_are_unavailable() {
 #[tokio::test]
 async fn replies_decode_into_the_return_type_of_the_peers_release() {
     use qapi::commands::{QueryTarget, QueryTargetReturns};
+    // `QemuTargetInfo`, which QEMU returns from 10.1, is `TargetInfo` on
+    // the wire from 3.0, so it is the return type from then.
     for (version, reply) in [
+        ((2, 12, 0), serde_json::json!({"arch": "x86_64"})),
         ((9, 2, 0), serde_json::json!({"arch": "x86_64"})),
         ((10, 1, 0), serde_json::json!({"arch": "aarch64"})),
     ] {
@@ -276,11 +279,16 @@ async fn replies_decode_into_the_return_type_of_the_peers_release() {
             peer.send_return(reply).await.unwrap();
         });
         match result.unwrap() {
-            QueryTargetReturns::V1_2_0(info) if version < (10, 1, 0) => {
-                assert!(matches!(info.arch, Some(qapi::SysEmuTarget::X8664)));
+            QueryTargetReturns::V1_2_0(info) if version < (3, 0, 0) => {
+                assert_eq!(info.arch_legacy2.as_deref(), Some("x86_64"));
             }
-            QueryTargetReturns::V10_1_0(info) if version >= (10, 1, 0) => {
-                assert!(matches!(info.arch, qapi::SysEmuTarget::Aarch64));
+            QueryTargetReturns::V3_0_0(qapi::QemuTargetInfo { arch }) if version >= (3, 0, 0) => {
+                let expected = if version < (10, 1, 0) {
+                    qapi::SysEmuTarget::X8664
+                } else {
+                    qapi::SysEmuTarget::Aarch64
+                };
+                assert_eq!(arch.to_string(), expected.to_string());
             }
             other => panic!("{version:?}: {other:?}"),
         }

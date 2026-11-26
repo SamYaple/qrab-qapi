@@ -617,7 +617,9 @@ fn command_returns_follow_the_newest_release() {
         (
             qmp(),
             "query-target",
-            &[((1, 7, 0), "TargetInfo"), ((10, 2, 0), "QemuTargetInfo")],
+            // `TargetInfo` is `QemuTargetInfo` on the wire from 3.0, so
+            // that returns from then.
+            &[((1, 7, 0), "TargetInfo"), ((3, 0, 0), "QemuTargetInfo")],
         ),
         (
             qga(),

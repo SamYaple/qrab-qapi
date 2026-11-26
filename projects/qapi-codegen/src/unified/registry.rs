@@ -3,8 +3,8 @@
 use super::lower::VersionResult;
 use super::lower::load_versions;
 use super::merge::{
-    check_lifetime, fix_recursive_types, materialize_field_history, materialize_variant_history,
-    merge_enum, merge_struct,
+    check_lifetime, coalesce_returns, fix_recursive_types, materialize_field_history,
+    materialize_variant_history, merge_enum, merge_struct,
 };
 use super::*;
 
@@ -92,6 +92,7 @@ pub(super) fn merge_releases(
     materialize_variant_history(&mut registry, protocol)?;
     materialize_field_history(&mut registry, protocol)?;
     fix_recursive_types(&mut registry);
+    coalesce_returns(&mut registry, protocol)?;
     crate::namespace::plan_returns_enums(&mut registry, protocol, &tags)?;
     crate::namespace::inventory(&registry, protocol)?;
     Ok(registry)

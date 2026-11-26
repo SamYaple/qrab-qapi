@@ -164,6 +164,9 @@ pub(crate) fn expand(
     if excluded_by_bounds(bounds, ta.since, ta.until) {
         return Ok(TokenStream2::new());
     }
+    if let Some(alias) = crate::structs::alias_item(&input_ast, &ta, bounds)? {
+        return Ok(alias);
+    }
     annotate_type(&mut input_ast.attrs, &ta, bounds);
     Ok(quote! {
         #input_ast

@@ -851,6 +851,8 @@ pub(super) fn merge_struct(
                 attr_history: Vec::new(),
                 returns_history,
                 returns_enum: None,
+                rust_since: None,
+                alias: None,
             }),
         );
     }
@@ -953,4 +955,211 @@ fn is_reachable<'a>(
         }
     }
     false
+}
+
+/// Whether a type holds `version`: it is in its lifetime.
+fn has_release(value: &UnifiedType, version: Version) -> bool {
+    let range = match value {
+        UnifiedType::Enum(value) => &value.versions,
+        UnifiedType::Struct(value) => &value.versions,
+    };
+    range.since <= version && range.until.is_none_or(|until| version < until)
+}
+
+/// The deepest nesting of struct members that [`same_on_the_wire`]
+/// compares; deeper types must have one Rust name.
+const WIRE_DEPTH: usize = 8;
+
+/// Whether the type `left` in release `left_at` and `right` in `right_at`
+/// are the same on the wire: one Rust type, or plain structs whose members
+/// in those releases have the same wire names, optionality, arrays and
+/// build conditions, and types that are the same on the wire in turn.
+fn same_on_the_wire(
+    registry: &UnifiedRegistry,
+    (left, left_at): (&str, Version),
+    (right, right_at): (&str, Version),
+    depth: usize,
+) -> bool {
+    if left == right {
+        return true;
+    }
+    let (Some(UnifiedType::Struct(left_type)), Some(UnifiedType::Struct(right_type))) =
+        (registry.types.get(left), registry.types.get(right))
+    else {
+        return false;
+    };
+    let plain = |value: &UnifiedStruct| {
+        classify_type(&UnifiedType::Struct(value.clone())) == TypeCategory::DataType
+            && value.attr_versions.is_empty()
+            && !value.ir.fields.iter().any(flattened)
+    };
+    if depth == 0
+        || !plain(left_type)
+        || !plain(right_type)
+        || !has_release(&registry.types[left], left_at)
+        || !has_release(&registry.types[right], right_at)
+    {
+        return false;
+    }
+    fn members(value: &UnifiedStruct, at: Version) -> BTreeMap<String, &StructField> {
+        value
+            .ir
+            .fields
+            .iter()
+            .filter(|field| {
+                value.field_versions.get(&field.name).is_some_and(|range| {
+                    range.since <= at && range.until.is_none_or(|until| at < until)
+                })
+            })
+            .map(|field| {
+                let wire = field
+                    .meta
+                    .attributes
+                    .iter()
+                    .find_map(|attr| match attr {
+                        Attribute::Item { name, value } if name == "name" => Some(value.clone()),
+                        _ => None,
+                    })
+                    .unwrap_or_else(|| field.name.clone());
+                (wire, field)
+            })
+            .collect()
+    }
+    let (left_members, right_members) =
+        (members(left_type, left_at), members(right_type, right_at));
+    left_members.len() == right_members.len()
+        && left_members.iter().all(|(wire, left)| {
+            right_members.get(wire).is_some_and(|right| {
+                left.optional == right.optional
+                    && left.array == right.array
+                    && condition(&left.meta).is_some() == condition(&right.meta).is_some()
+                    && same_on_the_wire(
+                        registry,
+                        (&rustify_type(&left.r#type), left_at),
+                        (&rustify_type(&right.r#type), right_at),
+                        depth - 1,
+                    )
+            })
+        })
+}
+
+/// Coalesce the wire-identical successors of a command's return types.
+///
+/// Take consecutive return types `A`, from release `a`, and `B`, from `b`,
+/// where `B` is a struct that `b` introduces. Let `r` be the earliest release
+/// at or after `a` such that `A` in every merged release of `[r, b)` is the
+/// same on the wire as `B` in `b`, and `A` from `b` until its removal as
+/// `B` in each of those releases. Where `r` is before `b`, `B` returns
+/// from `r` and its Rust lifetime starts there, while its metadata keeps
+/// QAPI's; `A`'s return type ends there, gone if `r` is `a`; and `A` is,
+/// in a build whose minimum is at or after `r`, a deprecated alias of `B`.
+/// `query-target` returns `TargetInfo` until 10.1 and `QemuTargetInfo`
+/// from then, which is `TargetInfo` from 3.0, when its `arch` became a
+/// `SysEmuTarget`.
+///
+/// A type that two coalescings would move or alias in two ways is a
+/// [`RegistryError::CoalesceAmbiguous`].
+pub(super) fn coalesce_returns(
+    registry: &mut UnifiedRegistry,
+    protocol: &'static str,
+) -> Result<(), RegistryError> {
+    let mut releases = registry.versions.clone();
+    releases.sort();
+    releases.dedup();
+    // (command, index of B's entry, A, B, r)
+    let mut plans: Vec<(String, usize, String, String, Version)> = Vec::new();
+    for (key, value) in &registry.types {
+        let UnifiedType::Struct(command) = value else {
+            continue;
+        };
+        for (index, pair) in command.returns_history.windows(2).enumerate() {
+            let [(a, before), (b, after)] = pair else {
+                unreachable!("windows of two")
+            };
+            let (before, before_array) = crate::metadata_emit::returns_element(before);
+            let (after, after_array) = crate::metadata_emit::returns_element(after);
+            let Some(UnifiedType::Struct(successor)) = registry.types.get(after) else {
+                continue;
+            };
+            let Some(UnifiedType::Struct(predecessor)) = registry.types.get(before) else {
+                continue;
+            };
+            if before_array != after_array || successor.versions.since != *b {
+                continue;
+            }
+            let same = |at: Version, other: Version| {
+                same_on_the_wire(registry, (before, at), (after, other), WIRE_DEPTH)
+            };
+            // After `b`, the alias stands for `B` until `A`'s removal.
+            let later = releases.iter().filter(|release| {
+                **release >= *b
+                    && predecessor
+                        .versions
+                        .until
+                        .is_none_or(|until| **release < until)
+            });
+            if !later.clone().all(|release| same(*release, *release)) {
+                continue;
+            }
+            let mut from = *b;
+            for release in releases
+                .iter()
+                .rev()
+                .filter(|release| (*a..*b).contains(*release))
+            {
+                if !same(*release, *b) {
+                    break;
+                }
+                from = *release;
+            }
+            if from < *b {
+                plans.push((
+                    key.clone(),
+                    index + 1,
+                    before.to_owned(),
+                    after.to_owned(),
+                    from,
+                ));
+            }
+        }
+    }
+    let describe = |(_, _, before, after, from): &(String, usize, String, String, Version)| {
+        format!("{before} -> {after} from {}", version_str(*from))
+    };
+    for (index, plan) in plans.iter().enumerate() {
+        for other in &plans[..index] {
+            let (moves, aliases) = (plan.3 == other.3, plan.2 == other.2);
+            if (moves || aliases) && (&plan.2, &plan.3, plan.4) != (&other.2, &other.3, other.4) {
+                return Err(RegistryError::CoalesceAmbiguous {
+                    protocol,
+                    name: if moves {
+                        plan.3.clone()
+                    } else {
+                        plan.2.clone()
+                    },
+                    first: describe(other),
+                    second: describe(plan),
+                });
+            }
+        }
+    }
+    for (command, index, before, after, from) in plans {
+        if let Some(UnifiedType::Struct(value)) = registry.types.get_mut(&command) {
+            value.returns_history[index].0 = from;
+            if value.returns_history[index - 1].0 == from {
+                value.returns_history.remove(index - 1);
+            }
+            value
+                .returns_history
+                .dedup_by(|later, earlier| later.1 == earlier.1);
+        }
+        if let Some(UnifiedType::Struct(value)) = registry.types.get_mut(&after) {
+            value.rust_since = Some(from);
+        }
+        if let Some(UnifiedType::Struct(value)) = registry.types.get_mut(&before) {
+            value.alias = Some((from, after.clone()));
+        }
+        registry.coalesced.push((command, before, after, from));
+    }
+    Ok(())
 }

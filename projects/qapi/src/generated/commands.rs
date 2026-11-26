@@ -2709,7 +2709,7 @@ pub struct QueryStatus {}
 #[qapi(returns = "QemuTargetInfo")]
 #[qapi(added = "1.2.0")]
 #[qapi(returns(added = "1.2.0", value = "TargetInfo"))]
-#[qapi(returns(added = "10.1.0", value = "QemuTargetInfo"))]
+#[qapi(returns(added = "3.0.0", value = "QemuTargetInfo"))]
 #[qapi(returns_enum = "QueryTargetReturns")]
 pub struct QueryTarget {}
 

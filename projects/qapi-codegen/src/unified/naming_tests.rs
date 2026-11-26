@@ -1,7 +1,8 @@
 //! The names that the generator synthesizes: the enums of return types, the
 //! inventory of every namespace with its collisions, and the names of
 //! historical members when a patch release of an older series joins the
-//! selection.
+//! selection; and the coalescing of wire-identical return types, which
+//! decides which commands need an enum.
 use super::registry_tests::registry;
 use super::*;
 use crate::namespace::{Pattern, inventory, plan_returns_enums_with};
@@ -438,4 +439,222 @@ fn runs_of_backports_are_named_by_their_series() {
         assert_eq!(after.get(name), Some(member), "{name}");
     }
     assert!(after.contains_key("Record.value_legacy_v10_1"), "{after:?}");
+}
+
+/// `ping` returning `Old` in the releases of `old`, then `New` from the
+/// release after them, each release with `extra`.
+fn coalescing(
+    old: &[(&str, &str)],
+    new: &[(&str, &str)],
+    extra: &str,
+) -> Result<UnifiedRegistry, RegistryError> {
+    let schemas: Vec<_> = old
+        .iter()
+        .map(|(tag, members)| {
+            (
+                *tag,
+                format!(
+                    "{{'struct':'Old','data':{{{members}}}}} {{'command':'ping','returns':'Old'}} {extra}"
+                ),
+            )
+        })
+        .chain(new.iter().map(|(tag, members)| {
+            (
+                *tag,
+                format!(
+                    "{{'struct':'New','data':{{{members}}}}} {{'command':'ping','returns':'New'}} {extra}"
+                ),
+            )
+        }))
+        .collect();
+    let schemas: Vec<_> = schemas
+        .iter()
+        .map(|(tag, text)| (*tag, text.as_str()))
+        .collect();
+    registry(&schemas)
+}
+
+fn command(registry: &UnifiedRegistry) -> &UnifiedStruct {
+    match &registry.types["Ping"] {
+        UnifiedType::Struct(value) => value,
+        UnifiedType::Enum(_) => panic!(),
+    }
+}
+
+/// A successor that its predecessor is on the wire from a release returns
+/// from then, with a Rust lifetime from then, and its predecessor is its
+/// alias from then; the attributes say so, while the metadata keeps QAPI's
+/// release.
+#[test]
+fn a_wire_identical_successor_returns_from_the_release_that_matches_it() {
+    let registry = coalescing(
+        &[("v9.0.0", "'a':'int'"), ("v9.1.0", "'a':'str'")],
+        &[("v9.2.0", "'a':'str'")],
+        "",
+    )
+    .unwrap();
+    assert_eq!(
+        command(&registry).returns_history,
+        [((9, 0, 0), "Old".to_owned()), ((9, 1, 0), "New".to_owned())]
+    );
+    assert_eq!(
+        command(&registry).returns_enum.as_deref(),
+        Some("PingReturns")
+    );
+    assert_eq!(
+        registry.coalesced,
+        [(
+            "Ping".to_owned(),
+            "Old".to_owned(),
+            "New".to_owned(),
+            (9, 1, 0)
+        )]
+    );
+    let output = emit_registry(&registry, Protocol::Qmp, Docs::Reference).unwrap();
+    let attributes = |name: &str| -> Vec<&str> {
+        let start = output.types.find(&format!("pub struct {name} ")).unwrap();
+        output.types[..start]
+            .lines()
+            .rev()
+            .take_while(|line| line.starts_with("#[qapi("))
+            .collect()
+    };
+    assert_eq!(attributes("New"), [r#"#[qapi(added = "9.1.0")]"#]);
+    assert_eq!(
+        attributes("Old"),
+        [
+            r#"#[qapi(alias(added = "9.1.0", value = "New"))]"#,
+            r#"#[qapi(removed = "9.2.0")]"#,
+            r#"#[qapi(added = "9.0.0")]"#,
+        ]
+    );
+    // The member of the successor's first release starts with it.
+    assert!(
+        output
+            .types
+            .contains("pub struct New {\n    pub a: String,\n}"),
+        "{}",
+        output.types
+    );
+    let new = &output.metadata[output.metadata.find("static STRUCT_New:").unwrap()..];
+    let new = &new[..new.find("};").unwrap()];
+    assert!(new.contains("since: (9u32, 2u32, 0u32),"), "{new}");
+}
+
+/// A predecessor the same as its successor from its own first release
+/// leaves the command one return type, and no enum.
+#[test]
+fn a_predecessor_the_same_throughout_leaves_one_return_type() {
+    let registry = coalescing(&[("v9.0.0", "'a':'int'")], &[("v9.1.0", "'a':'int'")], "").unwrap();
+    assert_eq!(
+        command(&registry).returns_history,
+        [((9, 0, 0), "New".to_owned())]
+    );
+    assert_eq!(command(&registry).returns(), Some("New"));
+    assert_eq!(command(&registry).returns_enum, None);
+    let UnifiedType::Struct(old) = &registry.types["Old"] else {
+        panic!()
+    };
+    assert_eq!(old.alias, Some(((9, 0, 0), "New".to_owned())));
+}
+
+/// Members of struct types compare by their own members, recursively.
+#[test]
+fn nested_structs_compare_by_their_members() {
+    let inner = "{'struct':'OldInner','data':{'v':'int'}} {'struct':'NewInner','data':{'v':'int'}}";
+    let registry = coalescing(
+        &[("v9.0.0", "'x':'OldInner'")],
+        &[("v9.1.0", "'x':'NewInner'")],
+        inner,
+    )
+    .unwrap();
+    assert_eq!(registry.coalesced.len(), 1, "{:?}", registry.coalesced);
+    let inner = "{'struct':'OldInner','data':{'v':'int'}} {'struct':'NewInner','data':{'v':'str'}}";
+    let registry = coalescing(
+        &[("v9.0.0", "'x':'OldInner'")],
+        &[("v9.1.0", "'x':'NewInner'")],
+        inner,
+    )
+    .unwrap();
+    assert!(registry.coalesced.is_empty());
+}
+
+/// Types that differ on the wire, a successor that existed before it was
+/// returned and a predecessor that differs after its successor arrives
+/// are no coalescing.
+#[test]
+fn only_a_new_successor_the_same_as_its_predecessor_coalesces() {
+    for (old, new, extra) in [
+        // Another member type, optionality or wire name.
+        (
+            vec![("v9.0.0", "'a':'int'")],
+            vec![("v9.1.0", "'a':'str'")],
+            "",
+        ),
+        (
+            vec![("v9.0.0", "'a':'int'")],
+            vec![("v9.1.0", "'*a':'int'")],
+            "",
+        ),
+        (
+            vec![("v9.0.0", "'a':'int'")],
+            vec![("v9.1.0", "'b':'int'")],
+            "",
+        ),
+    ] {
+        let registry = coalescing(&old, &new, extra).unwrap();
+        assert!(registry.coalesced.is_empty(), "{old:?} {new:?}");
+        assert_eq!(command(&registry).returns_history.len(), 2);
+    }
+    // `New` exists before `ping` returns it.
+    let registry = registry(&[
+        (
+            "v9.0.0",
+            "{'struct':'Old','data':{'a':'int'}} {'struct':'New','data':{'a':'int'}}
+             {'command':'ping','returns':'Old'}",
+        ),
+        (
+            "v9.1.0",
+            "{'struct':'New','data':{'a':'int'}} {'command':'ping','returns':'New'}",
+        ),
+    ])
+    .unwrap();
+    assert!(registry.coalesced.is_empty());
+    // `Old` lasts beyond `New`'s first release, and changes there.
+    let registry = super::registry_tests::registry(&[
+        (
+            "v9.0.0",
+            "{'struct':'Old','data':{'a':'int'}} {'command':'ping','returns':'Old'}",
+        ),
+        (
+            "v9.1.0",
+            "{'struct':'Old','data':{'a':'str'}} {'struct':'New','data':{'a':'int'}}
+             {'command':'ping','returns':'New'}",
+        ),
+    ])
+    .unwrap();
+    assert!(registry.coalesced.is_empty());
+}
+
+/// A type that two coalescings would give two predecessors is an error.
+#[test]
+fn a_successor_of_two_predecessors_is_ambiguous() {
+    let error = registry(&[
+        (
+            "v9.0.0",
+            "{'struct':'First','data':{'a':'int'}} {'struct':'Second','data':{'a':'int'}}
+             {'command':'one','returns':'First'} {'command':'two','returns':'Second'}",
+        ),
+        (
+            "v9.1.0",
+            "{'struct':'Common','data':{'a':'int'}}
+             {'command':'one','returns':'Common'} {'command':'two','returns':'Common'}",
+        ),
+    ])
+    .unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "QMP return type Common would coalesce with both First -> Common from 9.0.0 and \
+         Second -> Common from 9.0.0"
+    );
 }

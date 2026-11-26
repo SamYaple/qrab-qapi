@@ -1099,6 +1099,21 @@ pub enum RegistryError {
         /// The tag of the release with the command's second return type.
         tag: String,
     },
+    /// Two return types that coalescing would make one type in two ways: a
+    /// type that the same on the wire would make the successor of two
+    /// predecessors, or a predecessor of two types, or one from two
+    /// releases.
+    #[error("{protocol} return type {name} would coalesce with both {first} and {second}")]
+    CoalesceAmbiguous {
+        /// `QMP` or `QGA`.
+        protocol: &'static str,
+        /// The type coalesced twice.
+        name: String,
+        /// One coalescing, as `predecessor -> type from release`.
+        first: String,
+        /// The other.
+        second: String,
+    },
     /// Two items of one namespace of the generated code that would have
     /// one Rust name, which the generator's escapes do not tell apart: two
     /// types, two members of one type, or a name and a reserved one.

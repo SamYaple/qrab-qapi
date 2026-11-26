@@ -13,8 +13,11 @@ use quote::quote;
 use syn::ext::IdentExt;
 use syn::{DeriveInput, Fields, Type};
 
+mod alias;
 mod de;
 mod ser;
+
+pub(crate) use alias::alias_item;
 #[cfg(test)]
 mod tests;
 
@@ -100,6 +103,7 @@ pub(crate) fn gen_struct(
         ));
     }
     check_command_keys(ta)?;
+    alias::check_alias(ta)?;
 
     // Entry-point dispatches on the same `input_ast.data` variant, so this
     // branch is an internal invariant, not user-reachable.

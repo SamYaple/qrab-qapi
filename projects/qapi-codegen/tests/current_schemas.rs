@@ -238,7 +238,9 @@ fn invalid_utf8_boundary_in_schema_excerpt_does_not_panic() {
 type ReturnChange<S = &'static str> = (S, Vec<(Version, S)>);
 
 /// Every command whose return type changed between pinned releases, with
-/// the first version of each type. Generated code must use the newest one.
+/// the first version of each type, or for a type that coalescing moved,
+/// the first from which it is its predecessor on the wire. Generated code
+/// must use the newest one.
 fn changed_returns(registry: &UnifiedRegistry) -> Vec<ReturnChange<String>> {
     registry
         .types
@@ -290,12 +292,35 @@ fn command_returns_follow_the_newest_release() {
                 ((2, 12, 0), "Vec<ObjectPropertyInfo>"),
             ],
         ),
+        // QEMU 10.1 returns `QemuTargetInfo`, which `TargetInfo` is on
+        // the wire from 3.0.
         (
             "QueryTarget",
-            vec![((1, 2, 0), "TargetInfo"), ((10, 1, 0), "QemuTargetInfo")],
+            vec![((1, 2, 0), "TargetInfo"), ((3, 0, 0), "QemuTargetInfo")],
         ),
     ];
     assert_eq!(changed_returns(&qmp), owned(qmp_expected));
+    // The coalesced return types: `device-list-properties` and
+    // `guest-fstrim` change shape, and keep theirs.
+    assert_eq!(
+        qmp.coalesced,
+        [(
+            "QueryTarget".to_owned(),
+            "TargetInfo".to_owned(),
+            "QemuTargetInfo".to_owned(),
+            (3, 0, 0)
+        )]
+    );
+    let structure = |name: &str| match &qmp.types[name] {
+        UnifiedType::Struct(value) => value,
+        UnifiedType::Enum(_) => panic!("{name}"),
+    };
+    assert_eq!(structure("QemuTargetInfo").rust_since, Some((3, 0, 0)));
+    assert_eq!(structure("QemuTargetInfo").versions.since, (10, 1, 0));
+    assert_eq!(
+        structure("TargetInfo").alias,
+        Some(((3, 0, 0), "QemuTargetInfo".to_owned()))
+    );
 
     let qga = build_qga_registry(&qemu(), &tags).unwrap();
     let qga_expected: &[ReturnChange] = &[(
@@ -306,6 +331,7 @@ fn command_returns_follow_the_newest_release() {
         ],
     )];
     assert_eq!(changed_returns(&qga), owned(qga_expected));
+    assert!(qga.coalesced.is_empty());
 }
 
 #[test]

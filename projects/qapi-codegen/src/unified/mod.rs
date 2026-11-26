@@ -255,13 +255,24 @@ pub struct UnifiedStruct {
     /// The earlier runs of flags that a later release sets again.
     pub attr_history: Vec<(String, VersionRange)>,
     /// A command's return types in release order, each with the first merged
-    /// release that returns that Rust type. The newest is the `returns`
-    /// attribute of `ir`.
+    /// release that returns that Rust type, or for a type that coalescing
+    /// moved, the first release from which the type is its predecessor on
+    /// the wire. The newest is the `returns` attribute of `ir`.
     pub returns_history: Vec<(Version, String)>,
     /// The name of the enum of the return types, which a command with two
     /// or more of them in `returns_history` needs: planned after the merge,
     /// as `{Command}Returns` unless the generator's naming table names it.
     pub returns_enum: Option<String>,
+    /// For a type that coalescing made a command's return type before QAPI
+    /// does, the release from which its Rust lifetime starts: the
+    /// predecessor is the same on the wire from then. `versions` keeps
+    /// QAPI's.
+    pub rust_since: Option<Version>,
+    /// For the predecessor of such a type, the release from which it is
+    /// the same on the wire as that type, and the type: a build whose
+    /// minimum is at or after that release has it as a deprecated alias of
+    /// the type, `alias(added = "...", value = "...")`.
+    pub alias: Option<(Version, String)>,
 }
 
 impl UnifiedStruct {
@@ -340,6 +351,9 @@ pub struct UnifiedRegistry {
     pub versions: Vec<Version>,
     /// The tolerated quirks of the releases' schemas, in release order.
     pub warnings: Vec<Warning>,
+    /// The return types that coalescing moved: `(command, predecessor,
+    /// type, release)`, by command, for the test that pins them.
+    pub coalesced: Vec<(String, String, String, Version)>,
 }
 
 /// Return true when two attributes represent the "same" directive. For

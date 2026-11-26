@@ -11222,7 +11222,7 @@ pub enum QCryptoTlsCredsEndpoint {
 }
 
 /// QMP struct `QemuTargetInfo`; see the QEMU QMP Reference Manual.
-#[qapi(added = "10.1.0")]
+#[qapi(added = "3.0.0")]
 pub struct QemuTargetInfo {
     pub arch: SysEmuTarget,
 }
@@ -13422,6 +13422,7 @@ pub enum SysEmuTarget {
 /// QMP struct `TargetInfo`; see the QEMU QMP Reference Manual.
 #[qapi(added = "1.2.0")]
 #[qapi(removed = "10.1.0")]
+#[qapi(alias(added = "3.0.0", value = "QemuTargetInfo"))]
 pub struct TargetInfo {
     #[qapi(added = "3.0.0")]
     #[qapi(required)]

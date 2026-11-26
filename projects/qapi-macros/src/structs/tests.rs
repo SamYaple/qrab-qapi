@@ -501,6 +501,104 @@ fn a_return_type_history_names_its_enum() {
     );
 }
 
+/// A struct that is the same on the wire as another type from a release is,
+/// in a build whose minimum is at or after it, a deprecated alias of that
+/// type with the struct's documentation, and the struct elsewhere.
+#[test]
+fn an_alias_replaces_its_struct_from_its_release() {
+    use crate::support::Version;
+    let args =
+        r#"added = "1.2.0", removed = "10.1.0", alias(added = "3.0.0", value = "QemuTargetInfo")"#;
+    let item = "/// The target.\npub struct TargetInfo { #[qapi(added = \"3.0.0\")] arch: Option<String> }";
+    let expansion = |min: Option<Version>| {
+        let bounds = VersionBounds { min, max: None };
+        expand(args, item, &bounds).unwrap().to_string()
+    };
+    for min in [None, Some(Version(2, 12, 0))] {
+        let expansion = expansion(min);
+        assert!(expansion.contains("pub struct TargetInfo"), "{expansion}");
+        assert!(!expansion.contains("pub type"), "{expansion}");
+    }
+    for min in [Version(3, 0, 0), Version(9, 2, 0)] {
+        let expansion = expansion(Some(min));
+        assert_eq!(
+            expansion,
+            "# [doc = \" The target.\"] # [doc = \"\"] \
+             # [doc = \" The same on the wire as `QemuTargetInfo` from QEMU 3.0.0.\"] \
+             # [deprecated (note = \"the same on the wire as `QemuTargetInfo` from QEMU 3.0.0; use it\")] \
+             pub type TargetInfo = QemuTargetInfo ;"
+        );
+    }
+    // The struct's lifetime still bounds it.
+    assert!(expansion(Some(Version(10, 1, 0))).is_empty());
+    // Its members are checked whatever the bounds.
+    let (message, at) = crate::tests::error_in(
+        args,
+        "struct TargetInfo { #[qapi(added = \"0.1.0\")] arch: Option<String> }",
+        &VersionBounds {
+            min: Some(Version(9, 2, 0)),
+            max: None,
+        },
+    );
+    assert_eq!(
+        (message.as_str(), at.as_str()),
+        (
+            "qapi: `added` (0.1.0) must not be earlier than the type's `added` (1.2.0)",
+            r#"added = "0.1.0""#
+        )
+    );
+}
+
+#[test]
+fn an_alias_lies_within_its_struct_s_lifetime_and_names_a_type() {
+    for (args, message, at) in [
+        (
+            r#"added = "3.0.0", alias(added = "2.0.0", value = "T")"#,
+            "qapi: `alias` (added 2.0.0) must not be earlier than the type's `added` (3.0.0)",
+            r#""T""#,
+        ),
+        (
+            r#"removed = "3.0.0", alias(added = "3.0.0", value = "T")"#,
+            "qapi: `alias` (added 3.0.0) must be earlier than the type's `removed` (3.0.0)",
+            r#""T""#,
+        ),
+        (
+            r#"alias(added = "3.0.0")"#,
+            "qapi: `alias(...)` needs `added` and `value`",
+            r#"alias(added = "3.0.0")"#,
+        ),
+        (
+            r#"alias(added = "3.0.0", value = "T", other = "x")"#,
+            "qapi: unknown key `other`",
+            "other",
+        ),
+        (
+            r#"command, alias(added = "3.0.0", value = "T")"#,
+            "qapi: `alias` applies only to structs that are neither commands nor events",
+            "alias",
+        ),
+        (
+            r#"alias(added = "3.0.0", value = "T"), alias(added = "4.0.0", value = "T")"#,
+            "qapi: duplicate key `alias`",
+            "alias",
+        ),
+    ] {
+        assert_error(args, "struct S {}", message, at);
+    }
+    let (message, at) = error(r#"alias(added = "3.0.0", value = "Vec<")"#, "struct S {}");
+    assert!(
+        message.starts_with("qapi: `alias` is not a Rust type: unexpected end of input"),
+        "{message}"
+    );
+    assert_eq!(at, r#""Vec<""#);
+    assert_error(
+        r#"alias(added = "3.0.0", value = "T")"#,
+        "enum E { A }",
+        "qapi: `alias` applies only to structs",
+        "alias",
+    );
+}
+
 #[test]
 fn a_flattened_field_takes_no_keys_of_a_member() {
     for key in [

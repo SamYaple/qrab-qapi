@@ -7,7 +7,7 @@
 //! (`crate::symbols`) names the types, commands and events of every
 //! release, with their helper types, before the lowering, and the merge
 //! names the historical members; `plan_returns_enums` then names the enums
-//! of the return types of the commands whose return type changes, and
+//! of the return types that a command still has after coalescing, and
 //! [`inventory`] lists every name and refuses a namespace in which two
 //! items would share one, naming both, so that a clash is a generation error
 //! and never a duplicate definition in the generated code.

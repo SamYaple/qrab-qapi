@@ -21,6 +21,11 @@
 //!   return types, and the repeatable flags `allow_oob`, `allow_preconfig`
 //!   and `no_success_response`; each flag and `simple_union` is bare or has
 //!   a version range;
+//! - on structs that are neither commands nor events: `alias(added = "V",
+//!   value = "Type")`, the type that the struct is the same as on the wire
+//!   from `added`, which a build whose minimum is at or after `added` has as
+//!   a deprecated alias instead of the struct; `added` lies within the
+//!   struct's lifetime;
 //! - on enums: `union_branch`.
 //!
 //! On a member of a type: `name = "wire"`, `added`, `removed`,
@@ -97,6 +102,8 @@ pub(crate) struct TypeAttrs {
     pub(crate) returns: Option<LitStr>,
     pub(crate) returns_history: Vec<(Version, LitStr)>,
     pub(crate) returns_enum: Option<LitStr>,
+    /// `alias(added = "V", value = "Type")`, with the span of its key.
+    pub(crate) alias: Option<(Version, LitStr, Span)>,
     pub(crate) allow_oob: Vec<AttrRange>,
     pub(crate) allow_preconfig: Vec<AttrRange>,
     pub(crate) no_success_response: Vec<AttrRange>,
@@ -638,6 +645,10 @@ impl TypeAttrs {
                     Meta::List(_) => self.returns_history.push(parse_returns_history(item)?),
                     _ => once(&mut self.returns, item, lit_str(item, &key)?.clone())?,
                 },
+                "alias" => {
+                    let (added, value) = parse_alias(item)?;
+                    once(&mut self.alias, item, (added, value, item.path().span()))?;
+                }
                 "returns_enum" => {
                     once(&mut self.returns_enum, item, lit_str(item, &key)?.clone())?;
                 }
@@ -680,12 +691,35 @@ impl TypeAttrs {
             .simple_union
             .first()
             .map(|range| (range.span, "simple_union"));
+        let alias = self.alias.as_ref().map(|(.., span)| (*span, "alias"));
         command
             .into_iter()
             .chain(self.command_keys())
             .chain(event)
             .chain(simple_union)
+            .chain(alias)
             .next()
+    }
+}
+
+/// Parse `alias(added = "X", value = "Type")`.
+fn parse_alias(meta: &Meta) -> syn::Result<(Version, LitStr)> {
+    let (list, items) = nested(meta, "alias")?;
+    let mut added = None;
+    let mut value = None;
+    for item in &items {
+        match key(item)?.as_str() {
+            "added" => once(&mut added, item, version(item, "added")?)?,
+            "value" => once(&mut value, item, lit_str(item, "value")?.clone())?,
+            other => return Err(unknown(item, other)),
+        }
+    }
+    match (added, value) {
+        (Some(added), Some(value)) => Ok((added, value)),
+        _ => Err(syn::Error::new_spanned(
+            list,
+            "qapi: `alias(...)` needs `added` and `value`",
+        )),
     }
 }
 
