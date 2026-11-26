@@ -134,11 +134,24 @@ impl QmpWriter {
 }
 
 /// A mock QMP server on one connection.
+///
+/// [`negotiate`](Self::negotiate) also answers the `query-commands` that a
+/// client sends right after `qmp_capabilities`
+/// ([`ClientOptions::probe_commands`](crate::ClientOptions::probe_commands)),
+/// so later reads see only the commands of the test. By default it answers
+/// with a `CommandNotFound` error, which leaves the client checking calls
+/// against the release alone; [`offer_commands`](Self::offer_commands)
+/// answers with a list instead.
 #[derive(Debug)]
 pub struct QmpSession {
     reader: QmpReader,
     writer: QmpWriter,
     last_id: Option<Value>,
+    offered: Option<Vec<String>>,
+    expect_probe: bool,
+    probes: usize,
+    // The first command after negotiation, when it was not the probe.
+    pending: Option<ParsedCommand>,
 }
 
 impl QmpSession {
@@ -154,16 +167,45 @@ impl QmpSession {
             },
             writer: QmpWriter { writer: write },
             last_id: None,
+            offered: None,
+            expect_probe: true,
+            probes: 0,
+            pending: None,
         }
     }
+    /// Split the session into halves. The halves answer nothing on their
+    /// own: split after [`negotiate`](Self::negotiate), which answers the
+    /// client's `query-commands`.
     pub fn split(self) -> (QmpReader, QmpWriter) {
         (self.reader, self.writer)
+    }
+    /// Answer the client's `query-commands` with these command names.
+    pub fn offer_commands<I, S>(&mut self, names: I)
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.offered = Some(names.into_iter().map(Into::into).collect());
+    }
+    /// Whether [`negotiate`](Self::negotiate) waits for the client's
+    /// `query-commands`, as by default. Turn it off for a client whose
+    /// options turn the query off, when the test awaits the handshake
+    /// before the client sends a command.
+    pub fn expect_probe(&mut self, expect: bool) {
+        self.expect_probe = expect;
+    }
+    /// How many `query-commands` probes the session answered.
+    pub fn probes(&self) -> usize {
+        self.probes
     }
     pub async fn send_greeting(&mut self, major: u32, minor: u32, micro: u32) -> Result<()> {
         self.writer.send(json!({"QMP": {"version": {"qemu": {"major": major, "minor": minor, "micro": micro}, "package": ""}, "capabilities": ["oob"]}})).await
     }
-    /// Answer `qmp_capabilities`. The greeting advertises OOB, which the
-    /// client may enable; later `exec-oob` commands are refused unless it did.
+    /// Answer `qmp_capabilities`, then the client's `query-commands`. The
+    /// greeting advertises OOB, which the client may enable; later
+    /// `exec-oob` commands are refused unless it did. A first command that
+    /// is not the probe, from a client that does not send it, is kept for
+    /// the next read.
     pub async fn negotiate(&mut self) -> Result<()> {
         let command = self.recv_command_full().await?;
         expect(&command, "qmp_capabilities")?;
@@ -174,14 +216,45 @@ impl QmpSession {
                 return Err(Error::Protocol(ProtocolViolation::UnsupportedCapabilities));
             }
         }
-        self.send_return(json!({})).await
+        self.send_return(json!({})).await?;
+        if !self.expect_probe {
+            return Ok(());
+        }
+        let next = self.reader.recv_command_full().await?;
+        // The client sends its probe with the handshake's ID 0; its later
+        // requests, a query-commands of its own included, count from 1.
+        if next.name != "query-commands" || next.oob || next.id != Some(json!(0)) {
+            self.pending = Some(next);
+            return Ok(());
+        }
+        self.probes += 1;
+        match &self.offered {
+            Some(names) => {
+                let names: Vec<Value> = names.iter().map(|name| json!({"name": name})).collect();
+                self.writer
+                    .send_return_with_id(Value::Array(names), next.id)
+                    .await
+            }
+            None => {
+                self.writer
+                    .send_error_with_id(
+                        "CommandNotFound",
+                        "The command query-commands has not been found",
+                        next.id,
+                    )
+                    .await
+            }
+        }
     }
     pub async fn recv_command(&mut self) -> Result<(String, Value)> {
         let command = self.recv_command_full().await?;
         Ok((command.name, command.arguments))
     }
     pub async fn recv_command_full(&mut self) -> Result<ParsedCommand> {
-        let command = self.reader.recv_command_full().await?;
+        let command = match self.pending.take() {
+            Some(command) => command,
+            None => self.reader.recv_command_full().await?,
+        };
         self.last_id = command.id.clone();
         Ok(command)
     }

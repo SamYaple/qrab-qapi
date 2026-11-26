@@ -14,15 +14,17 @@ the binaries you give them ([testing.md](testing.md)).
 `Qga::new(path)` returns a sequential guest-agent client.
 `from_stream(stream)` takes an already-connected Unix socket instead, and the
 `*_with_options` constructors take `ClientOptions`. Options set connect,
-handshake and command timeouts, maximum JSON message size, and the QMP event
-buffer capacity. `ClientOptions` is `#[non_exhaustive]`: start from
+handshake and command timeouts, maximum JSON message size, the QMP event
+buffer capacity, and whether the client learns the peer's commands while
+connecting (`probe_commands`, see [The peer's commands](#the-peers-commands)).
+`ClientOptions` is `#[non_exhaustive]`: start from
 `ClientOptions::default()` and set its fields, or chain its `with_*` methods.
 
 Defaults are 5 seconds for connect, 10 seconds for the complete handshake,
-30 seconds for commands, 128 buffered events with a 1 MiB per-event bound, and
-8 MiB per JSON message. JSON size excludes the final line terminator. Both
-compact and pretty-printed QMP objects are accepted, with LF or CRLF
-termination. Invalid UTF-8, malformed envelopes, truncated EOF and oversized
+30 seconds for commands, 128 buffered events with a 1 MiB per-event bound,
+8 MiB per JSON message, and learning the peer's commands. JSON size excludes
+the final line terminator. Both compact and pretty-printed QMP objects are
+accepted, with LF or CRLF termination. Invalid UTF-8, malformed envelopes, truncated EOF and oversized
 frames close the connection; the client never drains an endless oversized
 frame waiting for a newline.
 
@@ -40,6 +42,43 @@ request. It enables OOB only if advertised. A missing, malformed or incorrectly
 correlated capabilities acknowledgement fails the handshake. Events arriving
 during negotiation are retained within the configured buffer. `greeting()`
 exposes the peer's version, package string and advertised capabilities.
+
+## The peer's commands
+
+A release number does not say everything a peer can run: a QEMU built
+without a feature lacks its commands (the schema's build conditions), a
+distribution may carry another release's changes, and a guest agent's
+administrator can disable commands (`--block-rpcs`, `--allow-rpcs`). So each
+connection asks once, while connecting. A QMP client sends one
+`query-commands` after `qmp_capabilities`, never `query-qmp-schema`: a single
+round trip whose reply names QEMU's commands in a few kilobytes, also before
+the machine exists (`--preconfig`). A guest agent's commands, enabled and
+disabled, come with the `guest-info` reply that the handshake reads for its
+version, at no extra cost. A reply with another ID than the request's fails
+the handshake with `ProtocolViolation::CommandsReplyId`.
+
+Every call checks the list before anything is sent. A typed call is refused
+first for its release, as before (`Unavailability::Release`), then for the
+list: `Unavailability::NotOffered` for a command the peer did not name, or
+`Unavailability::Disabled` for one a guest agent lists as disabled, both as
+`Error::Unavailable` with the command, the peer's version and the reason. A
+raw call checks its name against the list. The list only refuses: a typed
+command that the peer's release lacks stays refused even if the peer lists
+it, since its arguments are encoded for that release; send a backported
+command with `execute_raw`. The checks are set lookups and leave the
+connection usable.
+
+`commands()` returns the list as `PeerCommands`. `supports::<C>()` says
+whether the peer can run the typed command `C`, and
+`require(&[Required::of::<A>(), Required::of::<B>()])` checks several at once,
+typically right after connecting, and fails with `Error::MissingCommands`
+listing every command the peer cannot run with its reason.
+
+A QEMU that answers `query-commands` with an error leaves `commands()` at
+`None`: the client keeps the checks against the release alone, as it does for
+a guest agent whose `guest-info` lists no commands, or a list that does not
+name `guest-info` itself. `ClientOptions::probe_commands` set to false (or
+`with_probe_commands(false)`) skips the query and saves its round trip.
 
 ## QMP requests and lifecycle
 
@@ -181,7 +220,8 @@ cannot be built outside the crate, so fields can be added to them later.
 | Variant | Meaning | Connection |
 | --- | --- | --- |
 | `Remote` | The peer ran the command and returned an error reply | usable |
-| `Unavailable` | The command, or a type, variant or field it uses, is not in the peer's release; nothing was sent | usable |
+| `Unavailable` | The command, or a type, variant or field it uses, is not in the peer's release, or the peer did not list the command or has it disabled (`Unavailability`); nothing was sent | usable |
+| `MissingCommands` | `require` found commands the peer cannot run, listed with their reasons; nothing was sent | usable |
 | `Encode` | The request could not be serialized; nothing was sent | usable |
 | `InvalidRequest(kind)` | The request or the options are invalid; `InvalidRequestKind` names the rule; nothing was sent | usable |
 | `Decode` | A well-formed reply does not match the return type | usable |
@@ -221,3 +261,11 @@ against real QEMU binaries. The mock `server` sessions need the `mock` feature.
 They share the bounded framing and validation helpers, including explicit
 response IDs for out-of-order tests, and `QmpSession::split` gives a reader and
 a writer for a mock that reads commands in one task while another writes.
+`QmpSession::negotiate` also answers the client's `query-commands`, so a mock's
+later reads see only its test's commands: by default with `CommandNotFound`,
+which leaves the client checking against the release alone, or with the names
+given to `offer_commands`. `probes()` counts the queries it answered. For a
+client that turns the query off, `expect_probe(false)` keeps `negotiate` from
+waiting for it; otherwise `negotiate` keeps that client's first command for
+the next read. A mock guest agent lists its commands in the `guest-info` reply
+it sends.

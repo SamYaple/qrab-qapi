@@ -1,4 +1,7 @@
-use crate::{Error, InvalidRequestKind, ProtocolViolation, RemoteError, Result};
+use crate::{
+    Error, InvalidRequestKind, PeerCommands, ProtocolViolation, RemoteError, Required, Result,
+    Unavailability,
+};
 use qapi::QapiCommand;
 use serde::{Deserialize, Deserializer, de::DeserializeOwned};
 use serde_json::{Value, json, value::RawValue};
@@ -23,25 +26,49 @@ pub(crate) fn request(name: &str, args: Value, oob: bool) -> Result<Value> {
     Ok(value)
 }
 
-/// Serialize a typed command for a peer release. A command outside the
-/// peer's release, or a type, variant or field it uses that is, is
-/// `Unavailable`.
+/// Serialize a typed command for a peer release and the command list the
+/// peer gave, if any. A command outside the peer's release, a command the
+/// peer did not list, or a type, variant or field it uses that is outside
+/// the release, is `Unavailable`.
 pub(crate) fn command<C: QapiCommand>(
     cmd: &C,
     version: (u32, u32, u32),
+    peer: Option<&PeerCommands>,
     oob: bool,
 ) -> Result<Value> {
-    if version < C::AVAILABLE_SINCE || C::REMOVED_IN.is_some_and(|removed| version >= removed) {
+    if let Some(reason) = Required::of::<C>().refusal(version, peer) {
         return Err(Error::Unavailable {
             name: C::NAME.into(),
             version,
+            reason,
         });
     }
     let args = qapi::to_value(version, cmd).map_err(|error| match error {
-        qapi::EncodeError::Unavailable { name, version } => Error::Unavailable { name, version },
+        qapi::EncodeError::Unavailable { name, version } => Error::Unavailable {
+            name,
+            version,
+            reason: Unavailability::Release,
+        },
         error => Error::Encode(error),
     })?;
     request(C::NAME, args, oob)
+}
+
+/// Refuse a raw command `name` that the peer did not list. Without a list,
+/// any name goes to the peer.
+pub(crate) fn offered(
+    name: &str,
+    version: (u32, u32, u32),
+    peer: Option<&PeerCommands>,
+) -> Result<()> {
+    match peer.and_then(|peer| peer.refusal(name)) {
+        Some(reason) => Err(Error::Unavailable {
+            name: name.into(),
+            version,
+            reason,
+        }),
+        None => Ok(()),
+    }
 }
 
 /// The top-level members of a message, borrowed from its bytes without

@@ -9,8 +9,13 @@
 //! with [`Qga::execute_with_reply_limit`], such as a large `guest-file-read`.
 //! Requests are limited to it too, so write a large file in `guest-file-write`
 //! chunks: under the default limit, a chunk of up to 6 MiB less 1 KiB fits.
+//!
+//! The `guest-info` that the handshake reads also lists the agent's commands,
+//! with those it has disabled; a command it disables or does not list fails
+//! before anything is sent ([`Qga::commands`]).
 use crate::{
-    ClientOptions, Error, InvalidRequestKind, RemoteError, Result, TimeoutPhase,
+    ClientOptions, Error, InvalidRequestKind, PeerCommands, RemoteError, Required, Result,
+    TimeoutPhase,
     framing::{self, JsonReader, SyncLine},
     wire,
 };
@@ -46,6 +51,24 @@ fn sync_refusal(line: &[u8]) -> Option<RemoteError> {
     }
 }
 
+/// The commands of a `guest-info` reply, enabled and disabled. A list that
+/// does not name `guest-info` itself, which every agent that answers it
+/// has, is no command list, as from a mock that sends none.
+fn agent_commands(info: &qapi::qga::GuestAgentInfo) -> Option<PeerCommands> {
+    let listed = info.supported_commands.as_deref()?;
+    if !listed
+        .iter()
+        .any(|command| command.name == "guest-info" && command.enabled)
+    {
+        return None;
+    }
+    let (enabled, disabled): (Vec<_>, Vec<_>) = listed.iter().partition(|command| command.enabled);
+    Some(PeerCommands::new(
+        enabled.into_iter().map(|command| command.name.clone()),
+        disabled.into_iter().map(|command| command.name.clone()),
+    ))
+}
+
 struct Session {
     reader: JsonReader<OwnedReadHalf>,
     writer: OwnedWriteHalf,
@@ -53,6 +76,7 @@ struct Session {
 
 pub struct Qga {
     version: (u32, u32, u32),
+    commands: Option<PeerCommands>,
     options: ClientOptions,
     session: Option<Session>,
 }
@@ -95,7 +119,7 @@ impl Qga {
             reader: JsonReader::new(reader, options.max_message_bytes),
             writer,
         };
-        let version = timeout(options.handshake_timeout, async {
+        let (version, commands) = timeout(options.handshake_timeout, async {
             let mut nonce = [0_u8; 8];
             getrandom::fill(&mut nonce).map_err(|error| {
                 Error::SyncNonce(error.raw_os_error().map_or_else(
@@ -134,7 +158,12 @@ impl Qga {
             let reply = session.reader.next().await?;
             let info: qapi::qga::GuestAgentInfo =
                 wire::decode(wire::response(&wire::envelope(&reply)?)?)?;
-            qapi::parse_qga_version(&info.version).map_err(Error::AgentVersion)
+            let version = qapi::parse_qga_version(&info.version).map_err(Error::AgentVersion)?;
+            let commands = options
+                .probe_commands
+                .then(|| agent_commands(&info))
+                .flatten();
+            Ok((version, commands))
         })
         .await
         .map_err(|_| Error::Timeout {
@@ -142,6 +171,7 @@ impl Qga {
         })??;
         Ok(Self {
             version,
+            commands,
             options,
             session: Some(session),
         })
@@ -149,6 +179,30 @@ impl Qga {
 
     pub fn version(&self) -> (u32, u32, u32) {
         self.version
+    }
+
+    /// The commands the agent listed in the `guest-info` that the client
+    /// read while connecting, with those it has disabled. `None` when
+    /// [`ClientOptions::probe_commands`] was off or the reply listed no
+    /// commands; the calls are then checked against the agent's release
+    /// alone.
+    pub fn commands(&self) -> Option<&PeerCommands> {
+        self.commands.as_ref()
+    }
+
+    /// Whether the agent can run `C`: its release has the command and, when
+    /// the agent listed its commands, it lists it as enabled.
+    pub fn supports<C: QapiCommand>(&self) -> bool {
+        Required::of::<C>()
+            .refusal(self.version, self.commands())
+            .is_none()
+    }
+
+    /// Check that the agent can run every command in `required`, as
+    /// [`supports`](Self::supports) does, without sending anything. The
+    /// error lists all those it cannot run.
+    pub fn require(&self, required: &[Required]) -> Result<()> {
+        crate::require(required, self.version, self.commands())
     }
     pub fn is_closed(&self) -> bool {
         self.session.is_none()
@@ -181,20 +235,22 @@ impl Qga {
         if !C::sends_success_response(self.version) {
             return Err(crate::qmp::no_success_response::<C>());
         }
-        let request = wire::command(cmd, self.version, false)?;
+        let request = wire::command(cmd, self.version, self.commands(), false)?;
         self.call(request, max_reply_bytes).await
     }
 
     /// Run the command `name` with `args`, a JSON object (`{}` for none),
     /// and decode its reply into `T`, such as a `serde_json::Value`, in the
     /// agent's version scope, as [`Qmp::execute_raw`](crate::Qmp::execute_raw)
-    /// does.
+    /// does. A name that the agent's [`commands`](Self::commands) do not
+    /// list as enabled fails before anything is sent.
     pub async fn execute_raw<T: DeserializeOwned + 'static>(
         &mut self,
         name: &str,
         args: Value,
     ) -> Result<T> {
         let request = wire::request(name, args, false)?;
+        wire::offered(name, self.version, self.commands())?;
         self.call(request, self.options.max_message_bytes).await
     }
 
@@ -249,7 +305,7 @@ impl Qga {
                 command: C::NAME.into(),
             }));
         }
-        let request = wire::command(cmd, self.version, false)?;
+        let request = wire::command(cmd, self.version, self.commands(), false)?;
         let bytes = framing::encode(&request, self.options.max_message_bytes)?;
         let mut session = self.session.take().ok_or(Error::Closed)?;
         let mut sent = false;

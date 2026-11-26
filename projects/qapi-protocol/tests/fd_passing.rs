@@ -59,6 +59,24 @@ async fn send(stream: &mut UnixStream, value: Value) {
         .unwrap();
 }
 
+/// Answer the capability negotiation and then the client's
+/// `query-commands`, as a peer without that command, so that the client
+/// checks calls against the release alone.
+async fn negotiate(stream: &mut UnixStream) {
+    let (capabilities, fds) = line_with_fds(stream).await;
+    assert_eq!(capabilities["execute"], "qmp_capabilities");
+    assert!(fds.is_empty());
+    send(stream, json!({"return":{},"id":capabilities["id"]})).await;
+    let (query, fds) = line_with_fds(stream).await;
+    assert_eq!(query["execute"], "query-commands");
+    assert!(fds.is_empty());
+    send(
+        stream,
+        json!({"error":{"class":"CommandNotFound","desc":"The command query-commands has not been found"},"id":query["id"]}),
+    )
+    .await;
+}
+
 #[tokio::test]
 async fn getfd_carries_its_descriptor_and_plain_commands_carry_none() {
     let dir = tempfile::tempdir().unwrap();
@@ -70,10 +88,7 @@ async fn getfd_carries_its_descriptor_and_plain_commands_carry_none() {
             .write_all(format!("{GREETING}\n").as_bytes())
             .await
             .unwrap();
-        let (capabilities, fds) = line_with_fds(&stream).await;
-        assert_eq!(capabilities["execute"], "qmp_capabilities");
-        assert!(fds.is_empty());
-        send(&mut stream, json!({"return":{},"id":capabilities["id"]})).await;
+        negotiate(&mut stream).await;
 
         let (getfd, fds) = line_with_fds(&stream).await;
         assert_eq!(getfd["execute"], "getfd");
@@ -133,8 +148,7 @@ async fn more_descriptors_than_one_message_carries_are_refused_before_sending() 
             .write_all(format!("{GREETING}\n").as_bytes())
             .await
             .unwrap();
-        let (capabilities, _) = line_with_fds(&server).await;
-        send(&mut server, json!({"return":{},"id":capabilities["id"]})).await;
+        negotiate(&mut server).await;
     });
     let (qmp, _events) = qmp.unwrap();
     let fds: Vec<OwnedFd> = (0..254)
@@ -166,8 +180,7 @@ async fn descriptors_of_a_refused_request_are_closed() {
             .write_all(format!("{GREETING}\n").as_bytes())
             .await
             .unwrap();
-        let (capabilities, _) = line_with_fds(&stream).await;
-        send(&mut stream, json!({"return":{},"id":capabilities["id"]})).await;
+        negotiate(&mut stream).await;
         let mut rest = String::new();
         let _ = BufReader::new(stream).read_line(&mut rest).await;
     });
@@ -198,8 +211,7 @@ async fn descriptors_go_once_with_a_frame_written_in_parts() {
             .write_all(format!("{GREETING}\n").as_bytes())
             .await
             .unwrap();
-        let (capabilities, _) = line_with_fds(&server).await;
-        send(&mut server, json!({"return":{},"id":capabilities["id"]})).await;
+        negotiate(&mut server).await;
     });
     let (qmp, _events) = qmp.unwrap();
     let fd: OwnedFd = std::fs::File::open("/dev/null").unwrap().into();

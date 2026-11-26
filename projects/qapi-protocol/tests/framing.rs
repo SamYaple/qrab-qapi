@@ -391,6 +391,9 @@ async fn capabilities_enable_oob_only_when_the_greeting_offers_it() {
             support::write(&mut write, greeting).await;
             let capabilities = support::read(&mut read).await;
             support::write(&mut write, json!({"return": {}, "id": capabilities["id"]})).await;
+            let query = support::read(&mut read).await;
+            assert_eq!(query["execute"], "query-commands");
+            support::write(&mut write, support::probe_refusal(&query["id"])).await;
             (capabilities, read, write)
         });
         let (client, _) = Qmp::from_stream(client).await.unwrap();

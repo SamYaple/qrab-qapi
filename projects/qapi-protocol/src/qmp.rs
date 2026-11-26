@@ -1,5 +1,6 @@
 use crate::{
-    ClientOptions, Error, InvalidRequestKind, ProtocolViolation, QmpEvent, Result, TimeoutPhase,
+    ClientOptions, Error, InvalidRequestKind, PeerCommands, ProtocolViolation, QmpEvent, Required,
+    Result, TimeoutPhase,
     framing::{self, JsonReader},
     wire::{self, Envelope},
 };
@@ -143,6 +144,7 @@ impl Events {
 pub struct Qmp {
     greeting: Greeting,
     oob: bool,
+    commands: Option<PeerCommands>,
     options: ClientOptions,
     requests: mpsc::Sender<Request>,
     normal: Arc<Semaphore>,
@@ -200,7 +202,7 @@ impl Qmp {
             tx: event_tx,
             dropped: dropped_events.clone(),
         };
-        let (greeting, oob) = timeout(options.handshake_timeout, async {
+        let (greeting, oob, commands) = timeout(options.handshake_timeout, async {
             let bytes = reader.next().await?;
             let greeting = wire::envelope(&bytes)?
                 .greeting
@@ -213,22 +215,19 @@ impl Qmp {
                 request["arguments"] = json!({"enable": ["oob"]});
             }
             framing::write_json(&mut write, &request, options.max_message_bytes).await?;
-            loop {
-                let bytes = reader.next().await?;
-                let envelope = wire::envelope(&bytes)?;
-                if envelope.event.is_some() {
-                    events.publish(&bytes, &envelope)?;
-                    continue;
-                }
-                if envelope.numeric_id() != Some(0) {
-                    return Err(Error::Protocol(ProtocolViolation::CapabilitiesReplyId));
-                }
-                let value: Value = wire::decode(wire::response(&envelope)?)?;
-                if !value.as_object().is_some_and(|o| o.is_empty()) {
-                    return Err(Error::Protocol(ProtocolViolation::CapabilitiesReply));
-                }
-                return Ok((greeting, oob));
+            let reply =
+                reply_to_id_zero(&mut reader, &events, ProtocolViolation::CapabilitiesReplyId)
+                    .await?;
+            let value: Value = wire::decode(wire::response(&wire::envelope(&reply)?)?)?;
+            if !value.as_object().is_some_and(|o| o.is_empty()) {
+                return Err(Error::Protocol(ProtocolViolation::CapabilitiesReply));
             }
+            let commands = if options.probe_commands {
+                probe_commands(&mut reader, &mut write, &events, options.max_message_bytes).await?
+            } else {
+                None
+            };
+            Ok((greeting, oob, commands))
         })
         .await
         .map_err(|_| Error::Timeout {
@@ -271,6 +270,7 @@ impl Qmp {
             Self {
                 greeting,
                 oob,
+                commands,
                 options,
                 requests,
                 normal,
@@ -291,6 +291,39 @@ impl Qmp {
     pub fn version(&self) -> (u32, u32, u32) {
         let v = self.greeting.version.qemu;
         (v.major, v.minor, v.micro)
+    }
+
+    /// The commands this QEMU listed in reply to the `query-commands` the
+    /// client sent while connecting. `None` when
+    /// [`ClientOptions::probe_commands`] was off or the peer answered with
+    /// an error; the calls are then checked against the release alone.
+    pub fn commands(&self) -> Option<&PeerCommands> {
+        self.commands.as_ref()
+    }
+
+    /// Whether the peer can run `C`: its release has the command and, when
+    /// the peer listed its commands, the list names it. The arguments of a
+    /// call can still use an item the release lacks.
+    pub fn supports<C: QapiCommand>(&self) -> bool {
+        Required::of::<C>()
+            .refusal(self.version(), self.commands())
+            .is_none()
+    }
+
+    /// Check that the peer can run every command in `required`, as
+    /// [`supports`](Self::supports) does, without sending anything. The
+    /// error lists all those it cannot run:
+    ///
+    /// ```no_run
+    /// # async fn run(qmp: &qapi_protocol::Qmp) -> qapi_protocol::Result<()> {
+    /// use qapi::commands::{BlockdevAdd, QueryStatus};
+    /// use qapi_protocol::Required;
+    /// qmp.require(&[Required::of::<QueryStatus>(), Required::of::<BlockdevAdd>()])?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn require(&self, required: &[Required]) -> Result<()> {
+        crate::require(required, self.version(), self.commands())
     }
     /// Number of dispatched requests awaiting a reply, including cancelled callers.
     pub fn queue_depth(&self) -> usize {
@@ -344,7 +377,7 @@ impl Qmp {
         if !C::sends_success_response(self.version()) {
             return Err(no_success_response::<C>());
         }
-        let request = wire::command(cmd, self.version(), false)?;
+        let request = wire::command(cmd, self.version(), self.commands(), false)?;
         let reply = self.dispatch(request, Vec::new(), false, duration).await?;
         qapi::with_version(self.version(), || wire::decode(&reply))
     }
@@ -367,7 +400,7 @@ impl Qmp {
         if !C::sends_success_response(self.version()) {
             return Err(no_success_response::<C>());
         }
-        let request = wire::command(cmd, self.version(), true)?;
+        let request = wire::command(cmd, self.version(), self.commands(), true)?;
         let reply = self.dispatch(request, Vec::new(), true, duration).await?;
         qapi::with_version(self.version(), || wire::decode(&reply))
     }
@@ -375,7 +408,8 @@ impl Qmp {
     /// Run the command `name` with `args`, a JSON object (`{}` for none),
     /// and decode its reply into `T`, such as a `serde_json::Value`, in the
     /// peer's version scope, as [`Qga::execute_raw`](crate::qga::Qga::execute_raw)
-    /// does. The connection owns the request ID.
+    /// does. The connection owns the request ID. A name that the peer's
+    /// [`commands`](Self::commands) do not list fails before anything is sent.
     pub async fn execute_raw<T: DeserializeOwned + 'static>(
         &self,
         name: &str,
@@ -454,6 +488,7 @@ impl Qmp {
         duration: Duration,
     ) -> Result<T> {
         let request = wire::request(name, args, oob)?;
+        wire::offered(name, self.version(), self.commands())?;
         let reply = self.dispatch(request, fds, oob, duration).await?;
         qapi::with_version(self.version(), || wire::decode(&reply))
     }
@@ -538,6 +573,57 @@ impl Qmp {
         timeout_at(deadline, operation)
             .await
             .unwrap_or_else(|_| Err(timed_out()))
+    }
+}
+
+/// Read the handshake's reply to its request with ID 0, publishing the
+/// events that arrive first. A reply with another ID breaks `violation`.
+async fn reply_to_id_zero(
+    reader: &mut JsonReader<tokio::net::unix::OwnedReadHalf>,
+    events: &Events,
+    violation: ProtocolViolation,
+) -> Result<Vec<u8>> {
+    loop {
+        let bytes = reader.next().await?;
+        let envelope = wire::envelope(&bytes)?;
+        if envelope.event.is_some() {
+            events.publish(&bytes, &envelope)?;
+            continue;
+        }
+        if envelope.numeric_id() != Some(0) {
+            return Err(Error::Protocol(violation));
+        }
+        return Ok(bytes);
+    }
+}
+
+/// Ask the peer for its commands, once, right after capability
+/// negotiation: one `query-commands`, a list of names that the session
+/// keeps. An error reply leaves the list unknown, so that only the checks
+/// against the peer's release apply.
+async fn probe_commands(
+    reader: &mut JsonReader<tokio::net::unix::OwnedReadHalf>,
+    write: &mut tokio::net::unix::OwnedWriteHalf,
+    events: &Events,
+    limit: usize,
+) -> Result<Option<PeerCommands>> {
+    #[derive(Deserialize)]
+    struct Command {
+        name: String,
+    }
+    let request = json!({"execute": "query-commands", "id": 0});
+    framing::write_json(write, &request, limit).await?;
+    let reply = reply_to_id_zero(reader, events, ProtocolViolation::CommandsReplyId).await?;
+    match wire::response(&wire::envelope(&reply)?) {
+        Ok(raw) => {
+            let commands: Vec<Command> = wire::decode(raw)?;
+            Ok(Some(PeerCommands::new(
+                commands.into_iter().map(|command| command.name),
+                [],
+            )))
+        }
+        Err(Error::Remote(_)) => Ok(None),
+        Err(error) => Err(error),
     }
 }
 

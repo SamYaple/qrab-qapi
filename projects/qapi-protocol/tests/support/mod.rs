@@ -59,10 +59,16 @@ pub async fn read(reader: &mut RawReader) -> serde_json::Value {
 pub fn greeting() -> serde_json::Value {
     serde_json::json!({"QMP": {"version": {"qemu": {"major": 11, "minor": 1, "micro": 3}, "package": "test"}, "capabilities": ["oob"]}})
 }
+/// The error reply of a peer without `query-commands`, after which the
+/// client checks calls against the release alone.
+pub fn probe_refusal(id: &serde_json::Value) -> serde_json::Value {
+    serde_json::json!({"error": {"class": "CommandNotFound", "desc": "The command query-commands has not been found"}, "id": id})
+}
 pub async fn raw_qmp(options: ClientOptions) -> (Qmp, QmpEvents, RawReader, RawWriter) {
     let (client, peer) = UnixStream::pair().unwrap();
     let (read_half, mut writer) = peer.into_split();
     let mut reader = tokio::io::BufReader::new(read_half);
+    let probe = options.probe_commands;
     let (client, ()) = tokio::join!(Qmp::from_stream_with_options(client, options), async {
         write(&mut writer, greeting()).await;
         let caps = read(&mut reader).await;
@@ -71,6 +77,11 @@ pub async fn raw_qmp(options: ClientOptions) -> (Qmp, QmpEvents, RawReader, RawW
             serde_json::json!({"return": {}, "id": caps["id"]}),
         )
         .await;
+        if probe {
+            let query = read(&mut reader).await;
+            assert_eq!(query["execute"], "query-commands");
+            write(&mut writer, probe_refusal(&query["id"])).await;
+        }
     });
     let (client, events) = client.unwrap();
     (client, events, reader, writer)

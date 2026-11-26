@@ -15,15 +15,17 @@ mod qmp;
 pub mod server;
 mod wire;
 
+use qapi::QapiCommand;
 pub use qmp::{Greeting, QMP_QUEUE_CAPACITY, QemuVersion, Qmp, QmpEvents, VersionInfo};
-use std::{fmt, sync::Arc, time::Duration};
+use std::{collections::BTreeSet, fmt, sync::Arc, time::Duration};
 
 /// Why a connection or a call failed.
 ///
 /// [`Remote`](Error::Remote), [`Decode`](Error::Decode) and the failures
 /// detected before any byte is sent ([`Unavailable`](Error::Unavailable),
-/// [`Encode`](Error::Encode), [`InvalidRequest`](Error::InvalidRequest) and
-/// a [`Timeout`](Error::Timeout) in [`TimeoutPhase::BeforeDispatch`]) leave
+/// [`MissingCommands`](Error::MissingCommands), [`Encode`](Error::Encode),
+/// [`InvalidRequest`](Error::InvalidRequest) and a
+/// [`Timeout`](Error::Timeout) in [`TimeoutPhase::BeforeDispatch`]) leave
 /// the connection usable. Every other failure closes it.
 ///
 /// The clients and mock sessions of this crate create these errors; match
@@ -35,9 +37,10 @@ pub enum Error {
     /// The peer ran the command and answered with an error reply.
     #[error("command failed: {0}")]
     Remote(#[from] RemoteError),
-    /// The command, or a type, variant or field it uses, does not exist in
-    /// the peer's release. Nothing was sent.
-    #[error("{name} is not available in QEMU {}.{}.{}", .version.0, .version.1, .version.2)]
+    /// The peer cannot run the command: its release lacks the command or a
+    /// type, variant or field the command uses, or the peer did not list
+    /// the command when the client connected. Nothing was sent.
+    #[error("{name} is not available in QEMU {}.{}.{}: {reason}", .version.0, .version.1, .version.2)]
     #[non_exhaustive]
     Unavailable {
         /// The QAPI command name, or the Rust name of the type, variant or
@@ -45,6 +48,19 @@ pub enum Error {
         name: String,
         /// The peer's version.
         version: (u32, u32, u32),
+        /// Why the peer cannot run it.
+        reason: Unavailability,
+    },
+    /// [`Qmp::require`] or [`Qga::require`](qga::Qga::require) found
+    /// commands that the peer cannot run, all of them, each with the reason.
+    /// Nothing was sent.
+    #[error("QEMU {}.{}.{} cannot run {}", .version.0, .version.1, .version.2, list_missing(.missing))]
+    #[non_exhaustive]
+    MissingCommands {
+        /// The peer's version.
+        version: (u32, u32, u32),
+        /// The commands, in the order they were required.
+        missing: Vec<MissingCommand>,
     },
     /// The request could not be serialized for another reason than
     /// [`Unavailable`](Error::Unavailable). Nothing was sent.
@@ -231,6 +247,10 @@ pub enum ProtocolViolation {
     /// The reply to `qmp_capabilities` is not an empty object.
     #[error("capabilities reply must return an empty object")]
     CapabilitiesReply,
+    /// The reply to the `query-commands` that the client sends after
+    /// `qmp_capabilities` has another ID than the request's.
+    #[error("query-commands reply has wrong or missing ID")]
+    CommandsReplyId,
     /// An event also has response members (`return`, `error` or `id`).
     #[error("event mixed with response fields")]
     EventWithResponseFields,
@@ -274,6 +294,171 @@ pub enum ProtocolViolation {
     /// A mock guest agent session received `exec-oob`.
     #[error("QGA does not support OOB")]
     GuestAgentOob,
+}
+
+/// Why [`Error::Unavailable`] refused a command, or why
+/// [`Error::MissingCommands`] lists one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum Unavailability {
+    /// The peer's release does not have it: the command, or a type,
+    /// variant or field its arguments use, is outside its lifetime there.
+    Release,
+    /// The peer did not list the command when the client connected: this
+    /// QEMU or guest agent was built without it.
+    NotOffered,
+    /// The guest agent lists the command as disabled, as `--block-rpcs`
+    /// and `--allow-rpcs` leave it.
+    Disabled,
+}
+
+impl fmt::Display for Unavailability {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Release => "that release does not have it",
+            Self::NotOffered => "the peer does not offer it",
+            Self::Disabled => "the guest agent has it disabled",
+        })
+    }
+}
+
+/// A command that [`Error::MissingCommands`] lists.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct MissingCommand {
+    /// The command's name on the wire.
+    pub name: String,
+    /// Why the peer cannot run it.
+    pub reason: Unavailability,
+}
+
+fn list_missing(missing: &[MissingCommand]) -> String {
+    let names: Vec<String> = missing
+        .iter()
+        .map(|command| format!("{} ({})", command.name, command.reason))
+        .collect();
+    names.join(", ")
+}
+
+/// The commands a peer listed when the client connected: the reply to
+/// `query-commands` for QMP, or the commands of a guest agent's
+/// `guest-info`, with the ones it has disabled. [`Qmp::commands`] and
+/// [`Qga::commands`](qga::Qga::commands) return it.
+///
+/// The list can only refuse a command: one that the peer's release has
+/// but this peer does not list fails with [`Unavailability::NotOffered`]
+/// or [`Unavailability::Disabled`]. A typed command that the release does
+/// not have stays refused even if the peer lists it, as a backport would.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PeerCommands {
+    enabled: BTreeSet<String>,
+    disabled: BTreeSet<String>,
+}
+
+impl PeerCommands {
+    pub(crate) fn new(
+        enabled: impl IntoIterator<Item = String>,
+        disabled: impl IntoIterator<Item = String>,
+    ) -> Self {
+        Self {
+            enabled: enabled.into_iter().collect(),
+            disabled: disabled.into_iter().collect(),
+        }
+    }
+
+    /// Whether the peer listed `name` as a command it runs.
+    pub fn offers(&self, name: &str) -> bool {
+        self.enabled.contains(name)
+    }
+
+    /// Whether a guest agent listed `name` as disabled.
+    pub fn is_disabled(&self, name: &str) -> bool {
+        self.disabled.contains(name)
+    }
+
+    /// The commands the peer runs, in name order.
+    pub fn names(&self) -> impl Iterator<Item = &str> {
+        self.enabled.iter().map(String::as_str)
+    }
+
+    /// Why the peer cannot run `name`, if it cannot.
+    pub(crate) fn refusal(&self, name: &str) -> Option<Unavailability> {
+        if self.offers(name) {
+            None
+        } else if self.is_disabled(name) {
+            Some(Unavailability::Disabled)
+        } else {
+            Some(Unavailability::NotOffered)
+        }
+    }
+}
+
+/// A command that an application needs, for [`Qmp::require`] and
+/// [`Qga::require`](qga::Qga::require):
+///
+/// ```
+/// use qapi::commands::{QueryBlock, QueryStatus};
+/// use qapi_protocol::Required;
+/// let needed = [Required::of::<QueryStatus>(), Required::of::<QueryBlock>()];
+/// assert_eq!(needed[0].name(), "query-status");
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Required {
+    name: &'static str,
+    since: (u32, u32, u32),
+    removed: Option<(u32, u32, u32)>,
+}
+
+impl Required {
+    /// The typed command `C`, with its lifetime.
+    pub fn of<C: QapiCommand>() -> Self {
+        Self {
+            name: C::NAME,
+            since: C::AVAILABLE_SINCE,
+            removed: C::REMOVED_IN,
+        }
+    }
+
+    /// The command's name on the wire.
+    pub fn name(&self) -> &'static str {
+        self.name
+    }
+
+    /// Why a peer of `version`, with the command list `peer` if it gave
+    /// one, cannot run the command: its release first, then its list.
+    pub(crate) fn refusal(
+        &self,
+        version: (u32, u32, u32),
+        peer: Option<&PeerCommands>,
+    ) -> Option<Unavailability> {
+        if version < self.since || self.removed.is_some_and(|removed| version >= removed) {
+            return Some(Unavailability::Release);
+        }
+        peer.and_then(|peer| peer.refusal(self.name))
+    }
+}
+
+/// Check every command of `required` against a peer, and list all those it
+/// cannot run.
+pub(crate) fn require(
+    required: &[Required],
+    version: (u32, u32, u32),
+    peer: Option<&PeerCommands>,
+) -> Result<()> {
+    let missing: Vec<MissingCommand> = required
+        .iter()
+        .filter_map(|command| {
+            command.refusal(version, peer).map(|reason| MissingCommand {
+                name: command.name.into(),
+                reason,
+            })
+        })
+        .collect();
+    if missing.is_empty() {
+        Ok(())
+    } else {
+        Err(Error::MissingCommands { version, missing })
+    }
 }
 
 /// Where an [`Error::Timeout`] happened.
@@ -329,11 +514,19 @@ pub struct ClientOptions {
     pub max_event_bytes: usize,
     /// QMP events are bounded and never block command responses.
     pub event_capacity: usize,
+    /// Learn the peer's commands while connecting, so that a command it
+    /// does not list fails before anything is sent: QMP sends one
+    /// `query-commands` after `qmp_capabilities`, and a guest agent's
+    /// commands come with the `guest-info` that the client reads anyway.
+    /// Turning it off saves that one QMP round trip and keeps only the
+    /// checks against the peer's release.
+    pub probe_commands: bool,
 }
 
 impl Default for ClientOptions {
     /// 5 seconds to connect, 10 for the handshake and 30 per command;
-    /// 8 MiB per message, 1 MiB per event and 128 buffered events.
+    /// 8 MiB per message, 1 MiB per event and 128 buffered events; the
+    /// peer's commands are learned while connecting.
     fn default() -> Self {
         Self {
             connect_timeout: Duration::from_secs(5),
@@ -342,6 +535,7 @@ impl Default for ClientOptions {
             max_message_bytes: 8 * 1024 * 1024,
             max_event_bytes: 1024 * 1024,
             event_capacity: 128,
+            probe_commands: true,
         }
     }
 }
@@ -369,6 +563,10 @@ impl ClientOptions {
     }
     pub fn with_event_capacity(mut self, events: usize) -> Self {
         self.event_capacity = events;
+        self
+    }
+    pub fn with_probe_commands(mut self, probe: bool) -> Self {
+        self.probe_commands = probe;
         self
     }
 
