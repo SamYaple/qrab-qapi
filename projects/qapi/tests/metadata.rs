@@ -5,6 +5,10 @@
 //! branch enums are distinguishable, and the type-ref pool resolves
 //! correctly.
 
+// The tests use items and members of older releases, which the newest
+// release no longer has and which are therefore deprecated.
+#![allow(deprecated)]
+
 use qapi::metadata::{COMMANDS, ENUMS, EnumKind, STRUCTS};
 
 #[test]

@@ -34,10 +34,6 @@ pub fn write_module(path: &Path, output: qapi_codegen::unified::GeneratedOutput)
     output.write_to(path).unwrap();
 }
 
-pub fn run_fixture(workspace: &Path, fixture: &Path, main: &str) {
-    run_fixture_with_bounds(workspace, fixture, main, None)
-}
-
 /// The dependency line `name = ...` of a manifest, so that a fixture asks for
 /// what the workspace asks for.
 fn dependency(manifest: &Path, name: &str) -> String {
@@ -54,12 +50,7 @@ fn dependency(manifest: &Path, name: &str) -> String {
 /// offline, and builds under this test's target directory. Its root
 /// declares, before `main`, the `metadata_types` module that the generated
 /// metadata re-exports, a copy of qrab-qapi's.
-pub fn run_fixture_with_bounds(
-    workspace: &Path,
-    fixture: &Path,
-    main: &str,
-    bounds: Option<(&str, &str)>,
-) {
+pub fn run_fixture(workspace: &Path, fixture: &Path, main: &str) {
     let manifest = format!(
         r#"[package]
 name = "qapi-generated-fixture"
@@ -91,17 +82,12 @@ qapi-macros = {{ package = "qrab-qapi-macros", path = {:?} }}
     .unwrap();
     std::fs::copy(workspace.join("Cargo.lock"), fixture.join("Cargo.lock")).unwrap();
     let target = Path::new(env!("CARGO_TARGET_TMPDIR")).join("qapi-codegen-fixtures");
-    let target = bounds.map_or(target.clone(), |(min, max)| {
-        target.join(format!("{min}-{max}"))
-    });
     let cargo = |args: &[&str]| {
         let mut command = Command::new(env!("CARGO"));
         command
             .args(args)
             .arg("--manifest-path")
-            .arg(&fixture_manifest)
-            .env_remove("QEMU_MIN_VERSION")
-            .env_remove("QEMU_MAX_VERSION");
+            .arg(&fixture_manifest);
         command
     };
     // Lock the fixture package itself; every other package keeps the
@@ -116,11 +102,6 @@ qapi-macros = {{ package = "qrab-qapi-macros", path = {:?} }}
     );
     let mut command = cargo(&["run", "--locked", "--offline", "--quiet"]);
     command.arg("--target-dir").arg(target);
-    if let Some((min, max)) = bounds {
-        command
-            .env("QEMU_MIN_VERSION", min)
-            .env("QEMU_MAX_VERSION", max);
-    }
     let result = command.output().unwrap();
     assert!(
         result.status.success(),

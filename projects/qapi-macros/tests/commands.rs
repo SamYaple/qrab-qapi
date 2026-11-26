@@ -2,6 +2,10 @@
 //! stand-in runtime in `runtime/`: their trait constants and per-release
 //! flags, and the replies of a command whose return type changed.
 
+// The tests use items and members of older releases, which the newest
+// release no longer has and which are therefore deprecated.
+#![allow(deprecated)]
+
 // The stand-in runtime, which the expansion names `::qapi`.
 extern crate self as qapi;
 mod runtime;

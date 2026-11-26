@@ -269,9 +269,8 @@ pub struct UnifiedStruct {
     /// QAPI's.
     pub rust_since: Option<Version>,
     /// For the predecessor of such a type, the release from which it is
-    /// the same on the wire as that type, and the type: a build whose
-    /// minimum is at or after that release has it as a deprecated alias of
-    /// the type, `alias(added = "...", value = "...")`.
+    /// the same on the wire as that type, and the type,
+    /// `alias(added = "...", value = "...")`, which its documentation states.
     pub alias: Option<(Version, String)>,
 }
 

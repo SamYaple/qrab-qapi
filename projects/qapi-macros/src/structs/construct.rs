@@ -11,7 +11,7 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::ext::IdentExt;
 
-/// `Default` or `new` for a struct with the fields that the bounds keep.
+/// `Default` or `new` for a struct.
 pub(crate) fn construction(
     name: &syn::Ident,
     vis: &syn::Visibility,

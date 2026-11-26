@@ -14,26 +14,19 @@
 //! library: in a crate that depends on `qrab-qapi` under its library name,
 //! and in `qrab-qapi` itself, which declares `extern crate self as qapi`.
 //!
-//! `QEMU_MIN_VERSION` and `QEMU_MAX_VERSION` (such as `9.2.0`), read when
-//! the attribute expands, bound the QEMU releases a build supports. Types
-//! and their members that exist in no release of the range are left out,
-//! and one that every release of the range deprecates is Rust
-//! `#[deprecated]`. The documentation of an unstable type describes the
-//! maximum.
-//! So do the flag constants of a command, while its return types, and
-//! whether it is `PreconfigSafe`, cover every release of the range.
-//! An invalid value fails the build with one error. Cargo does not track
-//! the variables that a macro reads, so a crate that uses the attribute must
-//! rebuild when they change: its build script prints
-//! `cargo:rerun-if-env-changed=QEMU_MIN_VERSION` and the same for
-//! `QEMU_MAX_VERSION`.
+//! Every build expands the complete history: a type or member that only
+//! some releases have exists in every build, its lifetime checked against
+//! the peer at run time. One that the newest release no longer has, or
+//! deprecates, is Rust `#[deprecated]`, with a note naming the release. The
+//! documentation of an unstable type and the flag constants of a command
+//! describe the newest release, while its return types, and whether it is
+//! `PreconfigSafe`, cover every release.
 #![forbid(unsafe_code)]
 
 // The modules: `attrs`, the authoritative list of the keys and their
-// parser; `bounds`, `QEMU_MIN_VERSION` and `QEMU_MAX_VERSION`; `support`,
-// what the expansions share; and an expansion per kind of item.
+// parser; `support`, what the expansions share; and an expansion per kind
+// of item.
 mod attrs;
-mod bounds;
 mod command;
 mod enums;
 mod structs;
@@ -42,7 +35,6 @@ mod support;
 mod tests;
 
 use crate::attrs::{MetaArgs, TypeAttrs, parse_items};
-use crate::bounds::{VersionBounds, excluded_by_bounds, version_bounds};
 use crate::enums::gen_enum;
 use crate::structs::gen_struct;
 use crate::support::{
@@ -138,24 +130,11 @@ pub fn qapi(args: TokenStream, input: TokenStream) -> TokenStream {
     let qapi_args = parse_macro_input!(args with parse_items);
     let input_ast = parse_macro_input!(input as DeriveInput);
 
-    let (bounds, bounds_error) = version_bounds();
-    let mut expansion = bounds_error
-        .map(|error| error.to_compile_error())
-        .unwrap_or_default();
-    expansion.extend(
-        expand(qapi_args, input_ast, &bounds).unwrap_or_else(|error| error.to_compile_error()),
-    );
-    TokenStream::from(expansion)
+    TokenStream::from(expand(qapi_args, input_ast).unwrap_or_else(|error| error.to_compile_error()))
 }
 
-/// The expansion of an item under `bounds`. Every key and member is
-/// checked before the bounds decide whether the item is left out, so that
-/// an error does not depend on them.
-pub(crate) fn expand(
-    qapi_args: MetaArgs,
-    mut input_ast: DeriveInput,
-    bounds: &VersionBounds,
-) -> syn::Result<TokenStream2> {
+/// The expansion of an item, after every key and member is checked.
+pub(crate) fn expand(qapi_args: MetaArgs, mut input_ast: DeriveInput) -> syn::Result<TokenStream2> {
     let ta = TypeAttrs::parse(&qapi_args, &input_ast.attrs)?;
     input_ast.attrs.retain(|a| !a.path().is_ident("qapi"));
     reject_generics(&input_ast.generics)?;
@@ -165,8 +144,8 @@ pub(crate) fn expand(
     )?;
 
     let impls = match input_ast.data {
-        syn::Data::Enum(_) => gen_enum(&mut input_ast, &ta, bounds)?,
-        syn::Data::Struct(_) => gen_struct(&mut input_ast, &ta, bounds)?,
+        syn::Data::Enum(_) => gen_enum(&mut input_ast, &ta)?,
+        syn::Data::Struct(_) => gen_struct(&mut input_ast, &ta)?,
         _ => {
             return Err(syn::Error::new_spanned(
                 &input_ast.ident,
@@ -174,30 +153,23 @@ pub(crate) fn expand(
             ));
         }
     };
-    if excluded_by_bounds(bounds, ta.since, ta.until) {
-        return Ok(TokenStream2::new());
-    }
-    if let Some(alias) = crate::structs::alias_item(&input_ast, &ta, bounds)? {
-        return Ok(alias);
-    }
-    annotate_type(&mut input_ast.attrs, &ta, bounds);
+    annotate_type(&mut input_ast.attrs, &ta);
     Ok(quote! {
         #input_ast
         #impls
     })
 }
 
-/// Document an unstable type and its build condition, mark it deprecated,
-/// derive `Debug` and `Clone`, which every QAPI type has, and mark it
-/// `#[non_exhaustive]`, so that a QEMU release may add fields and variants.
-fn annotate_type(attrs: &mut Vec<syn::Attribute>, ta: &TypeAttrs, bounds: &VersionBounds) {
+/// Document an unstable type, the type it is the same as on the wire and its
+/// build condition, mark it deprecated, derive `Debug` and `Clone`, which
+/// every QAPI type has, and mark it `#[non_exhaustive]`, so that a QEMU
+/// release may add fields and variants.
+fn annotate_type(attrs: &mut Vec<syn::Attribute>, ta: &TypeAttrs) {
     let mut notes = Vec::new();
     // Unstable is not deprecated, so it is a doc line, not #[deprecated].
-    if flag_at_newest(&ta.unstable, bounds)
-        || (ta.unstable.is_empty() && ta.has_feature("unstable"))
-    {
+    if flag_at_newest(&ta.unstable) || (ta.unstable.is_empty() && ta.has_feature("unstable")) {
         // The ranges do not overlap, so at most one holds there.
-        let since = ranges_at_newest(&ta.unstable, bounds)
+        let since = ranges_at_newest(&ta.unstable)
             .next()
             .and_then(|range| range.added);
         notes.push(match since {
@@ -207,11 +179,12 @@ fn annotate_type(attrs: &mut Vec<syn::Attribute>, ta: &TypeAttrs, bounds: &Versi
             None => "**Unstable** — this interface may change without notice.".to_string(),
         });
     }
+    notes.extend(crate::structs::alias_note(ta));
     notes.extend(ta.condition.as_deref().map(condition_note));
     push_doc_notes(attrs, notes);
     attrs.extend(deprecated_attr(
-        bounds,
         &ta.deprecated,
+        ta.until,
         ta.has_feature("deprecated"),
         "type",
     ));

@@ -1,12 +1,10 @@
 //! Expansion of string enums, alternates and union branch enums.
 
 use crate::attrs::{ItemAttrs, TypeAttrs};
-use crate::bounds::{VersionBounds, excluded_by_bounds};
 use crate::support::{
     HelperNames, active_check, annotate_item, check_disjoint_wires, decoding_selects,
-    deprecation_warning, newest_first, outside_bounds_clause, type_deserialization_guard,
-    type_serialization_guard, unavailable_decode_error, unavailable_error, version_range_check,
-    wire_name,
+    deprecation_warning, newest_first, type_deserialization_guard, type_serialization_guard,
+    unavailable_decode_error, unavailable_error, version_range_check, wire_name,
 };
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
@@ -36,13 +34,8 @@ impl VariantInfo {
     }
 }
 
-/// The implementations of an enum, whose variants this checks and then
-/// reduces to those within the bounds.
-pub(crate) fn gen_enum(
-    input_ast: &mut DeriveInput,
-    ta: &TypeAttrs,
-    bounds: &VersionBounds,
-) -> syn::Result<TokenStream2> {
+/// The implementations of an enum, whose variants this checks.
+pub(crate) fn gen_enum(input_ast: &mut DeriveInput, ta: &TypeAttrs) -> syn::Result<TokenStream2> {
     let enum_name = input_ast.ident.clone();
     if let Some((span, key)) = ta.struct_key() {
         return Err(syn::Error::new(
@@ -124,10 +117,7 @@ pub(crate) fn gen_enum(
     let mut variants = Vec::new();
     let mut kept = syn::punctuated::Punctuated::new();
     for (mut variant, info) in parsed {
-        if excluded_by_bounds(bounds, info.attrs.since, info.attrs.until) {
-            continue;
-        }
-        annotate_item(&mut variant.attrs, bounds, &info.attrs, "variant");
+        annotate_item(&mut variant.attrs, &info.attrs, "variant");
         if let VariantKind::Tuple(_) = info.kind {
             // The payload's type may be Rust `#[deprecated]`; declaring the
             // variant is no use of it, so it warns only where code names it.
@@ -149,7 +139,6 @@ pub(crate) fn gen_enum(
         name: &enum_name,
         name_str: enum_name.unraw().to_string(),
         ta,
-        bounds,
         variants: &variants,
     };
     // The QAPI name of the type, which Serde's data model carries.
@@ -180,7 +169,6 @@ struct EnumExpansion<'a> {
     /// The unraw Rust name, for errors.
     name_str: String,
     ta: &'a TypeAttrs,
-    bounds: &'a VersionBounds,
     variants: &'a [VariantInfo],
 }
 
@@ -231,16 +219,14 @@ impl EnumExpansion<'_> {
     }
 
     /// The error for a wire name that no variant has, listing those that
-    /// decoding takes in the current version context. In a scope outside
-    /// the bounds, whose own variants the build may have left out, it names
-    /// the bound instead.
+    /// decoding takes in the current version context.
     fn unknown_error(
         &self,
         kind: &str,
         found: &syn::Ident,
-        bindings: [syn::Ident; 5],
+        bindings: [syn::Ident; 4],
     ) -> TokenStream2 {
-        let [expected_var, wire_var, selected_var, list, version] = bindings;
+        let [expected_var, wire_var, selected_var, list] = bindings;
         let groups = self.wire_groups();
         let count = groups.len();
         let expected = groups.into_iter().map(|(wire, group)| {
@@ -249,7 +235,7 @@ impl EnumExpansion<'_> {
         });
         let message = format!("unknown {kind} `{{}}`, {{}}");
         // Serde's wording for an unknown variant.
-        let known = quote! {{
+        quote! {{
             let #expected_var: ::std::vec::Vec<&str> = <[(&str, bool); #count]>::into_iter([#(#expected),*])
                 .filter_map(|(#wire_var, #selected_var)| #selected_var.then_some(#wire_var))
                 .collect();
@@ -260,21 +246,6 @@ impl EnumExpansion<'_> {
                 _ => ::std::format!("expected one of `{}`", #expected_var.join("`, `")),
             };
             ::core::result::Result::Err(::qapi::__private::serde::de::Error::custom(::std::format!(#message, #found, #list)))
-        }};
-        let Some(clause) = outside_bounds_clause(self.bounds) else {
-            return known;
-        };
-        let outside = format!("unknown {kind} `{{}}` in QEMU {{}}.{{}}.{{}}{{}}");
-        quote! {{
-            let #list: &str = #clause;
-            if #list.is_empty() {
-                #known
-            } else {
-                let #version = ::qapi::qemu_version();
-                ::core::result::Result::Err(::qapi::__private::serde::de::Error::custom(::std::format!(
-                    #outside, #found, #version.0, #version.1, #version.2, #list,
-                )))
-            }
         }}
     }
 
@@ -318,9 +289,8 @@ impl EnumExpansion<'_> {
             self.names.ident("wire"),
             self.names.ident("selected"),
             self.names.ident("list"),
-            self.names.ident("version"),
         ];
-        let type_guard = type_deserialization_guard(name, self.ta, self.bounds);
+        let type_guard = type_deserialization_guard(name, self.ta);
         let arms = self.variants.iter().map(|variant| {
             let ident = &variant.ident;
             let wire = variant.wire();
@@ -329,7 +299,7 @@ impl EnumExpansion<'_> {
         });
         // In a scope, a wire name whose variants are all outside it.
         let unavailable = self.wire_groups().into_iter().map(|(wire, group)| {
-            let error = unavailable_decode_error(&group[0].path(name), self.bounds);
+            let error = unavailable_decode_error(&group[0].path(name));
             quote! { #wire => ::core::result::Result::Err(#error), }
         });
         let unknown = self.unknown_error("variant", &other, bindings);
@@ -424,9 +394,7 @@ impl EnumExpansion<'_> {
         let error = self.names.ident("error");
         let message = self.names.ident("message");
         let version = self.names.ident("version");
-        let type_guard = type_deserialization_guard(name, self.ta, self.bounds);
-        let outside =
-            outside_bounds_clause(self.bounds).map(|clause| quote! { #message.push_str(#clause); });
+        let type_guard = type_deserialization_guard(name, self.ta);
         // Stable-sort variants by specificity so overlapping shapes (e.g. a
         // primitive vs an all-optional-fields struct) resolve to the least
         // ambiguous match instead of silently picking whichever happens to
@@ -484,7 +452,7 @@ impl EnumExpansion<'_> {
                     }
                 },
             });
-            let error = unavailable_decode_error(&variant.path(name), self.bounds);
+            let error = unavailable_decode_error(&variant.path(name));
             unavailable.push(quote! {
                 if ::qapi::scoped_qemu_version().is_some() && !#selected && #eligible && #accepts {
                     return ::core::result::Result::Err(#error);
@@ -504,7 +472,6 @@ impl EnumExpansion<'_> {
                     let mut #message = ::std::format!("no variant of {} accepts {}", #name_str, #value);
                     if let ::core::option::Option::Some(#version) = ::qapi::scoped_qemu_version() {
                         #message.push_str(&::std::format!(" in QEMU {}.{}.{}", #version.0, #version.1, #version.2));
-                        #outside
                     }
                     if !#errors.is_empty() {
                         #message.push_str(&::std::format!(" ({})", #errors.join("; ")));
@@ -529,9 +496,8 @@ impl EnumExpansion<'_> {
             self.names.ident("wire"),
             self.names.ident("selected"),
             self.names.ident("list"),
-            self.names.ident("version"),
         ];
-        let type_guard = type_deserialization_guard(name, self.ta, self.bounds);
+        let type_guard = type_deserialization_guard(name, self.ta);
         let tags = self.variants.iter().map(|variant| {
             let ident = &variant.ident;
             let wire = variant.wire();
@@ -559,7 +525,7 @@ impl EnumExpansion<'_> {
                 };
                 quote! { if #selected { return #decode; } }
             });
-            let unavailable = unavailable_decode_error(&group[0].path(name), self.bounds);
+            let unavailable = unavailable_decode_error(&group[0].path(name));
             quote! {
                 #wire => {
                     #(#candidates)*

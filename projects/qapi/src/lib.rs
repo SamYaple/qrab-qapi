@@ -141,8 +141,7 @@ pub trait QapiCommand: serde::Serialize {
     }
 }
 
-/// Marker for commands with `allow-preconfig` in at least one release that
-/// the build supports (`QEMU_MIN_VERSION` to `QEMU_MAX_VERSION`).
+/// Marker for commands with `allow-preconfig` in at least one QEMU release.
 /// Check `QapiCommand::allows_preconfig` when selecting a peer release.
 ///
 /// An API that issues commands while QEMU waits in its preconfig state,

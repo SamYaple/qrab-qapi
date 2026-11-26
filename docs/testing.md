@@ -30,15 +30,6 @@ regenerates QMP and QGA to verify the checked-in outputs byte for byte. It also
 builds the API documentation with warnings treated as errors, in both the
 default and the `schema-docs` mode.
 
-`contrib/check-qapi.sh` also compiles `qrab-qapi` with `QEMU_MIN_VERSION` and
-`QEMU_MAX_VERSION` bounds for every maintained release series, selecting its
-latest pinned patch. The final check restores the full development API surface.
-
-For an exploratory compile at every distinct pinned historical version, use
-`QRAB_QAPI_HISTORICAL_BOUNDS=1 contrib/check-qapi.sh`. Fourth-component tags
-share their three-component bounds. This longer sweep does not expand the
-maintained release matrix or replace live peer tests.
-
 For an explicit scan of every schema-era stable release tag present in
 `vendor/qemu` up to the pinned baseline, independent of the normal locked input
 selection:

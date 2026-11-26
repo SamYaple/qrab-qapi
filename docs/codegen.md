@@ -446,8 +446,7 @@ every event. Both import `mod.rs` by glob, and `mod.rs` imports one of them
 by glob, as `use self::commands::*;`, when a type outside it names one of
 its structs as a field, payload or return type: the QMP transaction actions
 name the commands `BlockdevBackup`, `BlockdevSnapshotSync`,
-`BlockDirtyBitmapAdd` and `DriveBackup`. A glob, unlike a list of names,
-still resolves when the version bounds leave some of the structs out. The
+`BlockDirtyBitmapAdd` and `DriveBackup`. The
 import is private, so a glob re-export of `mod.rs`, such as qrab-qapi's at
 its crate root, holds only the data types.
 
@@ -475,9 +474,8 @@ or structs the same in turn. The new type then returns, and its Rust
 lifetime starts, from the earliest release from which the predecessor is
 the same as the new type in its first release, while its metadata keeps
 QAPI's release. The predecessor takes
-`alias(added = "...", value = "...")`: a build whose minimum is at or after
-that release has it as a deprecated alias of the new type, and other builds
-the struct. A type that two coalescings would move or alias in two ways is
+`alias(added = "...", value = "...")`, and its documentation says from which
+release it is the same on the wire as the new type. A type that two coalescings would move or alias in two ways is
 `RegistryError::CoalesceAmbiguous`.
 
 The changes are pinned by a test: `device-list-properties`
@@ -695,9 +693,8 @@ of a command too, so that a baseline that adds fields or variants does not
 break code outside the crate. It gives a struct its construction API instead:
 `Default`, with every field `None`, where every field is an `Option` or there
 is none, and otherwise `new`, which takes the non-`Option` fields in
-declaration order and sets the others to `None`. Both cover the fields that
-the build range keeps, and `new` always takes the same arguments, since a
-field with a lifetime is an `Option`. A field that newer releases require is
+declaration order and sets the others to `None`. `new` takes the same
+arguments for every release, since a field with a lifetime is an `Option`. A field that newer releases require is
 an `Option` too, so `Default` leaves it `None` and serialization for such a
 peer reports it. Enum variants, union branches among them, hold their payload
 as a tuple variant and are built as usual.
@@ -731,8 +728,6 @@ by the release that introduced it:
 `V3_0_0(QemuTargetInfo)`. A reply decoded in a peer's version scope, as the
 protocol clients decode them, takes the variant of the peer's release, and
 unscoped decoding the newest. A variant whose type is unit reads QEMU's `{}`.
-A build whose minimum is 3.0 or later has `QemuTargetInfo` as the `Returns`
-of `query-target`, and `TargetInfo` as its deprecated alias until 10.1.
 
 Generated enum serializers enforce both type and variant lifetimes. The same
 checks apply to alternate values and union branch payloads, including scalar
@@ -759,13 +754,18 @@ decoding never populates. Explicit peer contexts enforce active required fields 
 lifetimes; unscoped record inspection remains lenient. Present nullable values
 retain `Some(null)` separately from absent fields.
 
-`QEMU_MIN_VERSION`/`QEMU_MAX_VERSION` builds prune representations outside the
-requested range: a command's return enum keeps the variants of the range,
-and a range with one return type has it as the `Returns` type. The newest
-release of the range takes the place of the newest pin in the command
-constants, the documentation of unstable types and unscoped decoding.
-`contrib/check-qapi.sh` compiles all maintained release series and restores an
-unbounded development build afterwards.
+Every build compiles the complete history, so a crate version has one API
+whatever QEMU releases its peers run. What a peer's release lacks is refused at
+run time, before anything is sent: the protocol clients reject a command
+outside its lifetime as unavailable, and serialization reports any type,
+variant or field of a value that the peer's release does not have. A type,
+variant or field that the newest pinned release no longer has is Rust
+`#[deprecated]` with the note "removed in QEMU X", and one that it deprecates
+with "deprecated since QEMU X", so that new code finds its replacement while
+code for older peers keeps compiling. A deprecation that QEMU later dropped
+marks nothing; each deprecation still warns once at run time when a value is
+serialized for a release it covers. The command constants, the documentation of
+unstable types and unscoped decoding describe the newest pinned release.
 
 Serde macro expansions allocate helper names against user fields, referenced
 types and other generated helpers. Fields such as `map` and internal-looking

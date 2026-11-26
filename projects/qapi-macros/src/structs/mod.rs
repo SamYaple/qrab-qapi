@@ -2,11 +2,10 @@
 //! events, with their flattened bases and unions.
 
 use crate::attrs::{AttrRange, ItemAttrs, TypeAttrs};
-use crate::bounds::{VersionBounds, excluded_by_bounds};
 use crate::command::{check_command_keys, gen_command_impl, gen_event_impl};
 use crate::support::{
     HelperNames, Version, active_check, annotate_item, check_disjoint_wires, decoding_selects,
-    flag_at_newest, lasts_to_newest, newest_first, version_range_check, wire_name,
+    flag_at_newest, newest_first, version_range_check, wire_name,
 };
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
@@ -18,7 +17,7 @@ mod construct;
 mod de;
 mod ser;
 
-pub(crate) use alias::alias_item;
+pub(crate) use alias::alias_note;
 #[cfg(test)]
 mod tests;
 
@@ -75,27 +74,16 @@ impl FieldInfo {
         quote! { (false #(|| #checks)*) }
     }
 
-    /// Whether the field is the discriminator in the newest release the
-    /// build represents.
-    pub(crate) fn discriminates_at_newest(&self, bounds: &VersionBounds) -> bool {
+    /// Whether the field is the discriminator in the newest release.
+    pub(crate) fn discriminates_at_newest(&self) -> bool {
         self.discriminator_runs()
             .into_iter()
-            .any(|(added, removed)| {
-                bounds
-                    .max
-                    .is_none_or(|max| added.is_none_or(|added| added <= max))
-                    && lasts_to_newest(removed, bounds)
-            })
+            .any(|(_, removed)| removed.is_none())
     }
 }
 
-/// The implementations of a struct, whose fields this checks and then
-/// reduces to those within the bounds.
-pub(crate) fn gen_struct(
-    input_ast: &mut DeriveInput,
-    ta: &TypeAttrs,
-    bounds: &VersionBounds,
-) -> syn::Result<TokenStream2> {
+/// The implementations of a struct, whose fields this checks.
+pub(crate) fn gen_struct(input_ast: &mut DeriveInput, ta: &TypeAttrs) -> syn::Result<TokenStream2> {
     let struct_name = input_ast.ident.clone();
     if let Some(span) = ta.union_branch {
         return Err(syn::Error::new(
@@ -141,18 +129,11 @@ pub(crate) fn gen_struct(
     }
     let infos: Vec<&FieldInfo> = parsed.iter().map(|(_, info)| info).collect();
     check_fields(ta, &infos)?;
-    let discriminator_left_out = parsed.iter().any(|(_, info)| {
-        !info.attrs.discriminator.is_empty()
-            && excluded_by_bounds(bounds, info.attrs.since, info.attrs.until)
-    });
 
     let mut fields = Vec::new();
     let mut kept = syn::punctuated::Punctuated::new();
     for (mut field, info) in parsed {
-        if excluded_by_bounds(bounds, info.attrs.since, info.attrs.until) {
-            continue;
-        }
-        annotate_item(&mut field.attrs, bounds, &info.attrs, "field");
+        annotate_item(&mut field.attrs, &info.attrs, "field");
         // The field's type may be Rust `#[deprecated]`; declaring the field
         // is no use of it, so it warns only where code names it.
         field.attrs.push(syn::parse_quote! { #[allow(deprecated)] });
@@ -176,9 +157,7 @@ pub(crate) fn gen_struct(
             .as_ref()
             .map_or_else(|| struct_name.unraw().to_string(), |name| name.value()),
         ta,
-        bounds,
         fields: &fields,
-        discriminator_left_out,
     };
     let flattened = fields.iter().any(FieldInfo::is_flattened);
     let ser = if flattened {
@@ -192,13 +171,7 @@ pub(crate) fn gen_struct(
         expansion.de_plain()?
     };
     let command = if ta.command.is_some() {
-        gen_command_impl(
-            &struct_name,
-            &input_ast.vis,
-            &expansion.wire_name,
-            ta,
-            bounds,
-        )?
+        gen_command_impl(&struct_name, &input_ast.vis, &expansion.wire_name, ta)?
     } else {
         TokenStream2::new()
     };
@@ -519,11 +492,7 @@ pub(crate) struct StructExpansion<'a> {
     /// The QAPI name.
     pub(crate) wire_name: String,
     pub(crate) ta: &'a TypeAttrs,
-    pub(crate) bounds: &'a VersionBounds,
     pub(crate) fields: &'a [FieldInfo],
-    /// Whether the bounds left out a discriminator, whose releases decoding
-    /// then cannot select a branch in.
-    pub(crate) discriminator_left_out: bool,
 }
 
 impl StructExpansion<'_> {
@@ -554,11 +523,10 @@ impl StructExpansion<'_> {
     }
 
     /// Whether decoding takes a gated flattened field: in a scope, where it
-    /// is active, and unscoped, unless it was removed by the newest release
-    /// the build represents.
+    /// is active, and unscoped, unless it was removed.
     pub(crate) fn flattened_selected(&self, field: &FieldInfo) -> Option<TokenStream2> {
         version_range_check(field.attrs.since, field.attrs.until).map(|active| {
-            let latest = lasts_to_newest(field.attrs.until, self.bounds);
+            let latest = field.attrs.until.is_none();
             decoding_selects(quote! { #latest }, active)
         })
     }
@@ -576,7 +544,7 @@ impl StructExpansion<'_> {
             .map(|range| active_check(range.added, range.removed));
         let active = quote! { (false #(|| #checks)*) };
         if decoding {
-            let latest = flag_at_newest(ranges, self.bounds);
+            let latest = flag_at_newest(ranges);
             decoding_selects(quote! { #latest }, active)
         } else {
             active
@@ -636,8 +604,7 @@ impl StructExpansion<'_> {
 }
 
 /// The discriminators among `fields`, of which one selects the branch in
-/// each release of the union field (see `check_discriminator_runs`), unless
-/// the bounds left it out.
+/// each release of the union field (see `check_discriminator_runs`).
 pub(crate) fn discriminators(fields: &[FieldInfo]) -> Vec<&FieldInfo> {
     fields
         .iter()

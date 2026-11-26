@@ -1,10 +1,8 @@
 //! Compile a command whose newer return type its older one is on the wire
 //! from a release, as `query-target`'s `QemuTargetInfo` is `TargetInfo`
-//! from 3.0: a build that keeps the releases before has the enum of both, a
-//! build from that release the newer type alone, with the older one as its
-//! deprecated alias.
+//! from 3.0: the enum of both, whose newer variant starts at that release.
 mod common;
-use common::{generate, git, run_fixture, run_fixture_with_bounds, write_module};
+use common::{generate, git, run_fixture, write_module};
 use std::path::Path;
 
 #[test]
@@ -93,30 +91,5 @@ fn main() {
 }
 "#
         ),
-    );
-    // From that release, the newer type alone, and the older one its alias.
-    run_fixture_with_bounds(
-        &workspace,
-        &fixture,
-        &format!(
-            "{prelude}{}",
-            r#"
-fn returns(info: Returns) -> QemuTargetInfo {
-    info
-}
-#[allow(deprecated)]
-fn alias(info: TargetInfo) -> QemuTargetInfo {
-    info
-}
-fn main() {
-    let info = returns(decode((9, 2, 0), "arm"));
-    assert!(matches!(info.arch, Arch::Arm));
-    let info = alias(info);
-    let value = qapi::to_value((6, 0, 0), &info).unwrap();
-    assert_eq!(value, serde_json::json!({ "arch": "arm" }));
-}
-"#
-        ),
-        Some(("6.0.0", "10.1.0")),
     );
 }

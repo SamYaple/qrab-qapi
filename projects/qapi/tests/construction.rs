@@ -1,10 +1,6 @@
-//! Code outside `qrab-qapi` that builds structs with their constructors and
-//! matches enums with a wildcard arm compiles whichever older releases the
-//! build keeps, as long as the shapes stay. `contrib/check-qapi.sh`
-//! compiles it with the minimums 9.2.0 and 3.0.0: the older range adds
-//! `StatusInfo.singlestep` (removed in 9.0) and `MigrationCapability::Block`
-//! (removed in 9.1), and with them the fields and variants that a lower
-//! floor adds to the API of a crate that another crate of the build uses.
+//! Code outside `qrab-qapi` builds structs with their constructors and
+//! matches enums with a wildcard arm, so that the fields and variants that a
+//! later QEMU baseline adds break none of it.
 
 use qapi::commands::{MigrateSetCapabilities, QueryStatus};
 use qapi::{MigrationCapability, MigrationCapabilityStatus, RunState, StatusInfo};
@@ -22,7 +18,7 @@ fn describe(capability: &MigrationCapability) -> &'static str {
 }
 
 #[test]
-fn constructors_and_wildcard_arms_compile_in_any_range() {
+fn constructors_and_wildcard_arms_compile() {
     let info = status(true);
     assert_eq!(
         qapi::to_value((11, 1, 0), &info).unwrap(),

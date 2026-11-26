@@ -1,5 +1,10 @@
 //! Version gating belongs to each protocol connection.
 //! That includes QGA peers whose version differs from the host's QEMU version.
+
+// The tests use items and members of older releases, which the newest
+// release no longer has and which are therefore deprecated.
+#![allow(deprecated)]
+
 mod support;
 use qapi_protocol::qga::Qga;
 use qapi_protocol::server::QgaSession;

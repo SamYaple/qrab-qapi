@@ -2,10 +2,7 @@
 //! from a release: `alias(added = "V", value = "Type")`.
 
 use crate::attrs::TypeAttrs;
-use crate::bounds::VersionBounds;
-use proc_macro2::TokenStream as TokenStream2;
-use quote::quote;
-use syn::{DeriveInput, Type};
+use syn::Type;
 
 /// Refuse `alias` on a command or an event, and one whose release lies
 /// outside the struct's lifetime or whose value is no type.
@@ -43,34 +40,12 @@ fn alias_type(value: &syn::LitStr) -> syn::Result<Type> {
     })
 }
 
-/// The item in place of the struct in a build whose minimum is at or after
-/// the alias's release: a deprecated alias of the type, with the struct's
-/// documentation. `None` where the build keeps the struct.
-pub(crate) fn alias_item(
-    input_ast: &DeriveInput,
-    ta: &TypeAttrs,
-    bounds: &VersionBounds,
-) -> syn::Result<Option<TokenStream2>> {
-    let Some((added, value, _)) = &ta.alias else {
-        return Ok(None);
-    };
-    if bounds.min.is_none_or(|min| min < *added) {
-        return Ok(None);
-    }
-    let target = alias_type(value)?;
-    let target_name = value.value();
-    let docs = input_ast
-        .attrs
-        .iter()
-        .filter(|attr| attr.path().is_ident("doc"));
-    let note = format!(" The same on the wire as `{target_name}` from QEMU {added}.");
-    let deprecated = format!("the same on the wire as `{target_name}` from QEMU {added}; use it");
-    let (vis, ident) = (&input_ast.vis, &input_ast.ident);
-    Ok(Some(quote! {
-        #(#docs)*
-        #[doc = ""]
-        #[doc = #note]
-        #[deprecated(note = #deprecated)]
-        #vis type #ident = #target;
-    }))
+/// The doc line of a struct that is the same on the wire as another type
+/// from a release: from there on, the newer type describes its replies.
+pub(crate) fn alias_note(ta: &TypeAttrs) -> Option<String> {
+    let (added, value, _) = ta.alias.as_ref()?;
+    Some(format!(
+        "The same on the wire as `{}` from QEMU {added}.",
+        value.value()
+    ))
 }

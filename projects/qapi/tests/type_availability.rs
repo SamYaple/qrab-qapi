@@ -1,3 +1,7 @@
+// The tests use items and members of older releases, which the newest
+// release no longer has and which are therefore deprecated.
+#![allow(deprecated)]
+
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 

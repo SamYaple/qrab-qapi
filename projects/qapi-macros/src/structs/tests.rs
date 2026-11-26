@@ -1,7 +1,6 @@
 //! The compile errors of structs, commands and events, read with the source
 //! text they point at, and the struct keys on other items.
 
-use crate::bounds::VersionBounds;
 use crate::tests::{assert_error, deprecated_note, docs, error, expand, expanded};
 
 fn field_attrs(item: &syn::DeriveInput, index: usize) -> &[syn::Attribute] {
@@ -87,7 +86,7 @@ fn unsupported_struct_shapes_are_errors() {
         "qapi: #[qapi] does not support generic items",
         "T",
     );
-    assert!(expand("", "struct Unit;", &VersionBounds::default()).is_ok());
+    assert!(expand("", "struct Unit;").is_ok());
 }
 
 #[test]
@@ -289,7 +288,7 @@ fn a_return_type_history_is_ordered_and_ends_at_returns() {
     // The same type, spelled with other whitespace, is the same.
     let args = r#"command, added = "1.0.0", returns = "Vec<A>", returns(added = "1.0.0", value = "B"),
         returns(added = "2.0.0", value = "Vec < A >"), returns_enum = "SReturns""#;
-    assert!(expand(args, "struct S {}", &VersionBounds::default()).is_ok());
+    assert!(expand(args, "struct S {}").is_ok());
     assert_error(
         r#"command, added = "1.0.0", returns = "A", returns(added = "1.0.0", value = "A")"#,
         "struct S {}",
@@ -308,7 +307,7 @@ fn a_return_type_history_is_ordered_and_ends_at_returns() {
     let args = r#"command, added = "1.0.0", returns = "A", returns(added = "1.0.0", value = "A"),
         returns(added = "2.0.0", value = "B"), returns(added = "3.0.0", value = "A"),
         returns_enum = "SReturns""#;
-    assert!(expand(args, "struct S {}", &VersionBounds::default()).is_ok());
+    assert!(expand(args, "struct S {}").is_ok());
     // The history covers the command's lifetime: it starts with the
     // command and changes before its removal.
     let history = r#"returns = "B", returns(added = "1.0.0", value = "A"),
@@ -333,7 +332,7 @@ fn a_return_type_history_is_ordered_and_ends_at_returns() {
     );
     let args =
         format!(r#"command, added = "1.0.0", removed = "2.1.0", {history}, returns_enum = "R""#);
-    assert!(expand(&args, "struct S {}", &VersionBounds::default()).is_ok());
+    assert!(expand(&args, "struct S {}").is_ok());
     // Without its `added`, the command has releases before the first type.
     assert_error(
         &format!(r#"command, removed = "2.1.0", {history}"#),
@@ -352,17 +351,10 @@ fn a_return_type_history_is_ordered_and_ends_at_returns() {
         "{message}"
     );
     assert_eq!(at, r#""Vec<""#);
-    // Every type of the history is checked, whatever the bounds keep.
+    // Every type of the history is checked.
     let args = r#"command, added = "1.0.0", returns = "B", returns(added = "1.0.0", value = "Vec<"),
         returns(added = "2.0.0", value = "B")"#;
-    let (message, at) = crate::tests::error_in(
-        args,
-        "struct S {}",
-        &VersionBounds {
-            min: Some(crate::support::Version(3, 0, 0)),
-            max: None,
-        },
-    );
+    let (message, at) = error(args, "struct S {}");
     assert!(
         message.starts_with("qapi: `returns` is not a Rust type"),
         "{message}"
@@ -371,26 +363,22 @@ fn a_return_type_history_is_ordered_and_ends_at_returns() {
 }
 
 #[test]
-fn deprecation_of_fields_takes_effect_by_feature_or_minimum() {
-    use crate::support::Version;
+fn deprecation_of_fields_follows_the_newest_release() {
+    // A deprecation that lasts to the newest release marks the field, and
+    // it warns within its releases.
     let item = r#"struct Example { #[qapi(deprecated(added = "9.2.0"))] value: String }"#;
-    for (min, deprecated) in [(Version(10, 0, 0), true), (Version(9, 0, 0), false)] {
-        let bounds = VersionBounds {
-            min: Some(min),
-            max: None,
-        };
-        let (item, rest) = expanded("", item, &bounds);
-        assert!(rest.contains("qapi warning: Example.value is deprecated since QEMU 9.2.0"));
-        let note = deprecated_note(field_attrs(&item, 0));
-        assert_eq!(note.is_some(), deprecated, "{note:?}");
-        assert!(note.is_none_or(|note| note.contains("deprecated since QEMU 9.2.0")));
-    }
+    let (item, rest) = expanded("", item);
+    assert!(rest.contains("qapi warning: Example.value is deprecated since QEMU 9.2.0"));
+    assert_eq!(
+        deprecated_note(field_attrs(&item, 0)).as_deref(),
+        Some("# [deprecated (note = \"deprecated since QEMU 9.2.0\")]")
+    );
     // Each deprecation warns in its own releases.
     let item = r#"struct Example {
         #[qapi(deprecated(added = "8.0.0", removed = "9.0.0"), deprecated(added = "10.0.0"))]
         value: String,
     }"#;
-    let (_, rest) = expanded("", item, &VersionBounds::default());
+    let (_, rest) = expanded("", item);
     for warning in [
         "qapi warning: Example.value is deprecated since QEMU 8.0.0",
         "qapi warning: Example.value is deprecated since QEMU 10.0.0",
@@ -402,11 +390,7 @@ fn deprecation_of_fields_takes_effect_by_feature_or_minimum() {
         r#"#[qapi(feature = "deprecated", feature = "unstable")]"#,
         r#"#[qapi(feature = "deprecated")] #[qapi(feature = "unstable")]"#,
     ] {
-        let (item, _) = expanded(
-            "",
-            &format!("struct S {{ {attrs} value: String }}"),
-            &VersionBounds::default(),
-        );
+        let (item, _) = expanded("", &format!("struct S {{ {attrs} value: String }}"));
         let attrs = field_attrs(&item, 0);
         assert_eq!(
             deprecated_note(attrs).as_deref(),
@@ -419,56 +403,19 @@ fn deprecation_of_fields_takes_effect_by_feature_or_minimum() {
     }
 }
 
-#[test]
-fn the_bounds_keep_the_return_types_of_their_releases() {
-    use crate::support::Version;
-    let args = r#"command, added = "1.2.0", name = "query-target", returns = "New",
-        returns(added = "1.2.0", value = "Old"), returns(added = "10.1.0", value = "New"),
-        returns_enum = "QueryTargetReturns""#;
-    let returns = |min: Option<Version>, max: Option<Version>| {
-        let (_, rest) = expanded(args, "struct QueryTarget {}", &VersionBounds { min, max });
-        let enum_kept = rest.contains("enum QueryTargetReturns");
-        let returns = rest
-            .split("type Returns = ")
-            .nth(1)
-            .and_then(|tail| tail.split(" ;").next())
-            .unwrap()
-            .to_owned();
-        (returns, enum_kept)
-    };
-    assert_eq!(returns(None, None), ("QueryTargetReturns".into(), true));
-    assert_eq!(
-        returns(Some(Version(9, 0, 0)), Some(Version(10, 1, 0))),
-        ("QueryTargetReturns".into(), true)
-    );
-    // A single release's type needs no enum.
-    assert_eq!(
-        returns(None, Some(Version(10, 0, 9))),
-        ("Old".into(), false)
-    );
-    assert_eq!(
-        returns(Some(Version(10, 1, 0)), None),
-        ("New".into(), false)
-    );
-}
-
 /// Every struct and enum is `#[non_exhaustive]`, the `Returns` enum of a
 /// command too, once.
 #[test]
 fn every_item_is_non_exhaustive() {
     let count = |text: &str| text.matches("non_exhaustive").count();
     for item in ["struct S { a: u8 }", "struct S {}", "enum E { A }"] {
-        let (item, rest) = expanded("", item, &VersionBounds::default());
+        let (item, rest) = expanded("", item);
         let attrs = &item.attrs;
         let attrs = quote::quote!(#(#attrs)*).to_string();
         assert_eq!(count(&attrs), 1, "{attrs}");
         assert_eq!(count(&rest), 0, "{rest}");
     }
-    let (item, _) = expanded(
-        "",
-        "#[non_exhaustive] struct S {}",
-        &VersionBounds::default(),
-    );
+    let (item, _) = expanded("", "#[non_exhaustive] struct S {}");
     let attrs = &item.attrs;
     let attrs = quote::quote!(#(#attrs)*).to_string();
     assert_eq!(count(&attrs), 1, "{attrs}");
@@ -476,7 +423,6 @@ fn every_item_is_non_exhaustive() {
         r#"command, added = "1.0.0", returns = "B", returns(added = "1.0.0", value = "A"),
             returns(added = "2.0.0", value = "B"), returns_enum = "R""#,
         "struct C {}",
-        &VersionBounds::default(),
     );
     assert!(
         rest.contains("# [non_exhaustive] pub enum R")
@@ -487,12 +433,11 @@ fn every_item_is_non_exhaustive() {
 
 /// A struct of `Option` fields, or of none, implements `Default`; any other
 /// has `new`, which takes the fields that are no `Option` in declaration
-/// order, of those the bounds keep.
+/// order.
 #[test]
 fn a_struct_has_default_or_new() {
-    use crate::support::Version;
-    let construction = |item: &str, bounds: &VersionBounds| {
-        let (_, rest) = expanded("", item, bounds);
+    let construction = |item: &str| {
+        let (_, rest) = expanded("", item);
         let default = rest.contains("impl :: core :: default :: Default for S");
         let new = rest
             .split("fn new (")
@@ -500,23 +445,16 @@ fn a_struct_has_default_or_new() {
             .map(|tail| tail.split(") -> Self").next().unwrap().to_owned());
         (default, new)
     };
-    let unbounded = VersionBounds::default();
-    assert_eq!(construction("struct S {}", &unbounded), (true, None));
+    assert_eq!(construction("struct S {}"), (true, None));
     assert_eq!(
-        construction(
-            "pub struct S { a: Option<u8>, #[qapi(required)] b: Option<String> }",
-            &unbounded
-        ),
+        construction("pub struct S { a: Option<u8>, #[qapi(required)] b: Option<String> }"),
         (true, None)
     );
     assert_eq!(
-        construction(
-            "pub struct S { z: String, a: Option<u8>, r#type: Vec<u8> }",
-            &unbounded
-        ),
+        construction("pub struct S { z: String, a: Option<u8>, r#type: Vec<u8> }"),
         (false, Some("z : String , r#type : Vec < u8 >".to_owned()))
     );
-    let (_, rest) = expanded("", "pub struct S { z: String, a: Option<u8> }", &unbounded);
+    let (_, rest) = expanded("", "pub struct S { z: String, a: Option<u8> }");
     assert!(rest.contains("pub fn new"), "{rest}");
     assert!(
         rest.contains("Self { z , a : :: core :: option :: Option :: None , }"),
@@ -529,19 +467,12 @@ fn a_struct_has_default_or_new() {
         ),
         "{rest}"
     );
-    // A gated field is an `Option`, and one the bounds leave out is no
-    // field.
-    let gated = r#"struct S { #[qapi(removed = "2.0.0")] old: Option<u8>, a: Option<u8> }"#;
-    let (_, rest) = expanded(
-        "",
-        gated,
-        &VersionBounds {
-            min: Some(Version(3, 0, 0)),
-            max: None,
-        },
-    );
+    // A field with a lifetime is an `Option`, which `new` leaves `None` in
+    // every build.
+    let gated = r#"struct S { z: String, #[qapi(removed = "2.0.0")] old: Option<u8> }"#;
+    let (_, rest) = expanded("", gated);
     assert!(
-        rest.contains("Self { a : :: core :: option :: Option :: None , }"),
+        rest.contains("Self { z , old : :: core :: option :: Option :: None , }"),
         "{rest}"
     );
 }
@@ -562,7 +493,6 @@ fn a_return_type_history_names_its_enum() {
     let (_, rest) = expanded(
         &format!(r#"{history}, returns_enum = "Replies""#),
         "struct S {}",
-        &VersionBounds::default(),
     );
     assert!(rest.contains("enum Replies"), "{rest}");
     assert!(rest.contains("type Returns = Replies ;"), "{rest}");
@@ -595,52 +525,28 @@ fn a_return_type_history_names_its_enum() {
     );
 }
 
-/// A struct that is the same on the wire as another type from a release is,
-/// in a build whose minimum is at or after it, a deprecated alias of that
-/// type with the struct's documentation, and the struct elsewhere.
+/// A struct that is the same on the wire as another type from a release
+/// says so in its documentation; it stays a struct, which the releases
+/// before need.
 #[test]
-fn an_alias_replaces_its_struct_from_its_release() {
-    use crate::support::Version;
+fn an_alias_documents_the_type_its_struct_is_the_same_as() {
     let args =
         r#"added = "1.2.0", removed = "10.1.0", alias(added = "3.0.0", value = "QemuTargetInfo")"#;
     let item = "/// The target.\npub struct TargetInfo { #[qapi(added = \"3.0.0\")] arch: Option<String> }";
-    let expansion = |min: Option<Version>| {
-        let bounds = VersionBounds { min, max: None };
-        expand(args, item, &bounds).unwrap().to_string()
-    };
-    for min in [None, Some(Version(2, 12, 0))] {
-        let expansion = expansion(min);
-        assert!(expansion.contains("pub struct TargetInfo"), "{expansion}");
-        assert!(!expansion.contains("pub type"), "{expansion}");
-    }
-    for min in [Version(3, 0, 0), Version(9, 2, 0)] {
-        let expansion = expansion(Some(min));
-        assert_eq!(
-            expansion,
-            "# [doc = \" The target.\"] # [doc = \"\"] \
-             # [doc = \" The same on the wire as `QemuTargetInfo` from QEMU 3.0.0.\"] \
-             # [deprecated (note = \"the same on the wire as `QemuTargetInfo` from QEMU 3.0.0; use it\")] \
-             pub type TargetInfo = QemuTargetInfo ;"
-        );
-    }
-    // The struct's lifetime still bounds it.
-    assert!(expansion(Some(Version(10, 1, 0))).is_empty());
-    // Its members are checked whatever the bounds.
-    let (message, at) = crate::tests::error_in(
-        args,
-        "struct TargetInfo { #[qapi(added = \"0.1.0\")] arch: Option<String> }",
-        &VersionBounds {
-            min: Some(Version(9, 2, 0)),
-            max: None,
-        },
+    let (item, rest) = expanded(args, item);
+    assert_eq!(
+        docs(&item.attrs),
+        [
+            " The target.",
+            "",
+            " The same on the wire as `QemuTargetInfo` from QEMU 3.0.0."
+        ]
     );
     assert_eq!(
-        (message.as_str(), at.as_str()),
-        (
-            "qapi: `added` (0.1.0) must not be earlier than the type's `added` (1.2.0)",
-            r#"added = "0.1.0""#
-        )
+        deprecated_note(&item.attrs).as_deref(),
+        Some("# [deprecated (note = \"removed in QEMU 10.1.0\")]")
     );
+    assert!(!rest.contains("pub type"), "{rest}");
 }
 
 #[test]
@@ -712,7 +618,7 @@ fn a_flattened_field_takes_no_keys_of_a_member() {
     }
     let item =
         r#"struct S { #[qapi(flatten, added = "2.0.0", removed = "3.0.0")] base: Option<Base> }"#;
-    assert!(expand("", item, &VersionBounds::default()).is_ok());
+    assert!(expand("", item).is_ok());
 }
 
 #[test]
@@ -776,10 +682,7 @@ fn a_union_has_one_branch_field_and_one_discriminator_member() {
             }}"#,
             keys[0], keys[1]
         );
-        assert!(
-            expand("", &item, &VersionBounds::default()).is_ok(),
-            "{item}"
-        );
+        assert!(expand("", &item).is_ok(), "{item}");
     }
     // A discriminator's runs lie within its field's lifetime, give no bound
     // that is the field's own, and do not overlap each other.
@@ -949,10 +852,7 @@ fn a_union_has_one_branch_field_and_one_discriminator_member() {
                 #[qapi(flatten, union, {union})] u: Option<Branch>,
             }}"#
         );
-        assert!(
-            expand("", &item, &VersionBounds::default()).is_ok(),
-            "{item}"
-        );
+        assert!(expand("", &item).is_ok(), "{item}");
     }
     let item = r#"struct S {
         #[qapi(discriminator)] kind: Kind,
@@ -1025,10 +925,9 @@ fn a_member_of_a_struct_lives_within_it() {
 }
 
 #[test]
-fn the_flags_of_a_command_follow_the_bounds() {
-    use crate::support::Version;
-    let constants = |args: &str, min: Option<Version>, max: Option<Version>| {
-        let (_, rest) = expanded(args, "struct C {}", &VersionBounds { min, max });
+fn the_flags_of_a_command_describe_the_newest_release() {
+    let constants = |args: &str| {
+        let (_, rest) = expanded(args, "struct C {}");
         let constant = |name: &str| {
             rest.split(&format!("const {name} : "))
                 .nth(1)
@@ -1046,60 +945,40 @@ fn the_flags_of_a_command_follow_the_bounds() {
             rest.contains("PreconfigSafe"),
         )
     };
-    let none = || {
-        (
-            "false".to_owned(),
-            ":: core :: option :: Option :: None".to_owned(),
-            false,
-        )
-    };
     let since = |version: &str| format!(":: core :: option :: Option :: Some (({version}))");
     let args = r#"command, allow_preconfig(added = "9.0.0")"#;
-    assert_eq!(constants(args, None, Some(Version(8, 0, 0))), none());
     assert_eq!(
-        constants(args, None, Some(Version(9, 0, 0))),
+        constants(args),
         ("true".into(), since("9u32 , 0u32 , 0u32"), true)
     );
+    // A run of any release makes the command `PreconfigSafe`, even where the
+    // newest release lacks it, and the first run names the release.
     let args = r#"command, allow_preconfig(added = "3.0.0", removed = "5.0.0"),
         allow_preconfig(added = "7.0.0", removed = "8.0.0")"#;
-    assert_eq!(constants(args, Some(Version(8, 0, 0)), None), none());
-    // A run that a release of the bounds has makes the command
-    // `PreconfigSafe`, even where the maximum lacks it.
     assert_eq!(
-        constants(args, Some(Version(6, 0, 0)), None),
-        ("false".into(), since("7u32 , 0u32 , 0u32"), true)
-    );
-    assert_eq!(
-        constants(args, None, None),
+        constants(args),
         ("false".into(), since("3u32 , 0u32 , 0u32"), true)
     );
     // Without `added`, a run starts with the command.
     let args = r#"command, added = "2.0.0", allow_preconfig(removed = "5.0.0")"#;
     assert_eq!(
-        constants(args, None, None),
+        constants(args),
         ("false".into(), since("2u32 , 0u32 , 0u32"), true)
     );
-    assert_eq!(constants(args, Some(Version(5, 0, 0)), None), none());
-    // The other flag constants describe the newest release of the bounds.
-    let allow_oob = |args: &str, max: Option<Version>| {
-        let (_, rest) = expanded(args, "struct C {}", &VersionBounds { min: None, max });
+    let (_, rest) = expanded("command", "struct C {}");
+    assert!(!rest.contains("PreconfigSafe"), "{rest}");
+    // The other flag constants describe the newest release.
+    let allow_oob = |args: &str| {
+        let (_, rest) = expanded(args, "struct C {}");
         rest.contains("const ALLOW_OOB : bool = true")
     };
-    assert!(allow_oob(r#"command, allow_oob(added = "9.0.0")"#, None));
-    assert!(!allow_oob(
-        r#"command, allow_oob(added = "9.0.0")"#,
-        Some(Version(8, 0, 0))
-    ));
-    assert!(!allow_oob(r#"command, allow_oob(removed = "9.0.0")"#, None));
-    assert!(allow_oob(
-        r#"command, allow_oob(removed = "9.0.0")"#,
-        Some(Version(8, 0, 0))
-    ));
+    assert!(allow_oob(r#"command, allow_oob(added = "9.0.0")"#));
+    assert!(!allow_oob(r#"command, allow_oob(removed = "9.0.0")"#));
 }
 
 #[test]
 fn a_field_declares_no_use_of_a_deprecated_type() {
-    let (item, _) = expanded("", "struct S { a: Old }", &VersionBounds::default());
+    let (item, _) = expanded("", "struct S { a: Old }");
     let attrs = field_attrs(&item, 0);
     assert!(
         attrs
@@ -1115,34 +994,9 @@ fn a_field_declares_no_use_of_a_deprecated_type() {
 }
 
 #[test]
-fn a_union_whose_discriminator_the_bounds_leave_out_is_refused_in_its_releases() {
-    // `CpuInfoFast`: `target` takes over from `arch` in 3.0.
-    let item = r#"#[qapi(added = "2.12.0")] struct Cpu {
-        #[qapi(discriminator(removed = "3.0.0"), removed = "6.0.0")] arch: Option<Arch>,
-        #[qapi(discriminator, added = "3.0.0")] target: Option<Target>,
-        #[qapi(flatten, union)] u: Option<Branch>,
-    }"#;
-    let refusal = "Cpu.u: no discriminator selects the branch in QEMU {}.{}.{}{}";
-    for (min, max, refused) in [
-        (None, Some("2.12.0"), true),
-        (Some("6.0.0"), None, true),
-        (Some("3.0.0"), Some("5.2.0"), false),
-        (None, None, false),
-    ] {
-        let bounds = VersionBounds {
-            min: min.map(|min| crate::support::Version::parse(min).unwrap()),
-            max: max.map(|max| crate::support::Version::parse(max).unwrap()),
-        };
-        let (_, rest) = expanded("", item, &bounds);
-        assert_eq!(rest.contains(refusal), refused, "{min:?}..{max:?}: {rest}");
-    }
-}
-
-#[test]
 fn unscoped_decoding_takes_the_discriminator_of_the_newest_release() {
     use crate::attrs::{ItemAttrs, TypeAttrs};
     use crate::structs::FieldInfo;
-    use crate::support::Version;
     let field = |keys: &str| {
         let item: syn::DeriveInput = syn::parse_str(&format!(
             "struct S {{ #[qapi({keys})] arch: Option<Arch> }}"
@@ -1158,21 +1012,12 @@ fn unscoped_decoding_takes_the_discriminator_of_the_newest_release() {
             ty: field.ty,
         }
     };
-    let newest = |field: &FieldInfo, max: Option<&str>| {
-        field.discriminates_at_newest(&VersionBounds {
-            min: None,
-            max: max.map(|max| Version::parse(max).unwrap()),
-        })
-    };
-    // A run that starts at the maximum holds in it, one that ends there not.
-    let from = field(r#"discriminator(added = "3.0.0")"#);
-    assert!(newest(&from, Some("3.0.0")) && newest(&from, None));
-    assert!(!newest(&from, Some("2.12.0")));
-    let until = field(r#"discriminator(removed = "3.0.0")"#);
-    assert!(newest(&until, Some("2.12.0")));
-    assert!(!newest(&until, Some("3.0.0")) && !newest(&until, None));
-    // Any run of the field may hold there.
-    let runs = field(r#"discriminator(removed = "3.0.0"), discriminator(added = "5.0.0")"#);
-    assert!(newest(&runs, Some("2.12.0")) && newest(&runs, Some("5.0.0")));
-    assert!(!newest(&runs, Some("4.0.0")) && newest(&runs, None));
+    // A run without a removal holds in the newest release, one that ends
+    // does not, and any run of the field may be the one.
+    assert!(field(r#"discriminator(added = "3.0.0")"#).discriminates_at_newest());
+    assert!(!field(r#"discriminator(removed = "3.0.0")"#).discriminates_at_newest());
+    assert!(
+        field(r#"discriminator(removed = "3.0.0"), discriminator(added = "5.0.0")"#)
+            .discriminates_at_newest()
+    );
 }

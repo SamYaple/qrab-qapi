@@ -60,8 +60,6 @@ bash contrib/check-qapi.sh
   lines, and the documentation of `qrab-qapi` built with it, which carries
   schema prose only with both the `schema-docs` feature and
   `QRAB_QAPI_SCHEMA_DOCS`
-- builds of `qrab-qapi` with `QEMU_MIN_VERSION` and `QEMU_MAX_VERSION`
-  bounds for each maintained QEMU series
 - strict Clippy on all four crates, the generated sources included, and
   the tests of the other crates
 - the API documentation of all four crates, with warnings treated as errors

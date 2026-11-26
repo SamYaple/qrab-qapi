@@ -53,9 +53,9 @@ Most users want `qrab-qapi-protocol` together with `qrab-qapi`.
   generation inputs and regression fixtures, but schema coverage does not
   mean every release has been tested against a live QEMU.
 
-To compile only the representations that exist in a range of QEMU releases,
-set `QEMU_MIN_VERSION` and `QEMU_MAX_VERSION` when building, for example to
-`9.2.0` and `11.1.3`. Without them the complete history is available.
+Every build has the complete history, and the clients refuse at run time
+what a peer's release lacks. What the newest pinned release removed or
+deprecates is Rust `#[deprecated]`.
 
 [docs/codegen.md](docs/codegen.md#compatibility-policy) has the full
 compatibility policy and [docs/protocol.md](docs/protocol.md) the client
@@ -84,8 +84,8 @@ qmp.shutdown().await;
 
 Each crate's README has more:
 
-- [qrab-qapi](projects/qapi/README.md): the generated types, version bounds
-  and the `schema-docs` feature;
+- [qrab-qapi](projects/qapi/README.md): the generated types, their QEMU
+  lifetimes and the `schema-docs` feature;
 - [qrab-qapi-protocol](projects/qapi-protocol/README.md): connecting to
   QEMU;
 - [qrab-qapi-macros](projects/qapi-macros/README.md): the `#[qapi(...)]`

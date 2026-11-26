@@ -1,7 +1,6 @@
 //! Helpers shared by the expansions of every kind of item.
 
 use crate::attrs::{AttrRange, Deprecation, ItemAttrs, TypeAttrs};
-use crate::bounds::{VersionBounds, rust_deprecated_by_bounds};
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{ToTokens, format_ident, quote};
 use syn::ext::IdentExt;
@@ -134,22 +133,25 @@ pub(crate) fn condition_note(condition: &str) -> String {
     format!("QEMU/guest build condition: `{condition}`.")
 }
 
-/// Rust `#[deprecated]` for a deprecated type or member: when one of its
-/// deprecations covers every release the build supports, or when it only
-/// has the `deprecated` feature and so no version to compare.
+/// Rust `#[deprecated]` for a type or member that the newest release no
+/// longer offers: one removed at `until`, or one with a deprecation that
+/// lasts to the newest release, or, without any versions to compare, one
+/// with the `deprecated` feature. The note names the release. Code for an
+/// older peer may still use it; the warning points newer code elsewhere.
 pub(crate) fn deprecated_attr(
-    bounds: &VersionBounds,
     deprecated: &[Deprecation],
+    until: Option<Version>,
     feature: bool,
     what: &str,
 ) -> Option<syn::Attribute> {
-    let covering = deprecated
-        .iter()
-        .find(|run| rust_deprecated_by_bounds(bounds, run.added, run.removed));
-    let note = match covering {
-        Some(run) => format!("deprecated since QEMU {}", run.added),
-        None if deprecated.is_empty() && feature => format!("deprecated QAPI {what}"),
-        None => return None,
+    let note = if let Some(until) = until {
+        format!("removed in QEMU {until}")
+    } else if let Some(run) = deprecated.iter().find(|run| run.removed.is_none()) {
+        format!("deprecated since QEMU {}", run.added)
+    } else if deprecated.is_empty() && feature {
+        format!("deprecated QAPI {what}")
+    } else {
+        return None;
     };
     Some(syn::parse_quote! { #[deprecated(note = #note)] })
 }
@@ -157,12 +159,7 @@ pub(crate) fn deprecated_attr(
 /// Replace the `#[qapi(...)]` attributes of a member by its QAPI
 /// metadata: doc lines for the `unstable` feature and the build condition,
 /// and Rust `#[deprecated]`.
-pub(crate) fn annotate_item(
-    item_attrs: &mut Vec<syn::Attribute>,
-    bounds: &VersionBounds,
-    attrs: &ItemAttrs,
-    what: &str,
-) {
+pub(crate) fn annotate_item(item_attrs: &mut Vec<syn::Attribute>, attrs: &ItemAttrs, what: &str) {
     item_attrs.retain(|attr| !attr.path().is_ident("qapi"));
     let mut notes = Vec::new();
     // Unstable is not deprecated, so it is a doc line, not #[deprecated].
@@ -174,8 +171,8 @@ pub(crate) fn annotate_item(
     notes.extend(attrs.condition.as_deref().map(condition_note));
     push_doc_notes(item_attrs, notes);
     item_attrs.extend(deprecated_attr(
-        bounds,
         &attrs.deprecated,
+        attrs.until,
         attrs.has_feature("deprecated"),
         what,
     ));
@@ -204,59 +201,17 @@ pub(crate) fn unavailable_error(name: &str) -> TokenStream2 {
 }
 
 /// The decoding error of a type or member outside its lifetime in the
-/// scoped version, which names the bound that a version outside the bounds
-/// lies outside.
-pub(crate) fn unavailable_decode_error(name: &str, bounds: &VersionBounds) -> TokenStream2 {
-    match outside_bounds_clause(bounds) {
-        Some(clause) => quote! {
-            ::qapi::__private::serde::de::Error::custom(::std::format!(
-                "{}{}",
-                ::qapi::__private::unavailable_type_message(#name),
-                #clause,
-            ))
-        },
-        None => {
-            quote! { ::qapi::__private::serde::de::Error::custom(::qapi::__private::unavailable_type_message(#name)) }
-        }
-    }
-}
-
-/// The clause that ends a decoding error in a peer's version scope when the
-/// peer's release lies outside the build's bounds, since the build leaves
-/// out what only releases outside them have: an `&str` expression, empty
-/// within the bounds and unscoped. `None` for a build without bounds.
-pub(crate) fn outside_bounds_clause(bounds: &VersionBounds) -> Option<TokenStream2> {
-    let earlier = bounds.min.map(|min| {
-        let clause = format!(", which is earlier than this build's QEMU_MIN_VERSION {min}");
-        quote! {
-            if ::qapi::scoped_qemu_version().is_some()
-                && ::qapi::scoped_qemu_version() < ::core::option::Option::Some(#min)
-            {
-                #clause
-            } else
-        }
-    });
-    let later = bounds.max.map(|max| {
-        let clause = format!(", which is later than this build's QEMU_MAX_VERSION {max}");
-        quote! {
-            if ::qapi::scoped_qemu_version() > ::core::option::Option::Some(#max) {
-                #clause
-            } else
-        }
-    });
-    (earlier.is_some() || later.is_some()).then(|| quote! { (#earlier #later { "" }) })
+/// scoped version.
+pub(crate) fn unavailable_decode_error(name: &str) -> TokenStream2 {
+    quote! { ::qapi::__private::serde::de::Error::custom(::qapi::__private::unavailable_type_message(#name)) }
 }
 
 /// The start of a type's decoder: in a peer's version scope, refuse a type
 /// outside its lifetime.
-pub(crate) fn type_deserialization_guard(
-    name: &syn::Ident,
-    attrs: &TypeAttrs,
-    bounds: &VersionBounds,
-) -> TokenStream2 {
+pub(crate) fn type_deserialization_guard(name: &syn::Ident, attrs: &TypeAttrs) -> TokenStream2 {
     version_range_check(attrs.since, attrs.until)
         .map(|active| {
-            let error = unavailable_decode_error(&name.unraw().to_string(), bounds);
+            let error = unavailable_decode_error(&name.unraw().to_string());
             quote! {
                 if ::qapi::scoped_qemu_version().is_some() && !#active {
                     return ::core::result::Result::Err(#error);
@@ -290,35 +245,15 @@ pub(crate) fn deprecation_warning(name: &str, deprecated: &[Deprecation]) -> Tok
     quote! { #(#warnings)* }
 }
 
-/// Whether something removed at `until` still exists in the newest release
-/// the build represents: `QEMU_MAX_VERSION`, or the newest pinned release
-/// without it.
-pub(crate) fn lasts_to_newest(until: Option<Version>, bounds: &VersionBounds) -> bool {
-    match (until, bounds.max) {
-        (None, _) => true,
-        (Some(until), Some(max)) => until > max,
-        (Some(_), None) => false,
-    }
+/// The ranges of a flag such as `unstable` that hold in the newest
+/// release: those without a removal.
+pub(crate) fn ranges_at_newest(ranges: &[AttrRange]) -> impl Iterator<Item = &AttrRange> {
+    ranges.iter().filter(|range| range.removed.is_none())
 }
 
-/// The ranges of a flag such as `unstable` that hold in the
-/// newest release the build represents: `QEMU_MAX_VERSION`, or the newest
-/// pinned release without it.
-pub(crate) fn ranges_at_newest<'a>(
-    ranges: &'a [AttrRange],
-    bounds: &'a VersionBounds,
-) -> impl Iterator<Item = &'a AttrRange> + 'a {
-    ranges.iter().filter(|range| {
-        bounds
-            .max
-            .is_none_or(|max| range.added.is_none_or(|added| added <= max))
-            && lasts_to_newest(range.removed, bounds)
-    })
-}
-
-/// Whether a flag holds in the newest release the build represents.
-pub(crate) fn flag_at_newest(ranges: &[AttrRange], bounds: &VersionBounds) -> bool {
-    ranges_at_newest(ranges, bounds).next().is_some()
+/// Whether a flag holds in the newest release.
+pub(crate) fn flag_at_newest(ranges: &[AttrRange]) -> bool {
+    ranges_at_newest(ranges).next().is_some()
 }
 
 /// Collision-free names for the locals, helper types and generic parameters

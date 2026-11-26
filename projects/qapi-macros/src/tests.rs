@@ -1,39 +1,23 @@
 //! The attribute's compile errors, which these tests read with the source
 //! text they point at, and the parts of the expansion that only the
-//! attributes it emits show: documentation, deprecation and the bounds.
+//! attributes it emits show: documentation and deprecation.
 
-use crate::bounds::{
-    VersionBounds, bound, checked_bounds, excluded_by_bounds, report_once,
-    rust_deprecated_by_bounds,
-};
 use crate::support::{Version, flag_at_newest};
 use proc_macro2::TokenStream as TokenStream2;
-use std::sync::atomic::AtomicBool;
 use syn::DeriveInput;
 use syn::parse::Parser;
 
-fn version(text: &str) -> Version {
-    Version::parse(text).unwrap()
-}
-
-fn bounds(min: Option<&str>, max: Option<&str>) -> VersionBounds {
-    VersionBounds {
-        min: min.map(version),
-        max: max.map(version),
-    }
-}
-
 /// Expand `item` with the attribute arguments `args`, both parsed from
 /// source text so that errors carry the location they point at.
-pub(crate) fn expand(args: &str, item: &str, bounds: &VersionBounds) -> syn::Result<TokenStream2> {
+pub(crate) fn expand(args: &str, item: &str) -> syn::Result<TokenStream2> {
     let args = crate::attrs::parse_items.parse_str(args)?;
     let item: DeriveInput = syn::parse_str(item)?;
-    crate::expand(args, item, bounds)
+    crate::expand(args, item)
 }
 
 /// The message of the expansion's error and the source text it points at.
-pub(crate) fn error_in(args: &str, item: &str, bounds: &VersionBounds) -> (String, String) {
-    match expand(args, item, bounds) {
+pub(crate) fn error(args: &str, item: &str) -> (String, String) {
+    match expand(args, item) {
         Ok(tokens) => panic!("expected a compile error, got {tokens}"),
         Err(error) => (
             error.to_string(),
@@ -42,18 +26,14 @@ pub(crate) fn error_in(args: &str, item: &str, bounds: &VersionBounds) -> (Strin
     }
 }
 
-pub(crate) fn error(args: &str, item: &str) -> (String, String) {
-    error_in(args, item, &VersionBounds::default())
-}
-
 #[track_caller]
 pub(crate) fn assert_error(args: &str, item: &str, message: &str, at: &str) {
     assert_eq!(error(args, item), (message.to_owned(), at.to_owned()));
 }
 
 /// The expanded item, with its attributes, and the rest of the expansion.
-pub(crate) fn expanded(args: &str, item: &str, bounds: &VersionBounds) -> (DeriveInput, String) {
-    let tokens = expand(args, item, bounds).unwrap();
+pub(crate) fn expanded(args: &str, item: &str) -> (DeriveInput, String) {
+    let tokens = expand(args, item).unwrap();
     let file: syn::File = syn::parse2(tokens).unwrap();
     let mut items = file.items.into_iter();
     let item: DeriveInput = match items.next() {
@@ -192,116 +172,23 @@ fn versions_have_three_decimal_components_without_leading_zeros() {
 }
 
 #[test]
-fn invalid_version_bounds_name_their_variable_once() {
-    assert_eq!(
-        bound("QEMU_MIN_VERSION", Ok("9.2.0".into())).unwrap(),
-        Some(Version(9, 2, 0))
-    );
-    assert_eq!(bound("QEMU_MIN_VERSION", Ok(String::new())).unwrap(), None);
-    assert_eq!(
-        bound("QEMU_MIN_VERSION", Err(std::env::VarError::NotPresent)).unwrap(),
-        None
-    );
-    let error = bound("QEMU_MAX_VERSION", Ok("nine".into())).unwrap_err();
-    assert_eq!(
-        error.to_string(),
-        "qapi: QEMU_MAX_VERSION must be a QEMU version such as 9.2.0, found \"nine\""
-    );
-    let error = checked_bounds(bounds(Some("11.0.0"), Some("9.2.0")))
-        .err()
-        .unwrap();
-    assert_eq!(
-        error.to_string(),
-        "qapi: QEMU_MIN_VERSION 11.0.0 is later than QEMU_MAX_VERSION 9.2.0"
-    );
-    // Only the first expansion of a build reports an invalid bound; every
-    // expansion goes on without bounds.
-    let reported = AtomicBool::new(false);
-    let invalid = || bound("QEMU_MIN_VERSION", Ok("x".into())).map(|_| VersionBounds::default());
-    let (first, error) = report_once(invalid(), &reported);
-    assert!(error.is_some() && first.min.is_none() && first.max.is_none());
-    let (second, error) = report_once(invalid(), &reported);
-    assert!(error.is_none() && second.min.is_none());
-    let (valid, error) = report_once(Ok(bounds(Some("9.2.0"), None)), &reported);
-    assert!(error.is_none() && valid.min == Some(Version(9, 2, 0)));
-}
-
-#[test]
-fn the_bounds_leave_out_what_no_release_of_their_range_has() {
-    let min = bounds(Some("9.2.0"), None);
-    assert!(excluded_by_bounds(&min, None, Some(version("9.2.0"))));
-    assert!(!excluded_by_bounds(&min, None, Some(version("9.2.1"))));
-    assert!(!excluded_by_bounds(&min, Some(version("11.0.0")), None));
-    let max = bounds(None, Some("9.2.0"));
-    assert!(!excluded_by_bounds(&max, Some(version("9.2.0")), None));
-    assert!(excluded_by_bounds(&max, Some(version("9.2.1")), None));
-    assert!(!excluded_by_bounds(&max, None, Some(version("1.0.0"))));
-    assert!(!excluded_by_bounds(
-        &VersionBounds::default(),
-        Some(version("99.0.0")),
-        Some(version("99.1.0"))
-    ));
-
-    assert!(rust_deprecated_by_bounds(&min, version("9.2.0"), None));
-    assert!(rust_deprecated_by_bounds(&min, version("9.1.0"), None));
-    assert!(!rust_deprecated_by_bounds(&min, version("9.2.1"), None));
-    assert!(!rust_deprecated_by_bounds(&max, version("1.0.0"), None));
-    // A deprecation that ends covers the build only if it ends after the
-    // maximum.
-    let both = bounds(Some("9.2.0"), Some("10.0.0"));
-    assert!(rust_deprecated_by_bounds(
-        &both,
-        version("9.0.0"),
-        Some(version("10.1.0"))
-    ));
-    assert!(!rust_deprecated_by_bounds(
-        &both,
-        version("9.0.0"),
-        Some(version("10.0.0"))
-    ));
-    assert!(!rust_deprecated_by_bounds(
-        &min,
-        version("9.0.0"),
-        Some(version("99.0.0"))
-    ));
-
-    // Variants, and the whole item, follow the same rule.
-    let item = r#"enum E {
-        A,
-        #[qapi(removed = "9.2.0")] Gone,
-        #[qapi(removed = "9.2.1")] Kept,
-    }"#;
-    let (item, _) = expanded("", item, &min);
-    let syn::Data::Enum(data) = &item.data else {
-        panic!("not an enum");
-    };
-    let names: Vec<_> = data.variants.iter().map(|v| v.ident.to_string()).collect();
-    assert_eq!(names, ["A", "Kept"]);
-    let item = "enum E { A }";
-    assert!(expand(r#"added = "9.2.1""#, item, &max).unwrap().is_empty());
-    assert!(!expand(r#"added = "9.2.0""#, item, &max).unwrap().is_empty());
-}
-
-#[test]
-fn flags_of_the_newest_release_follow_the_maximum() {
-    let holds = |range: &str, max: Option<&str>| {
+fn flags_of_the_newest_release_are_those_without_a_removal() {
+    let holds = |range: &str| {
         let args = crate::attrs::parse_items.parse_str(range).unwrap();
         let ta = crate::attrs::TypeAttrs::parse(&args, &[]).unwrap();
-        flag_at_newest(&ta.unstable, &bounds(None, max))
+        flag_at_newest(&ta.unstable)
     };
-    let max = Some("9.0.0");
-    assert!(holds(r#"unstable(added = "9.0.0")"#, max));
-    assert!(!holds(r#"unstable(added = "9.0.1")"#, max));
-    assert!(!holds(r#"unstable(removed = "9.0.0")"#, max));
-    assert!(holds(r#"unstable(removed = "9.0.1")"#, max));
-    assert!(holds(r#"unstable(added = "99.0.0")"#, None));
-    assert!(!holds(r#"unstable(removed = "99.0.0")"#, None));
-    assert!(!holds("", None));
+    assert!(holds(r#"unstable(added = "9.0.0")"#));
+    assert!(holds(r#"unstable(added = "99.0.0")"#));
+    assert!(!holds(r#"unstable(removed = "99.0.0")"#));
+    assert!(holds(
+        r#"unstable(removed = "9.0.0"), unstable(added = "10.0.0")"#
+    ));
+    assert!(!holds(""));
 }
 
 #[test]
-fn every_key_is_checked_whatever_the_bounds_leave_out() {
-    let old = bounds(None, Some("8.0.0"));
+fn every_key_is_checked() {
     let cases = [
         (
             r#"added = "9.0.0""#,
@@ -335,9 +222,7 @@ fn every_key_is_checked_whatever_the_bounds_leave_out() {
         ),
     ];
     for (args, item, message) in cases {
-        for bounds in [&old, &VersionBounds::default()] {
-            assert_eq!(error_in(args, item, bounds).0, message, "{item}");
-        }
+        assert_eq!(error(args, item).0, message, "{item}");
     }
 }
 
@@ -376,7 +261,7 @@ fn lifetimes_end_after_they_start_and_hold_their_deprecation() {
     // A deprecation in the release that adds the item is within it.
     let item =
         r#"enum E { #[qapi(added = "9.0.0", deprecated(added = "9.0.0"), removed = "9.1.0")] A }"#;
-    assert!(expand("", item, &VersionBounds::default()).is_ok());
+    assert!(expand("", item).is_ok());
     // A deprecation that ends does so after it starts and by the item's end,
     // and the next starts after it.
     assert_error(
@@ -404,7 +289,7 @@ fn lifetimes_end_after_they_start_and_hold_their_deprecation() {
         r#"deprecated(added = "9.1.0")"#,
     );
     let item = r#"enum E { #[qapi(deprecated(added = "8.0.0", removed = "9.0.0"), deprecated(added = "9.0.0", removed = "9.1.0"), removed = "9.1.0")] A }"#;
-    assert!(expand("", item, &VersionBounds::default()).is_ok());
+    assert!(expand("", item).is_ok());
 }
 
 #[test]
@@ -476,19 +361,12 @@ fn repeated_keys_and_features_are_errors() {
     let args = r#"unstable(added = "1.0.0", removed = "2.0.0"), unstable(added = "3.0.0"),
         deprecated(added = "1.0.0", removed = "2.0.0"),
         feature = "deprecated", feature = "unstable""#;
-    assert!(expand(args, "enum E { A }", &VersionBounds::default()).is_ok());
+    assert!(expand(args, "enum E { A }").is_ok());
     let args = r#"deprecated(added = "1.0.0", removed = "2.0.0")"#;
-    assert!(
-        expand(
-            args,
-            r#"#[qapi(deprecated(added = "3.0.0"))] enum E { A }"#,
-            &VersionBounds::default()
-        )
-        .is_ok()
-    );
+    assert!(expand(args, r#"#[qapi(deprecated(added = "3.0.0"))] enum E { A }"#).is_ok());
     let args = r#"unstable(added = "1.0.0", removed = "2.0.0"), unstable(added = "3.0.0"),
         feature = "deprecated", feature = "unstable""#;
-    assert!(expand(args, "enum E { A }", &VersionBounds::default()).is_ok());
+    assert!(expand(args, "enum E { A }").is_ok());
 }
 
 #[test]
@@ -543,7 +421,7 @@ fn representations_of_one_wire_name_have_disjoint_lifetimes() {
         );
     }
     let item = r#"enum E { #[qapi(name = "x", removed = "3.0.0")] A, #[qapi(name = "x", added = "3.0.0")] B }"#;
-    assert!(expand("", item, &VersionBounds::default()).is_ok());
+    assert!(expand("", item).is_ok());
 }
 
 #[test]
@@ -576,19 +454,8 @@ fn own_derives_of_the_expansions_traits_are_errors() {
         "qapi: #[qapi] provides `Default` itself",
         "Default",
     );
-    assert!(
-        expand(
-            "",
-            "#[derive(Default)] enum E { #[default] A }",
-            &VersionBounds::default()
-        )
-        .is_ok()
-    );
-    let (item, rest) = expanded(
-        "",
-        "#[derive(PartialEq, Eq)] enum E { A }",
-        &VersionBounds::default(),
-    );
+    assert!(expand("", "#[derive(Default)] enum E { #[default] A }").is_ok());
+    let (item, rest) = expanded("", "#[derive(PartialEq, Eq)] enum E { A }");
     assert!(rest.contains("Serialize for E"), "{rest}");
     let derives: Vec<_> = item
         .attrs
@@ -618,7 +485,7 @@ fn notes_follow_the_docs_as_a_paragraph_of_their_own() {
             #[qapi(condition = "CONFIG_Z")]
             B,
         }"#;
-    let (item, _) = expanded("", item, &VersionBounds::default());
+    let (item, _) = expanded("", item);
     assert_eq!(
         docs(&item.attrs),
         [
@@ -645,48 +512,32 @@ fn notes_follow_the_docs_as_a_paragraph_of_their_own() {
 }
 
 #[test]
-fn unstable_types_are_documented_as_in_the_newest_release_of_the_bounds() {
-    let doc = |args: &str, max: Option<&str>| {
-        let (item, _) = expanded(args, "enum E { A }", &bounds(None, max));
+fn unstable_types_are_documented_as_in_the_newest_release() {
+    let doc = |args: &str| {
+        let (item, _) = expanded(args, "enum E { A }");
         docs(&item.attrs)
     };
     let since = " **Unstable** since QEMU 9.0.0 — this interface may change without notice.";
     let plain = " **Unstable** — this interface may change without notice.";
-    assert!(doc(r#"unstable(added = "9.0.0")"#, Some("8.0.0")).is_empty());
-    assert_eq!(doc(r#"unstable(added = "9.0.0")"#, Some("9.0.0")), [since]);
-    assert_eq!(doc(r#"unstable(added = "9.0.0")"#, None), [since]);
-    assert_eq!(
-        doc(r#"unstable(removed = "10.0.0")"#, Some("9.2.0")),
-        [plain]
-    );
-    assert!(doc(r#"unstable(removed = "10.0.0")"#, None).is_empty());
-    assert_eq!(doc(r#"feature = "unstable""#, None), [plain]);
-    // The release that the range holding at the maximum began.
+    assert_eq!(doc(r#"unstable(added = "9.0.0")"#), [since]);
+    assert!(doc(r#"unstable(removed = "10.0.0")"#).is_empty());
+    assert_eq!(doc(r#"feature = "unstable""#), [plain]);
+    // The release that began the range holding in the newest release.
     let ranges = r#"unstable(added = "5.0.0", removed = "10.0.0"), unstable(added = "11.0.0")"#;
     assert_eq!(
-        doc(ranges, Some("9.0.0")),
-        [" **Unstable** since QEMU 5.0.0 — this interface may change without notice."]
-    );
-    assert_eq!(
-        doc(ranges, None),
+        doc(ranges),
         [" **Unstable** since QEMU 11.0.0 — this interface may change without notice."]
     );
     // The versions decide where there are any.
-    assert!(
-        doc(
-            r#"feature = "unstable", unstable(removed = "10.0.0")"#,
-            None
-        )
-        .is_empty()
-    );
+    assert!(doc(r#"feature = "unstable", unstable(removed = "10.0.0")"#).is_empty());
 }
 
 #[test]
-fn deprecation_marks_types_and_variants_by_feature_or_minimum() {
+fn deprecation_marks_what_the_newest_release_deprecates_or_no_longer_has() {
+    // Without versions, the `deprecated` feature decides.
     let (item, _) = expanded(
         r#"feature = "deprecated", feature = "unstable""#,
         "enum E { A }",
-        &VersionBounds::default(),
     );
     assert_eq!(
         deprecated_note(&item.attrs).as_deref(),
@@ -699,11 +550,7 @@ fn deprecation_marks_types_and_variants_by_feature_or_minimum() {
         } else {
             r#"#[qapi(feature = "deprecated", feature = "unstable")]"#
         };
-        let (item, _) = expanded(
-            "",
-            &format!("enum E {{ {attrs} A }}"),
-            &VersionBounds::default(),
-        );
+        let (item, _) = expanded("", &format!("enum E {{ {attrs} A }}"));
         let attrs = variant_attrs(&item, 0);
         assert_eq!(
             deprecated_note(attrs).as_deref(),
@@ -711,81 +558,53 @@ fn deprecation_marks_types_and_variants_by_feature_or_minimum() {
         );
         assert!(docs(attrs)[0].contains("**Unstable**"), "{split}");
     }
-    let item = r#"enum E { #[qapi(feature = "deprecated", deprecated(added = "9.2.0"))] A }"#;
-    for (min, deprecated) in [("9.2.0", true), ("9.1.0", false), ("10.0.0", true)] {
-        let (item, rest) = expanded("", item, &bounds(Some(min), None));
-        // The version, not the feature, decides.
-        let note = deprecated_note(variant_attrs(&item, 0));
-        assert_eq!(note.is_some(), deprecated, "{min}: {note:?}");
-        assert!(note.is_none_or(|note| note.contains("deprecated since QEMU 9.2.0")));
-        assert!(rest.contains("qapi warning: E::A is deprecated since QEMU 9.2.0"));
-    }
-    // A deprecation that a later release drops is Rust `#[deprecated]` only
-    // where every release of the bounds deprecates it, and it warns only
+    let note = |text: &str| Some(format!("# [deprecated (note = \"{text}\")]"));
+    let notes = |item: &str| {
+        let (item, rest) = expanded("", item);
+        let notes: Vec<Option<String>> = (0..2)
+            .map(|index| deprecated_note(variant_attrs(&item, index)))
+            .collect();
+        (notes, rest)
+    };
+    // A deprecation that lasts to the newest release: the version, not the
+    // feature, decides, and it warns within its releases.
+    let (found, rest) =
+        notes(r#"enum E { #[qapi(feature = "deprecated", deprecated(added = "9.2.0"))] A, B }"#);
+    assert_eq!(found, [note("deprecated since QEMU 9.2.0"), None]);
+    assert!(rest.contains("qapi warning: E::A is deprecated since QEMU 9.2.0"));
+    // One that a later release dropped marks nothing, and it still warns
     // within its releases.
-    let item = r#"enum E { #[qapi(deprecated(added = "9.0.0", removed = "10.0.0"))] A }"#;
-    for (max, deprecated) in [
-        (Some("9.2.0"), true),
-        (Some("10.0.0"), false),
-        (None, false),
-    ] {
-        let (item, rest) = expanded("", item, &bounds(Some("9.1.0"), max));
-        assert_eq!(
-            deprecated_note(variant_attrs(&item, 0)).is_some(),
-            deprecated,
-            "{max:?}"
-        );
-        assert!(
-            rest.contains(":: qapi :: qemu_version () < (10u32 , 0u32 , 0u32)"),
-            "{rest}"
-        );
-    }
-}
-
-#[test]
-fn decoding_errors_name_the_bound_that_the_peers_release_lies_outside() {
-    // What the bounds leave out of a release outside them is no error of
-    // the peer's: the errors that the release decides say so.
-    let earlier = ", which is earlier than this build's QEMU_MIN_VERSION 3.0.0";
-    let later = ", which is later than this build's QEMU_MAX_VERSION 5.0.0";
-    let items = [
-        r#"enum E { #[qapi(removed = "3.0.0")] A, B }"#,
-        r#"#[qapi(union_branch)] enum E { #[qapi(removed = "3.0.0")] A, B }"#,
-        r#"enum E { A(u8), B(String) }"#,
-    ];
-    for item in items {
-        for (bounds, clauses) in [
-            (bounds(Some("3.0.0"), Some("5.0.0")), [true, true]),
-            (bounds(Some("3.0.0"), None), [true, false]),
-            (bounds(None, Some("5.0.0")), [false, true]),
-            (VersionBounds::default(), [false, false]),
-        ] {
-            let (_, rest) = expanded(r#"added = "1.0.0""#, item, &bounds);
-            for (clause, given) in [earlier, later].into_iter().zip(clauses) {
-                // Each decoding error that the version decides carries it,
-                // the type's and each variant's unavailability among them.
-                let count = rest.matches(clause).count();
-                assert_eq!(count > 0, given, "{item}: {clause}: {rest}");
-                let unavailable = rest.matches("unavailable_type_message").count();
-                assert!(!given || count > unavailable, "{item}: {clause}: {rest}");
-            }
-        }
-    }
-    // The bounds themselves are releases within them.
-    let (_, rest) = expanded("", "enum E { A }", &bounds(Some("3.0.0"), Some("5.0.0")));
-    for comparison in [
-        ":: qapi :: scoped_qemu_version () < :: core :: option :: Option :: Some ((3u32 , 0u32 , 0u32))",
-        ":: qapi :: scoped_qemu_version () > :: core :: option :: Option :: Some ((5u32 , 0u32 , 0u32))",
-    ] {
-        assert!(rest.contains(comparison), "{comparison}: {rest}");
-    }
-    // An unknown wire name names the release instead of the variants.
-    let (_, rest) = expanded("", "enum E { A }", &bounds(Some("3.0.0"), None));
+    let (found, rest) =
+        notes(r#"enum E { #[qapi(deprecated(added = "9.0.0", removed = "10.0.0"))] A, B }"#);
+    assert_eq!(found, [None, None]);
     assert!(
-        rest.contains(r#""unknown variant `{}` in QEMU {}.{}.{}{}""#),
+        rest.contains(":: qapi :: qemu_version () < (10u32 , 0u32 , 0u32)"),
         "{rest}"
     );
-    assert!(rest.contains(r#""unknown variant `{}`, {}""#), "{rest}");
+    // What the newest release no longer has names its removal, whether or
+    // not a deprecation came first; what a later release added is current.
+    let (found, _) =
+        notes(r#"enum E { #[qapi(removed = "9.1.0")] A, #[qapi(added = "9.1.0")] B }"#);
+    assert_eq!(found, [note("removed in QEMU 9.1.0"), None]);
+    let (found, _) =
+        notes(r#"enum E { #[qapi(deprecated(added = "8.0.0"), removed = "9.1.0")] A, B }"#);
+    assert_eq!(found, [note("removed in QEMU 9.1.0"), None]);
+    // A type and a field the same way.
+    let (item, _) = expanded(r#"removed = "9.1.0""#, "enum E { A }");
+    assert_eq!(deprecated_note(&item.attrs), note("removed in QEMU 9.1.0"));
+    let (item, _) = expanded(
+        "",
+        r#"struct S { #[qapi(removed = "9.1.0")] old: Option<u8>, new: Option<u8> }"#,
+    );
+    let syn::Data::Struct(data) = &item.data else {
+        unreachable!("a struct expands to a struct");
+    };
+    let fields: Vec<Option<String>> = data
+        .fields
+        .iter()
+        .map(|field| deprecated_note(&field.attrs))
+        .collect();
+    assert_eq!(fields, [note("removed in QEMU 9.1.0"), None]);
 }
 
 #[test]
@@ -867,9 +686,9 @@ fn a_member_lives_within_its_type() {
     }
     // The lifetime of a member may start and end with its type's.
     let item = r#"enum E { #[qapi(added = "5.0.0", removed = "8.0.0")] A, B }"#;
-    assert!(expand(type_life, item, &VersionBounds::default()).is_ok());
+    assert!(expand(type_life, item).is_ok());
     let item = r#"enum E { #[qapi(added = "1.0.0", removed = "99.0.0")] A, B }"#;
-    assert!(expand("", item, &VersionBounds::default()).is_ok());
+    assert!(expand("", item).is_ok());
 }
 
 #[test]
@@ -918,19 +737,15 @@ fn the_ranges_of_a_flag_lie_within_the_lifetime_and_do_not_overlap() {
     }
     let ranges = r#"unstable(removed = "2.0.0"), unstable(added = "2.0.0", removed = "3.0.0"),
         unstable(added = "5.0.0")"#;
-    assert!(expand(ranges, "enum E { A }", &VersionBounds::default()).is_ok());
+    assert!(expand(ranges, "enum E { A }").is_ok());
     let ranges =
         r#"added = "5.0.0", removed = "8.0.0", unstable(added = "5.0.0", removed = "8.0.0")"#;
-    assert!(expand(ranges, "enum E { A }", &VersionBounds::default()).is_ok());
+    assert!(expand(ranges, "enum E { A }").is_ok());
 }
 
 #[test]
 fn a_payload_declares_no_use_of_a_deprecated_type() {
-    let (item, _) = expanded(
-        "",
-        r#"enum E { #[qapi(name = "a")] A(Old), B }"#,
-        &VersionBounds::default(),
-    );
+    let (item, _) = expanded("", r#"enum E { #[qapi(name = "a")] A(Old), B }"#);
     let allows = |attrs: &[syn::Attribute]| {
         attrs
             .iter()

@@ -2,8 +2,6 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# This check owns its bounded builds; start with the complete API surface.
-unset QEMU_MIN_VERSION QEMU_MAX_VERSION
 # The generator tests build fixture crates with --offline from the registry
 # cache, so a fresh checkout (CI) needs every locked package downloaded first.
 cargo fetch --locked
@@ -81,40 +79,6 @@ QRAB_QAPI_SCHEMA_DOCS="$PWD/vendor/qemu" \
 QRAB_QAPI_SCHEMA_DOCS="$PWD/vendor/qemu" RUSTDOCFLAGS="${RUSTDOCFLAGS:+$RUSTDOCFLAGS }-D warnings" \
     cargo doc --locked --no-deps -p qrab-qapi --features schema-docs --target-dir "$qapi_schema_docs_target"
 qapi_has_schema_docs "$qapi_schema_docs_target"
-
-# Compile each maintained series using its latest pinned patch.
-for qapi_series in 9.2 10.0 10.1 10.2 11.0 11.1; do
-    qapi_max=$(awk -v prefix="v$qapi_series." \
-        'index($1, prefix) == 1 { version = substr($1, 2) } END { if (!version) exit 1; print version }' \
-        projects/qapi-codegen/qemu-versions.lock)
-    QEMU_MIN_VERSION="$qapi_series.0" QEMU_MAX_VERSION="$qapi_max" \
-        cargo check --locked -p qrab-qapi
-done
-# Check the combined maintained range as well as each individual series.
-# Code that builds the generated types with their constructors and matches
-# them with wildcard arms compiles there and with a lower minimum, which adds
-# fields and variants but keeps the shapes.
-QEMU_MIN_VERSION=9.2.0 QEMU_MAX_VERSION="$qapi_max" \
-    cargo test --locked -p qrab-qapi --test additive_use
-QEMU_MIN_VERSION=3.0.0 QEMU_MAX_VERSION="$qapi_max" \
-    cargo test --locked -p qrab-qapi --test additive_use
-
-# Opt-in exploratory coverage; older releases are outside the maintained matrix.
-if [[ ${QRAB_QAPI_HISTORICAL_BOUNDS:-0} == 1 ]]; then
-    while IFS= read -r qapi_version; do
-        printf 'Checking historical QAPI bounds for QEMU %s\n' "$qapi_version"
-        QEMU_MIN_VERSION="$qapi_version" QEMU_MAX_VERSION="$qapi_version" \
-            cargo check --locked -p qrab-qapi
-    done < <(awk '
-        !/^#/ && NF {
-            split(substr($1, 2), parts, ".")
-            version = parts[1] "." parts[2] "." (parts[3] ? parts[3] : 0)
-            if (!seen[version]++) print version
-        }
-    ' projects/qapi-codegen/qemu-versions.lock)
-fi
-# Leave the ordinary development build with the complete API surface.
-env -u QEMU_MIN_VERSION -u QEMU_MAX_VERSION cargo check --locked -p qrab-qapi
 
 # The variable alone changes nothing either: the ordinary documentation, built
 # with it set, carries no schema prose.

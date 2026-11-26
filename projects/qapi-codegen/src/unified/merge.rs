@@ -1051,8 +1051,8 @@ fn same_on_the_wire(
 /// same on the wire as `B` in `b`, and `A` from `b` until its removal as
 /// `B` in each of those releases. Where `r` is before `b`, `B` returns
 /// from `r` and its Rust lifetime starts there, while its metadata keeps
-/// QAPI's; `A`'s return type ends there, gone if `r` is `a`; and `A` is,
-/// in a build whose minimum is at or after `r`, a deprecated alias of `B`.
+/// QAPI's; `A`'s return type ends there, gone if `r` is `a`; and `A`'s
+/// documentation says that it is the same on the wire as `B` from `r`.
 /// `query-target` returns `TargetInfo` until 10.1 and `QemuTargetInfo`
 /// from then, which is `TargetInfo` from 3.0, when its `arch` became a
 /// `SysEmuTarget`.

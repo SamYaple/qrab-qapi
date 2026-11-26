@@ -62,11 +62,14 @@ missing field as an error.
 
 `qrab-qapi-protocol` provides async QMP and QGA clients for these types.
 
-## Version bounds
+## QEMU releases
 
-Set `QEMU_MIN_VERSION` and `QEMU_MAX_VERSION` (for example `9.2.0` and
-`11.1.3`) at build time to compile only the representations that exist in
-that range of QEMU releases. Without them the complete history is available.
+Every build has the complete history of the pinned QEMU releases. Each type,
+variant and field knows the releases that have it: serialization for a peer
+refuses what its release lacks, and the protocol clients refuse a command
+outside its lifetime before sending it. What the newest pinned release no
+longer has, or deprecates, is Rust `#[deprecated]`, with a note naming the
+release.
 
 ## The `schema-docs` feature
 

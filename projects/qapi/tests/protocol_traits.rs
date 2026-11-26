@@ -1,6 +1,10 @@
 //! Trait metadata, enum coverage and field renames of the generated types.
 //! None of these tests runs QEMU.
 
+// The tests use items and members of older releases, which the newest
+// release no longer has and which are therefore deprecated.
+#![allow(deprecated)]
+
 use qapi::commands::*;
 use qapi::events::*;
 use qapi::*;

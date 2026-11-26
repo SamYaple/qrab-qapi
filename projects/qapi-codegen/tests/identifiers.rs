@@ -300,10 +300,4 @@ fn valid_schema_keywords_and_standard_type_names_compile_and_round_trip() {
         &fixture,
         include_str!("fixtures/compiler/main.rs"),
     );
-    common::run_fixture_with_bounds(
-        &workspace,
-        &fixture,
-        include_str!("fixtures/compiler/old.rs"),
-        Some(("6.1.0", "6.1.0")),
-    );
 }

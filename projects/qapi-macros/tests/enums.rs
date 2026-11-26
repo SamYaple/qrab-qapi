@@ -2,6 +2,10 @@
 //! `runtime/`: string enums, alternates and union branches, with the lifetimes
 //! of their types and variants.
 
+// The tests use items and members of older releases, which the newest
+// release no longer has and which are therefore deprecated.
+#![allow(deprecated)]
+
 mod child;
 // The stand-in runtime, which the expansion names `::qapi`.
 extern crate self as qapi;

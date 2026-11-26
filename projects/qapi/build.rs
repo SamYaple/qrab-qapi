@@ -4,8 +4,6 @@
 const SCHEMA_DOCS: &str = "QRAB_QAPI_SCHEMA_DOCS";
 
 fn main() {
-    println!("cargo::rerun-if-env-changed=QEMU_MIN_VERSION");
-    println!("cargo::rerun-if-env-changed=QEMU_MAX_VERSION");
     println!("cargo::rerun-if-env-changed={SCHEMA_DOCS}");
     println!("cargo::rustc-check-cfg=cfg(qrab_qapi_schema_docs)");
     // An empty value counts as unset, so `QRAB_QAPI_SCHEMA_DOCS=` turns the

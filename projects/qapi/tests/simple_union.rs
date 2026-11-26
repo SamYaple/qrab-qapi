@@ -1,4 +1,9 @@
 //! Historical simple unions keep arbitrary branch payloads under `data`.
+
+// The tests use items and members of older releases, which the newest
+// release no longer has and which are therefore deprecated.
+#![allow(deprecated)]
+
 use serde_json::{Value, json};
 
 #[qapi::qapi]

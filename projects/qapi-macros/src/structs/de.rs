@@ -1,9 +1,7 @@
 //! Version-aware `Deserialize` implementations for structs.
 
 use crate::structs::{FieldInfo, StructExpansion, discriminators, inner_option_type};
-use crate::support::{
-    decoding_selects, outside_bounds_clause, type_deserialization_guard, unavailable_decode_error,
-};
+use crate::support::{decoding_selects, type_deserialization_guard, unavailable_decode_error};
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use std::collections::BTreeMap;
@@ -98,7 +96,7 @@ impl StructExpansion<'_> {
                     } else
                 }
             });
-            let unavailable = unavailable_decode_error(&self.path(group[0]), self.bounds);
+            let unavailable = unavailable_decode_error(&self.path(group[0]));
             quote! {
                 if let ::core::option::Option::Some(#raw_value) = #raw {
                     #(#branches)* {
@@ -163,7 +161,7 @@ impl StructExpansion<'_> {
         let error = self.names.ident("error");
         let slots = self.slots();
         let error_ty = quote! { #access_ty::Error };
-        let type_guard = type_deserialization_guard(name, self.ta, self.bounds);
+        let type_guard = type_deserialization_guard(name, self.ta);
         let shared = self.shared_wires();
 
         let mut declarations = Vec::new();
@@ -244,10 +242,9 @@ impl StructExpansion<'_> {
         let result = self.names.ident("result");
         let raw_value = self.names.ident("raw_value");
         let error = self.names.ident("error");
-        let version = self.names.ident("version");
         let slots = self.slots();
         let error_ty = quote! { #deserializer_ty::Error };
-        let type_guard = type_deserialization_guard(name, self.ta, self.bounds);
+        let type_guard = type_deserialization_guard(name, self.ta);
         let custom = |message: TokenStream2| {
             quote! { <#error_ty as ::qapi::__private::serde::de::Error>::custom(#message) }
         };
@@ -335,7 +332,7 @@ impl StructExpansion<'_> {
                             let disc = slots.field(field);
                             let selected = decoding_selects(
                                 {
-                                    let newest = field.discriminates_at_newest(self.bounds);
+                                    let newest = field.discriminates_at_newest();
                                     quote! { #newest }
                                 },
                                 field.discriminates(),
@@ -353,26 +350,6 @@ impl StructExpansion<'_> {
                         })
                     }
                 };
-                // In a scope outside the bounds, the release's discriminator
-                // may be one that the build left out.
-                let left_out = self.discriminator_left_out.then(|| {
-                    let discriminates = discriminators.iter().map(|field| field.discriminates());
-                    let clause =
-                        outside_bounds_clause(self.bounds).unwrap_or_else(|| quote! { "" });
-                    let message = format!(
-                        "{}: no discriminator selects the branch in QEMU {{}}.{{}}.{{}}{{}}",
-                        self.path(field)
-                    );
-                    let failed = custom(quote! {
-                        ::std::format!(#message, #version.0, #version.1, #version.2, #clause)
-                    });
-                    quote! {
-                        if ::qapi::scoped_qemu_version().is_some() && !(false #(|| #discriminates)*) {
-                            let #version = ::qapi::qemu_version();
-                            return ::core::result::Result::Err(#failed);
-                        }
-                    }
-                });
                 let decode = match optional_tag {
                     Some(tag_value) => {
                         let decode = dispatch(quote! { &#tag });
@@ -401,7 +378,7 @@ impl StructExpansion<'_> {
                         }
                     }
                 };
-                quote! { { #left_out #decode } }
+                quote! { { #decode } }
             } else {
                 let context = format!("{name_str}: {{}}");
                 let failed = custom(quote! { ::std::format!(#context, #error) });

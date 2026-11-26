@@ -62,12 +62,11 @@ body:
     id: environment
     attributes:
       label: Environment
-      description: Rust version, OS, enabled features and any QEMU_MIN_VERSION / QEMU_MAX_VERSION build bounds.
+      description: Rust version, OS and enabled features.
       placeholder: |
         Rust:
         OS:
         Features:
-        QEMU_MIN_VERSION / QEMU_MAX_VERSION:
   - type: textarea
     id: logs
     attributes:

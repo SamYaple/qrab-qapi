@@ -2,6 +2,10 @@
 //! in `runtime/`: members and their lifetimes, version alternates, flattened
 //! bases, unions in both layouts, and `Display`.
 
+// The tests use items and members of older releases, which the newest
+// release no longer has and which are therefore deprecated.
+#![allow(deprecated)]
+
 mod child;
 // The stand-in runtime, which the expansion names `::qapi`.
 extern crate self as qapi;

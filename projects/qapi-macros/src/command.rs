@@ -1,7 +1,6 @@
 //! `QapiCommand` and `QapiEvent` implementations.
 
 use crate::attrs::{AttrRange, TypeAttrs};
-use crate::bounds::{VersionBounds, excluded_by_bounds};
 use crate::support::{
     HelperNames, Version, active_check, decoding_selects, flag_at_newest, unavailable_decode_error,
     unavailable_error, version_range_check,
@@ -144,9 +143,8 @@ pub(crate) fn gen_command_impl(
     vis: &syn::Visibility,
     wn: &str,
     ta: &TypeAttrs,
-    bounds: &VersionBounds,
 ) -> syn::Result<TokenStream2> {
-    let entries = return_entries(ta, bounds)?;
+    let entries = return_entries(ta)?;
     let (returns, returns_enum) = match entries.as_slice() {
         [] => {
             let returns = match &ta.returns {
@@ -155,7 +153,7 @@ pub(crate) fn gen_command_impl(
             };
             (returns.into_token_stream(), TokenStream2::new())
         }
-        // The bounds keep one return type.
+        // One return type in the whole history.
         [(.., ty)] => (ty.into_token_stream(), TokenStream2::new()),
         _ => {
             let enum_name = returns_enum_ident(
@@ -163,16 +161,16 @@ pub(crate) fn gen_command_impl(
                     .as_ref()
                     .expect("check_command_keys requires `returns_enum` with a history"),
             )?;
-            let returns_enum = gen_returns_enum(&enum_name, vis, wn, &entries, bounds);
+            let returns_enum = gen_returns_enum(&enum_name, vis, wn, &entries);
             (enum_name.into_token_stream(), returns_enum)
         }
     };
-    let oob = flag_at_newest(&ta.allow_oob, bounds);
-    let preconfig = flag_at_newest(&ta.allow_preconfig, bounds);
-    let success = !flag_at_newest(&ta.no_success_response, bounds);
+    let oob = flag_at_newest(&ta.allow_oob);
+    let preconfig = flag_at_newest(&ta.allow_preconfig);
+    let success = !flag_at_newest(&ta.no_success_response);
     // The `unstable` feature without versions marks every release.
     let unstable_feature = ta.unstable.is_empty() && ta.has_feature("unstable");
-    let unstable = unstable_feature || flag_at_newest(&ta.unstable, bounds);
+    let unstable = unstable_feature || flag_at_newest(&ta.unstable);
     let unstable_at = if unstable_feature {
         quote! { true }
     } else {
@@ -187,13 +185,11 @@ pub(crate) fn gen_command_impl(
         Some(until) => quote! { ::core::option::Option::Some(#until) },
         None => quote! { ::core::option::Option::None },
     };
-    // The runs of preconfig that some release of the bounds has; each lies
-    // within the command's lifetime, which the bounds keep. Report the first
-    // introduction even when there are several.
+    // The runs of preconfig, each within the command's lifetime. Report the
+    // first introduction even when there are several.
     let preconfig_runs: Vec<Version> = ta
         .allow_preconfig
         .iter()
-        .filter(|range| !excluded_by_bounds(bounds, range.added, range.removed))
         .map(|range| range.added.or(ta.since).unwrap_or(Version::ZERO))
         .collect();
     let preconfig_since = match preconfig_runs.iter().min() {
@@ -242,25 +238,22 @@ fn command_flag_check(ranges: &[AttrRange]) -> TokenStream2 {
     quote! { false #(|| (#checks))* }
 }
 
-/// A return type of a command's history that the bounds keep: from the
-/// release that introduced it until the next one, the variant named by that
-/// release, and the type.
+/// A return type of a command's history: from the release that introduced
+/// it until the next one, the variant named by that release, and the type.
 type ReturnEntry = (Version, Option<Version>, syn::Ident, Type);
 
-fn return_entries(ta: &TypeAttrs, bounds: &VersionBounds) -> syn::Result<Vec<ReturnEntry>> {
+fn return_entries(ta: &TypeAttrs) -> syn::Result<Vec<ReturnEntry>> {
     let mut entries = Vec::new();
     for (index, (added, text)) in ta.returns_history.iter().enumerate() {
         let until = ta.returns_history.get(index + 1).map(|(next, _)| *next);
-        if !excluded_by_bounds(bounds, Some(*added), until) {
-            let variant = format_ident!("V{}_{}_{}", added.0, added.1, added.2);
-            entries.push((*added, until, variant, return_type(text)?));
-        }
+        let variant = format_ident!("V{}_{}_{}", added.0, added.1, added.2);
+        entries.push((*added, until, variant, return_type(text)?));
     }
     Ok(entries)
 }
 
-/// The reply type of a command whose return type changed across the
-/// releases that the bounds keep: an enum with a variant per return type,
+/// The reply type of a command whose return type changed across its
+/// releases: an enum with a variant per return type,
 /// named by the release that introduced it. A reply decodes into the variant
 /// of the peer's release in a version scope, and into the newest unscoped.
 fn gen_returns_enum(
@@ -268,7 +261,6 @@ fn gen_returns_enum(
     vis: &syn::Visibility,
     wn: &str,
     entries: &[ReturnEntry],
-    bounds: &VersionBounds,
 ) -> TokenStream2 {
     let name_str = enum_name.unraw().to_string();
     let mut names = HelperNames::new(enum_name, [], entries.iter().map(|(.., ty)| ty));
@@ -325,7 +317,7 @@ fn gen_returns_enum(
             }
         }
     });
-    let unavailable = unavailable_decode_error(&name_str, bounds);
+    let unavailable = unavailable_decode_error(&name_str);
     let doc = format!(
         " The reply of `{wn}`, whose return type changed across QEMU releases: the return type of the peer's release."
     );

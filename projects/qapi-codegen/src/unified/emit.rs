@@ -143,9 +143,7 @@ fn references(value: &UnifiedType) -> Vec<String> {
 /// and each event struct in `events.rs`, so that `commands` holds every
 /// command and `events` every event. Those modules import `mod.rs` by glob,
 /// and `mod.rs` imports a module by glob where a type outside it names one
-/// of its structs, as a field, payload or return type. A glob, unlike a
-/// named import, holds whatever a build's QEMU version bounds leave of the
-/// module.
+/// of its structs, as a field, payload or return type.
 fn glob_imports(registry: &UnifiedRegistry) -> String {
     let named_elsewhere = |category: TypeCategory| {
         registry.types.values().any(|value| {
