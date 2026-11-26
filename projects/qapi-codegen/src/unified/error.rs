@@ -1078,6 +1078,46 @@ pub enum RegistryError {
         /// The tag of the release that changes it.
         tag: String,
     },
+    /// A command whose return type changes needs an enum of its return
+    /// types, named `{Command}Returns`, and another symbol holds that name:
+    /// a type, command or event, a reserved name, or the enum of another
+    /// command. An entry of the generator's naming table,
+    /// `RETURNS_ENUM_NAMES` in `src/namespace.rs`, names the enum instead.
+    #[error(
+        "{protocol} command {command} needs an enum of return types from {tag}, \
+         {name}, which {holder} holds; name the enum in RETURNS_ENUM_NAMES"
+    )]
+    ReturnsNameTaken {
+        /// `QMP` or `QGA`.
+        protocol: &'static str,
+        /// The command's wire name.
+        command: String,
+        /// The name that the enum would take.
+        name: String,
+        /// What holds the name.
+        holder: String,
+        /// The tag of the release with the command's second return type.
+        tag: String,
+    },
+    /// Two items of one namespace of the generated code that would have
+    /// one Rust name, which the generator's escapes do not tell apart: two
+    /// types, two members of one type, or a name and a reserved one.
+    #[error("{protocol} {namespace}: {first} and {second} are both named {name}")]
+    NameCollision {
+        /// `QMP` or `QGA`.
+        protocol: &'static str,
+        /// The namespace: `items` (the types, commands, events and enums
+        /// of return types of the protocol, with the modules and root items
+        /// beside them), `fields of {Type}`, `variants of {Type}` or
+        /// `metadata`.
+        namespace: String,
+        /// The Rust name.
+        name: String,
+        /// The item that has the name first.
+        first: String,
+        /// The item that would have it too.
+        second: String,
+    },
 }
 
 /// Why generating or writing the modules failed.

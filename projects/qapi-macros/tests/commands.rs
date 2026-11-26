@@ -161,7 +161,8 @@ struct QemuTargetInfo {
     returns = "QemuTargetInfo",
     added = "1.2.0",
     returns(added = "1.2.0", value = "TargetInfo"),
-    returns(added = "10.1.0", value = "QemuTargetInfo")
+    returns(added = "10.1.0", value = "QemuTargetInfo"),
+    returns_enum = "QueryTargetReturns"
 )]
 struct QueryTarget {}
 
@@ -176,7 +177,9 @@ struct TrimResponse {
     returns = "TrimResponse",
     added = "1.2.0",
     returns(added = "1.2.0", value = "()"),
-    returns(added = "2.4.0", value = "TrimResponse")
+    returns(added = "2.4.0", value = "TrimResponse"),
+    // The generator names the enum; any name will do.
+    returns_enum = "FstrimReply"
 )]
 struct Fstrim {}
 
@@ -220,16 +223,16 @@ fn a_release_without_a_return_value_replies_an_empty_object() {
     for wire in [json!({}), json!(null)] {
         assert!(matches!(
             reply::<Fstrim>(Some((2, 3, 0)), wire),
-            Ok(FstrimReturns::V1_2_0(()))
+            Ok(FstrimReply::V1_2_0(()))
         ));
     }
     assert_eq!(
         reply::<Fstrim>(Some((2, 3, 0)), json!({"paths": []})).unwrap_err(),
-        r#"FstrimReturns::V1_2_0: expected an empty object, found {"paths":[]}"#
+        r#"FstrimReply::V1_2_0: expected an empty object, found {"paths":[]}"#
     );
     assert!(matches!(
         reply::<Fstrim>(Some((2, 4, 0)), json!({"paths": ["/"]})),
-        Ok(FstrimReturns::V2_4_0(TrimResponse { .. }))
+        Ok(FstrimReply::V2_4_0(TrimResponse { .. }))
     ));
 }
 

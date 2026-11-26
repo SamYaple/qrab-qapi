@@ -374,7 +374,8 @@ fn process_member_with_inline(
     names: &mut HashSet<String>,
 ) -> Result<(StructField, Vec<Struct>), LowerError> {
     if let QapiTypeRef::InlineStruct(members) = q.r#type {
-        let preferred = format!("{}{}", rustify_name(prefix), rustify_name(&q.name));
+        let preferred =
+            super::escape_reserved(format!("{}{}", rustify_name(prefix), rustify_name(&q.name)));
         let mut inline_name = preferred.clone();
         let mut suffix = 0;
         while !names.insert(inline_name.clone()) {

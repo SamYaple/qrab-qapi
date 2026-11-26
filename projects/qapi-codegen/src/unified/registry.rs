@@ -89,8 +89,10 @@ pub(super) fn merge_releases(
         }
     }
 
-    materialize_variant_history(&mut registry);
-    materialize_field_history(&mut registry);
+    materialize_variant_history(&mut registry, protocol)?;
+    materialize_field_history(&mut registry, protocol)?;
     fix_recursive_types(&mut registry);
+    crate::namespace::plan_returns_enums(&mut registry, protocol, &tags)?;
+    crate::namespace::inventory(&registry, protocol)?;
     Ok(registry)
 }

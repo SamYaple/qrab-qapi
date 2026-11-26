@@ -117,20 +117,16 @@ fn pascal_identifier(input: &str) -> String {
 /// ```
 pub fn rustify_name(input: &str) -> String {
     let name = pascal_identifier(input);
-    match name.as_str() {
-        "" => "QapiUnnamed".into(),
-        "Self" | "String" | "Option" | "Vec" | "Box" | "Result" | "HashMap" | "Send" | "Sync"
-        | "Sized" | "Drop" | "Fn" | "FnMut" | "FnOnce" | "Some" | "None" | "Ok" | "Err" => {
-            format!("Qapi{name}")
-        }
-        runtime if RUNTIME_ITEMS.contains(&runtime) => format!("Qapi{runtime}"),
-        _ => name,
+    if name.is_empty() {
+        "QapiUnnamed".into()
+    } else {
+        escape_reserved(name)
     }
 }
 
 /// The types and traits that `qrab-qapi` defines at its root, where a
 /// generated type of the same name, re-exported by glob, would be shadowed.
-const RUNTIME_ITEMS: &[&str] = &[
+pub(crate) const RUNTIME_ITEMS: &[&str] = &[
     "EncodeError",
     "PreconfigSafe",
     "QapiCommand",
@@ -141,6 +137,39 @@ const RUNTIME_ITEMS: &[&str] = &[
     "VersionParseError",
     "VersionParseErrorKind",
 ];
+
+/// A Rust type name with the prefix `Qapi` where it would shadow `Self`,
+/// `HashMap`, a name of the prelude or a root item of `qrab-qapi`. Both
+/// [`rustify_name`] and the names that the generator composes from Rust
+/// names, such as a union's `{Union}Branch`, escape so.
+pub(crate) fn escape_reserved(name: String) -> String {
+    let reserved = matches!(
+        name.as_str(),
+        "Self"
+            | "String"
+            | "Option"
+            | "Vec"
+            | "Box"
+            | "Result"
+            | "HashMap"
+            | "Send"
+            | "Sync"
+            | "Sized"
+            | "Drop"
+            | "Fn"
+            | "FnMut"
+            | "FnOnce"
+            | "Some"
+            | "None"
+            | "Ok"
+            | "Err"
+    ) || RUNTIME_ITEMS.contains(&name.as_str());
+    if reserved {
+        format!("Qapi{name}")
+    } else {
+        name
+    }
+}
 
 /// The Rust variant name of a QAPI name. Variants have a namespace of their
 /// own, so only `Self` is renamed.

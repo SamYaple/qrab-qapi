@@ -116,7 +116,7 @@ fn conditional_field_presence_preserves_requiredness_and_latest_conditions() {
         }
         merge_struct(&mut registry, "Record", &record(vec![value]), (major, 0, 0));
     }
-    materialize_field_history(&mut registry);
+    materialize_field_history(&mut registry, "QMP").unwrap();
     let UnifiedType::Struct(value) = &registry.types["Record"] else {
         panic!()
     };
@@ -145,7 +145,7 @@ fn reintroduced_fields_keep_the_gap_between_lifetimes() {
     for (major, value) in [(1, &present), (2, &absent), (3, &present)] {
         merge_struct(&mut registry, "Record", value, (major, 0, 0));
     }
-    materialize_field_history(&mut registry);
+    materialize_field_history(&mut registry, "QMP").unwrap();
     let UnifiedType::Struct(value) = &registry.types["Record"] else {
         panic!()
     };
@@ -162,7 +162,7 @@ fn field_optionality_changes_preserve_each_wire_contract() {
         value.optional = optional;
         merge_struct(&mut registry, "Record", &record(vec![value]), (major, 0, 0));
     }
-    materialize_field_history(&mut registry);
+    materialize_field_history(&mut registry, "QMP").unwrap();
     let UnifiedType::Struct(value) = &registry.types["Record"] else {
         panic!()
     };
@@ -187,14 +187,22 @@ fn field_type_history_preserves_arrays_and_does_not_collide_with_real_fields() {
         ]);
         merge_struct(&mut registry, "Record", &value, (major, 0, 0));
     }
-    materialize_field_history(&mut registry);
+    materialize_field_history(&mut registry, "QMP").unwrap();
     let UnifiedType::Struct(value) = &registry.types["Record"] else {
         panic!()
     };
     assert_eq!(value.field_history.len(), 2);
     assert_eq!(value.field_versions["value"].since, (3, 0, 0));
-    assert_eq!(value.field_versions["value_legacy2"].until, Some((2, 0, 0)));
-    assert_eq!(value.field_versions["value_legacy3"].until, Some((3, 0, 0)));
+    // The member `value_legacy` makes the earlier shapes take the names of
+    // the series of their first release.
+    assert_eq!(
+        value.field_versions["value_legacy_v1_0"].until,
+        Some((2, 0, 0))
+    );
+    assert_eq!(
+        value.field_versions["value_legacy_v2_0"].until,
+        Some((3, 0, 0))
+    );
     assert_eq!(value.ir.fields.len(), 4);
 }
 
@@ -209,7 +217,7 @@ fn the_earlier_shape_of_a_keyword_field_is_named_without_r_hash() {
             (major, 0, 0),
         );
     }
-    materialize_field_history(&mut registry);
+    materialize_field_history(&mut registry, "QMP").unwrap();
     let UnifiedType::Struct(value) = &registry.types["Record"] else {
         panic!()
     };
@@ -240,7 +248,7 @@ fn field_wire_renames_preserve_original_keys() {
         &record(vec![field("foo_bar", "str", false)]),
         (2, 0, 0),
     );
-    materialize_field_history(&mut registry);
+    materialize_field_history(&mut registry, "QMP").unwrap();
     let UnifiedType::Struct(value) = &registry.types["Record"] else {
         panic!()
     };

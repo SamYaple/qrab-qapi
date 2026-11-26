@@ -4,7 +4,7 @@ use super::merge::{has_feature, merge_struct};
 use super::registry::merge_releases;
 use super::*;
 
-fn lowered(releases: &[(&str, &str)]) -> Result<Vec<VersionResult>, RegistryError> {
+pub(super) fn lowered(releases: &[(&str, &str)]) -> Result<Vec<VersionResult>, RegistryError> {
     let tags: Vec<_> = releases.iter().map(|(tag, _)| *tag).collect();
     let sources = releases
         .iter()
@@ -23,7 +23,7 @@ fn lowered(releases: &[(&str, &str)]) -> Result<Vec<VersionResult>, RegistryErro
     lower_versions(&tags, sources)
 }
 
-fn registry(releases: &[(&str, &str)]) -> Result<UnifiedRegistry, RegistryError> {
+pub(super) fn registry(releases: &[(&str, &str)]) -> Result<UnifiedRegistry, RegistryError> {
     merge_releases("QMP", lowered(releases)?)
 }
 

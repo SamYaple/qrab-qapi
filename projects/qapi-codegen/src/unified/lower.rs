@@ -856,16 +856,23 @@ pub(super) fn process_version_schema_with_names(
     }
 
     symbols.rewrite_types(&declared, &mut enums_lookup, &mut structs_lookup);
-    Ok((
-        enums_lookup
-            .into_values()
-            .map(|value| (rustify_name(&value.name), value))
-            .collect(),
-        structs_lookup
-            .into_values()
-            .map(|value| (rustify_name(&value.name), value))
-            .collect(),
-    ))
+    let count = enums_lookup.len() + structs_lookup.len();
+    let enums: HashMap<_, _> = enums_lookup
+        .into_values()
+        .map(|value| (rustify_name(&value.name), value))
+        .collect();
+    let structs: HashMap<_, _> = structs_lookup
+        .into_values()
+        .map(|value| (rustify_name(&value.name), value))
+        .collect();
+    // The plan names every item of a release apart; a clash here would
+    // drop an item, so it is a generator bug, which fails the release.
+    assert!(
+        enums.len() + structs.len() == count
+            && enums.keys().all(|name| !structs.contains_key(name)),
+        "two items of one release have one Rust name"
+    );
+    Ok((enums, structs))
 }
 
 /// Result of extracting and parsing a single version's schema.

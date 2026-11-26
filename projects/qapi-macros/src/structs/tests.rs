@@ -288,7 +288,7 @@ fn a_return_type_history_is_ordered_and_ends_at_returns() {
     );
     // The same type, spelled with other whitespace, is the same.
     let args = r#"command, added = "1.0.0", returns = "Vec<A>", returns(added = "1.0.0", value = "B"),
-        returns(added = "2.0.0", value = "Vec < A >")"#;
+        returns(added = "2.0.0", value = "Vec < A >"), returns_enum = "SReturns""#;
     assert!(expand(args, "struct S {}", &VersionBounds::default()).is_ok());
     assert_error(
         r#"command, added = "1.0.0", returns = "A", returns(added = "1.0.0", value = "A")"#,
@@ -306,7 +306,8 @@ fn a_return_type_history_is_ordered_and_ends_at_returns() {
     );
     // A type may come back after another.
     let args = r#"command, added = "1.0.0", returns = "A", returns(added = "1.0.0", value = "A"),
-        returns(added = "2.0.0", value = "B"), returns(added = "3.0.0", value = "A")"#;
+        returns(added = "2.0.0", value = "B"), returns(added = "3.0.0", value = "A"),
+        returns_enum = "SReturns""#;
     assert!(expand(args, "struct S {}", &VersionBounds::default()).is_ok());
     // The history covers the command's lifetime: it starts with the
     // command and changes before its removal.
@@ -330,7 +331,8 @@ fn a_return_type_history_is_ordered_and_ends_at_returns() {
         "qapi: `returns(...)` (added 2.0.0) must be earlier than the command's `removed` (2.0.0)",
         r#""B""#,
     );
-    let args = format!(r#"command, added = "1.0.0", removed = "2.1.0", {history}"#);
+    let args =
+        format!(r#"command, added = "1.0.0", removed = "2.1.0", {history}, returns_enum = "R""#);
     assert!(expand(&args, "struct S {}", &VersionBounds::default()).is_ok());
     // Without its `added`, the command has releases before the first type.
     assert_error(
@@ -421,7 +423,8 @@ fn deprecation_of_fields_takes_effect_by_feature_or_minimum() {
 fn the_bounds_keep_the_return_types_of_their_releases() {
     use crate::support::Version;
     let args = r#"command, added = "1.2.0", name = "query-target", returns = "New",
-        returns(added = "1.2.0", value = "Old"), returns(added = "10.1.0", value = "New")"#;
+        returns(added = "1.2.0", value = "Old"), returns(added = "10.1.0", value = "New"),
+        returns_enum = "QueryTargetReturns""#;
     let returns = |min: Option<Version>, max: Option<Version>| {
         let (_, rest) = expanded(args, "struct QueryTarget {}", &VersionBounds { min, max });
         let enum_kept = rest.contains("enum QueryTargetReturns");
@@ -446,6 +449,55 @@ fn the_bounds_keep_the_return_types_of_their_releases() {
     assert_eq!(
         returns(Some(Version(10, 1, 0)), None),
         ("New".into(), false)
+    );
+}
+
+/// The generator names the enum of a command's return types, as
+/// `returns_enum`, which a history needs and nothing else takes.
+#[test]
+fn a_return_type_history_names_its_enum() {
+    let history = r#"command, added = "1.0.0", returns = "B", returns(added = "1.0.0", value = "A"),
+        returns(added = "2.0.0", value = "B")"#;
+    assert_error(
+        history,
+        "struct S {}",
+        "qapi: a `returns(...)` history needs `returns_enum = \"Name\"`, the name of the enum \
+         of its return types",
+        r#""A""#,
+    );
+    let (_, rest) = expanded(
+        &format!(r#"{history}, returns_enum = "Replies""#),
+        "struct S {}",
+        &VersionBounds::default(),
+    );
+    assert!(rest.contains("enum Replies"), "{rest}");
+    assert!(rest.contains("type Returns = Replies ;"), "{rest}");
+    assert!(!rest.contains("SReturns"), "{rest}");
+    assert_error(
+        r#"command, returns = "A", returns_enum = "Replies""#,
+        "struct S {}",
+        "qapi: `returns_enum` names the enum of a `returns(...)` history",
+        r#""Replies""#,
+    );
+    for name in ["", "Vec<A>", "type"] {
+        assert_error(
+            &format!(r#"{history}, returns_enum = "{name}""#),
+            "struct S {}",
+            "qapi: `returns_enum` is the name of an enum, such as \"QueryTargetReturns\"",
+            &format!("{name:?}"),
+        );
+    }
+    assert_error(
+        &format!(r#"{history}, returns_enum = "R", returns_enum = "R""#),
+        "struct S {}",
+        "qapi: duplicate key `returns_enum`",
+        "returns_enum",
+    );
+    assert_error(
+        r#"returns_enum = "R""#,
+        "struct S {}",
+        "qapi: `returns_enum` applies only to commands",
+        r#""R""#,
     );
 }
 

@@ -465,7 +465,8 @@ guest-fsfreeze-status, whose response is an enum.
 
 A command whose return type changed across pins keeps each one in the
 registry as `UnifiedStruct::returns_history`, and the emitter writes them as
-`returns(added = "...", value = "...")` beside the newest, `returns`. The
+`returns(added = "...", value = "...")` beside the newest, `returns`, with
+`returns_enum = "..."`, the name of their enum (see "Rust names"). The
 changes are pinned by a test: `device-list-properties` (`DevicePropertyInfo`
 until 2.12, then `ObjectPropertyInfo`), `query-target` (`TargetInfo` until
 10.1, then `QemuTargetInfo`) and `guest-fstrim` (unit until 2.4, then
@@ -505,15 +506,15 @@ tracks transitions to flat unions per type rather than using a global cutoff.
 
 When a branch payload type or wire spelling changes, the latest Rust variant
 name remains stable and earlier representations are emitted as lifetime-gated
-`Legacy` variants. Repeated changes receive distinct suffixes without colliding
-with schema-defined names. Generated metadata carries each representation's
-original wire tag and lifetime. Fields and enum members that disappear and
-later return retain separate lifetimes, so the intervening releases do not
-inherit the restored member.
+`Legacy` variants, named as "Rust names" describes. Generated metadata
+carries each representation's original wire tag and lifetime. Fields and enum
+members that disappear and later return retain separate lifetimes, so the
+intervening releases do not inherit the restored member.
 
 Field payload changes, optionality changes and wire renames retain `_legacy`
-representations with separate lifetimes. A required wire field remains
-required in metadata even when version merging needs a Rust `Option`.
+representations with separate lifetimes, named the same way. A required wire
+field remains required in metadata even when version merging needs a Rust
+`Option`.
 
 When a named type changes between a string enum, alternate and object, each
 run of releases with one kind is a lifetime-gated type of its own. The first
@@ -619,6 +620,48 @@ The `#[qapi]` attributes carry the same runs: a `deprecated(...)` or
 still has the item drops the feature. A run that lasts until the item goes,
 such as the deprecation of the `MEM_UNPLUG_ERROR` event from 6.2, ends with
 the item's own `removed` (9.1).
+
+### Rust names
+
+The generator takes most Rust names from QAPI and synthesizes the others;
+each way of making a name has its escape, so that no two items of one
+namespace share a name. The namespaces are the items of a protocol (its data
+types, command and event structs and enums of return types, which `mod.rs`,
+`commands.rs` and `events.rs` share through their glob imports, beside the
+modules `commands`, `events` and `metadata` and, for QMP, the root items of
+`qrab-qapi`), the fields of each struct, the variants of each enum, and the
+statics of `metadata.rs`. `qapi_codegen::namespace::inventory` lists every
+name with its pattern, and the registry builders refuse a namespace in which
+two items would share one, as `RegistryError::NameCollision` naming both;
+`tests/name_inventory.rs` checks the full history and each pinned release
+alone, and pins the synthesized and escaped names of the full history in
+`tests/names/`.
+
+| Pattern | Made from | Escape |
+|---|---|---|
+| A type, command, event or member | Its QAPI name in PascalCase, snake_case or, for variants, PascalCase, in ASCII | Type names that would shadow `Self`, `HashMap`, a prelude name or a root item of `qrab-qapi` take the prefix `Qapi`, as do the composed names below; a variant `Self` is `QapiSelf`; keyword fields are raw (`r#type`), `self`, `super` and `crate` take a trailing `_`; a leading digit takes a leading `_`; non-ASCII is `_u{hex}_`; an empty name is `QapiUnnamed` or `qapi_unnamed` |
+| `{Name}Generated`, `{Name}Generated2`, ... | A later run of a type that changes kind or returns, of a command or event that returns, or a claim whose name an earlier release's symbol holds | The first release that has a name keeps it, so a newer release renames no symbol of the older ones |
+| `{Union}Branch` | A union's branch enum | Claimed like a declaration, `Generated` after it |
+| `{Union}Kind` | A simple union's implicit tag enum, QEMU's name | One type with the flat union's declared enum of that name |
+| `{Command}Command` | The request type of a command named like a data type, such as `GuestExecCommand` | Claimed like a declaration |
+| `{Event}Event` | An event's data | Claimed like a declaration |
+| `{Owner}{Member}`, then `Inline`, `Inline2` | An anonymous struct of a schema before 2.4 | Avoids every planned name |
+| `{Command}Returns` | The enum of the return types of a command whose return type changes | None: a type, command, event, reserved name or another enum that holds the name is `RegistryError::ReturnsNameTaken`, which an entry of `RETURNS_ENUM_NAMES` in `src/namespace.rs` resolves by naming the enum |
+| `V{major}_{minor}_{patch}` | A variant of an enum of return types, by the release that introduced the type | Unique, as the releases increase; no QAPI value spells one, since PascalCase drops the underscores |
+| `{member}_alt`, `{member}_alt2`, `{Variant}Alt` | A member whose Rust name another member of the same release has, such as `PC` beside `pc` | The newest release's member keeps the plain name; the names avoid every member of the type in any release |
+| `{member}_legacy`, `{member}_legacy2`, ...; `{Variant}Legacy`, `{Variant}Legacy2`, ... | An earlier shape or wire spelling of a member, numbered in release order by its shape in the release that opens each series | A member of the type that holds a numbered name makes every earlier shape of that member take its series name, and one that holds that too is `RegistryError::NameCollision` |
+| `{member}_legacy_v{major}_{minor}` (then `_2`, ...); `{Variant}LegacyV{major}p{minor}` (then `r2`, ...) | An earlier run that only patch releases have, or a later part of a run that one interrupts, by the series of its first release | As above |
+| `r_type`, `u`, `arguments` | A simple union's `type` tag, the flattened branches of a union, the catch-all arguments of a `gen: false` command | Collisions with members get `_alt` names |
+| `STRUCT_{Type}`, `FIELDS_{Type}`, `ENUM_{Type}`, `VARIANTS_{Type}` | The metadata statics of a type | Unique with the type names |
+
+The names of earlier member shapes stay when a patch release of an older
+series joins the pins: the numbered runs are those of the release that
+opens each series, which such a release never is, so a backport that moves a
+shape's first release, or one with a shape of its own, adds names and
+renames none. `BlkdebugInjectErrorOptions.delay-ns`, which only backports
+have before 11.1 (10.0.10, 10.2.3, then 11.0.1), is
+`delay_ns_legacy_v10_0` and `delay_ns_legacy_v10_2`. A newer series still
+gives a member's newest shape the plain name.
 
 ## The generated code at run time
 

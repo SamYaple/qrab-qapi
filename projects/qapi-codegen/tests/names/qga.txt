@@ -1,0 +1,39 @@
+# The Rust names of the generated code by pattern, then every name
+# but those taken unchanged from QAPI and the metadata statics, as
+# pattern, namespace, name: what it stands for.
+# Schema: 361
+# Escaped: 5
+# Branch: 3
+# Command: 6
+# Returns: 1
+# ReturnsVariant: 2
+# Legacy: 3
+# Lowering: 3
+# Reserved: 3
+# Metadata: 193
+Reserved	items	commands: the module commands
+Reserved	items	events: the module events
+Reserved	items	metadata: the module metadata
+Branch	items	GuestCpuStatsBranch: the branch enum GuestCpuStatsBranch
+Branch	items	GuestDeviceIdBranch: the branch enum GuestDeviceIdBranch
+Branch	items	GuestDiskSmartBranch: the branch enum GuestDiskSmartBranch
+Command	items	GuestExecCommand: command 'guest-exec'
+Command	items	GuestExecStatusCommand: command 'guest-exec-status'
+Command	items	GuestFileReadCommand: command 'guest-file-read'
+Command	items	GuestFileSeekCommand: command 'guest-file-seek'
+Command	items	GuestFileWriteCommand: command 'guest-file-write'
+Command	items	GuestFsfreezeStatusCommand: command 'guest-fsfreeze-status'
+Escaped	fields of GuestCpuStats	r#type: member 'type' from 7.1.0
+Lowering	fields of GuestCpuStats	u: member 'u' from 7.1.0
+Escaped	fields of GuestDeviceId	r#type: member 'type' from 5.2.0
+Lowering	fields of GuestDeviceId	u: member 'u' from 5.2.0
+Escaped	fields of GuestDiskSmart	r#type: member 'type' from 7.1.0
+Lowering	fields of GuestDiskSmart	u: member 'u' from 7.1.0
+Legacy	fields of GuestExecCommand	capture_output_legacy: member 'capture-output' from 2.5.0 until 8.1.0
+Legacy	fields of GuestFileSeekCommand	whence_legacy: member 'whence' from 0.15.0 until 2.6.0
+Escaped	fields of GuestFilesystemInfo	r#type: member 'type' from 2.2.0
+Returns	items	GuestFstrimReturns: the enum of return types of command 'guest-fstrim'
+ReturnsVariant	variants of GuestFstrimReturns	V1_2_0: the return type () from 1.2.0
+ReturnsVariant	variants of GuestFstrimReturns	V2_4_0: the return type GuestFilesystemTrimResponse from 2.4.0
+Escaped	fields of GuestNetworkRoute	r#use: member 'use' from 9.1.0
+Legacy	fields of GuestSetTime	time_legacy: member 'time' from 1.5.0 until 2.0.0

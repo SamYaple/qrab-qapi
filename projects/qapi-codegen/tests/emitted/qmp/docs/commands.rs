@@ -101,6 +101,7 @@ pub struct Mid {
 #[qapi(returns(added = "6.1.0", value = "()"))]
 #[qapi(returns(added = "6.2.0", value = "Bag"))]
 #[qapi(returns(added = "7.0.0", value = "Pod"))]
+#[qapi(returns_enum = "OuterReturns")]
 pub struct Outer {
     pub i: Inner,
 }
@@ -121,6 +122,7 @@ pub struct Pod {
 #[qapi(added = "6.1.0")]
 #[qapi(returns(added = "6.1.0", value = "KindInfo"))]
 #[qapi(returns(added = "7.0.0", value = "Vec<KindInfo>"))]
+#[qapi(returns_enum = "QueryKindReturns")]
 pub struct QueryKind {}
 
 /// QMP command `quiet`; see the QEMU QMP Reference Manual.

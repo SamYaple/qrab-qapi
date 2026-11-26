@@ -589,6 +589,11 @@ fn generate_unified_struct(us: &UnifiedStruct, flavor: &Flavor) -> proc_macro2::
             ));
         }
     }
+    if let Some(name) = &us.returns_enum {
+        ir.meta
+            .attributes
+            .push(Attribute::with_value("returns_enum", name));
+    }
 
     for field in &mut ir.fields {
         let flatten = field.meta.attributes.contains(&Attribute::new("flatten"));

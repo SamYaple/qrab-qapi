@@ -846,11 +846,11 @@ pub struct BlkdebugInjectErrorOptions {
     #[qapi(name = "delay-ns")]
     #[qapi(added = "10.0.10")]
     #[qapi(removed = "10.1.0")]
-    pub delay_ns_legacy: Option<i64>,
+    pub delay_ns_legacy_v10_0: Option<i64>,
     #[qapi(name = "delay-ns")]
     #[qapi(added = "10.2.3")]
     #[qapi(removed = "11.0.0")]
-    pub delay_ns_legacy2: Option<i64>,
+    pub delay_ns_legacy_v10_2: Option<i64>,
     pub errno: Option<i64>,
     pub event: BlkdebugEvent,
     pub immediately: Option<bool>,

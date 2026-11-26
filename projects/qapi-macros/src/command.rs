@@ -15,7 +15,9 @@ use syn::{LitStr, Type};
 /// a command and an event, and a return type history that is not one: a
 /// single type, types out of order, outside the command's lifetime or
 /// repeated by the next one, a first type not added with the command, which
-/// therefore has `added`, or a newest one that disagrees with `returns`.
+/// therefore has `added`, or a newest one that disagrees with `returns`;
+/// and a history without `returns_enum`, the name of its enum, or that name
+/// without a history or where it is no identifier.
 pub(crate) fn check_command_keys(ta: &TypeAttrs) -> syn::Result<()> {
     if let (Some(_), Some(event)) = (ta.command, ta.event) {
         return Err(syn::Error::new(
@@ -97,7 +99,36 @@ pub(crate) fn check_command_keys(ta: &TypeAttrs) -> syn::Result<()> {
             ));
         }
     }
+    match (&ta.returns_enum, ta.returns_history.first()) {
+        (None, Some((_, first))) => {
+            return Err(syn::Error::new_spanned(
+                first,
+                "qapi: a `returns(...)` history needs `returns_enum = \"Name\"`, \
+                 the name of the enum of its return types",
+            ));
+        }
+        (Some(name), None) => {
+            return Err(syn::Error::new_spanned(
+                name,
+                "qapi: `returns_enum` names the enum of a `returns(...)` history",
+            ));
+        }
+        (Some(name), Some(_)) => {
+            returns_enum_ident(name)?;
+        }
+        (None, None) => {}
+    }
     Ok(())
+}
+
+/// The enum of a command's return types that `returns_enum` names.
+fn returns_enum_ident(text: &LitStr) -> syn::Result<syn::Ident> {
+    text.parse().map_err(|_| {
+        syn::Error::new_spanned(
+            text,
+            "qapi: `returns_enum` is the name of an enum, such as \"QueryTargetReturns\"",
+        )
+    })
 }
 
 /// The type of a `returns` literal. Its tokens keep the literal's span, and
@@ -127,7 +158,11 @@ pub(crate) fn gen_command_impl(
         // The bounds keep one return type.
         [(.., ty)] => (ty.into_token_stream(), TokenStream2::new()),
         _ => {
-            let enum_name = format_ident!("{}Returns", name.unraw());
+            let enum_name = returns_enum_ident(
+                ta.returns_enum
+                    .as_ref()
+                    .expect("check_command_keys requires `returns_enum` with a history"),
+            )?;
             let returns_enum = gen_returns_enum(&enum_name, vis, wn, &entries, bounds);
             (enum_name.into_token_stream(), returns_enum)
         }

@@ -1,0 +1,684 @@
+# The Rust names of the generated code by pattern, then every name
+# but those taken unchanged from QAPI and the metadata statics, as
+# pattern, namespace, name: what it stands for.
+# Schema: 6080
+# Escaped: 149
+# Branch: 51
+# ImplicitTag: 7
+# Command: 2
+# Event: 60
+# Inline: 4
+# Returns: 2
+# ReturnsVariant: 4
+# Legacy: 292
+# Alt: 1
+# Lowering: 83
+# Reserved: 12
+# Metadata: 2371
+Reserved	items	commands: the module commands
+Reserved	items	events: the module events
+Reserved	items	metadata: the module metadata
+Reserved	items	EncodeError: the root item qapi::EncodeError
+Reserved	items	PreconfigSafe: the root item qapi::PreconfigSafe
+Reserved	items	QapiCommand: the root item qapi::QapiCommand
+Reserved	items	QapiEvent: the root item qapi::QapiEvent
+Reserved	items	QapiFlatUnion: the root item qapi::QapiFlatUnion
+Reserved	items	VersionAlreadySet: the root item qapi::VersionAlreadySet
+Reserved	items	VersionComponent: the root item qapi::VersionComponent
+Reserved	items	VersionParseError: the root item qapi::VersionParseError
+Reserved	items	VersionParseErrorKind: the root item qapi::VersionParseErrorKind
+Event	items	AcpiDeviceOstEvent: event 'ACPI_DEVICE_OST'
+Branch	items	AudiodevBranch: the branch enum AudiodevBranch
+Event	items	BalloonChangeEvent: event 'BALLOON_CHANGE'
+Command	items	BlockDirtyBitmapMergeCommand: command 'block-dirty-bitmap-merge'
+Branch	items	BlockExportBranch: the branch enum BlockExportBranch
+Event	items	BlockExportDeletedEvent: event 'BLOCK_EXPORT_DELETED'
+Branch	items	BlockExportOptionsBranch: the branch enum BlockExportOptionsBranch
+Event	items	BlockImageCorruptedEvent: event 'BLOCK_IMAGE_CORRUPTED'
+Event	items	BlockIoErrorEvent: event 'BLOCK_IO_ERROR'
+Event	items	BlockJobCancelledEvent: event 'BLOCK_JOB_CANCELLED'
+Branch	items	BlockJobChangeOptionsBranch: the branch enum BlockJobChangeOptionsBranch
+Event	items	BlockJobCompletedEvent: event 'BLOCK_JOB_COMPLETED'
+Event	items	BlockJobErrorEvent: event 'BLOCK_JOB_ERROR'
+Branch	items	BlockJobInfoBranch: the branch enum BlockJobInfoBranch
+Event	items	BlockJobPendingEvent: event 'BLOCK_JOB_PENDING'
+Event	items	BlockJobReadyEvent: event 'BLOCK_JOB_READY'
+Branch	items	BlockStatsSpecificBranch: the branch enum BlockStatsSpecificBranch
+Event	items	BlockWriteThresholdEvent: event 'BLOCK_WRITE_THRESHOLD'
+Branch	items	BlockdevActionBranch: the branch enum BlockdevActionBranch
+ImplicitTag	items	BlockdevActionKind: the generated type BlockdevActionKind
+Branch	items	BlockdevAmendOptionsBranch: the branch enum BlockdevAmendOptionsBranch
+Branch	items	BlockdevCreateOptionsBranch: the branch enum BlockdevCreateOptionsBranch
+Branch	items	BlockdevOptionsBranch: the branch enum BlockdevOptionsBranch
+Branch	items	BlockdevQcow2EncryptionBranch: the branch enum BlockdevQcow2EncryptionBranch
+Branch	items	BlockdevQcowEncryptionBranch: the branch enum BlockdevQcowEncryptionBranch
+Command	items	BlockdevSnapshotCommand: command 'blockdev-snapshot'
+Branch	items	ChardevBackendBranch: the branch enum ChardevBackendBranch
+Event	items	ColoExitEvent: event 'COLO_EXIT'
+Event	items	CommandDroppedEvent: event 'COMMAND_DROPPED'
+Branch	items	CpuInfoBranch: the branch enum CpuInfoBranch
+Branch	items	CpuInfoFastBranch: the branch enum CpuInfoFastBranch
+Event	items	CpuPolarizationChangeEvent: event 'CPU_POLARIZATION_CHANGE'
+Event	items	DeviceDeletedEvent: event 'DEVICE_DELETED'
+Event	items	DeviceTrayMovedEvent: event 'DEVICE_TRAY_MOVED'
+Event	items	DeviceUnplugGuestErrorEvent: event 'DEVICE_UNPLUG_GUEST_ERROR'
+Branch	items	DisplayOptionsBranch: the branch enum DisplayOptionsBranch
+Branch	items	DisplayReloadOptionsBranch: the branch enum DisplayReloadOptionsBranch
+Branch	items	DisplayUpdateOptionsBranch: the branch enum DisplayUpdateOptionsBranch
+Event	items	DumpCompletedEvent: event 'DUMP_COMPLETED'
+Branch	items	ExpirePasswordOptionsBranch: the branch enum ExpirePasswordOptionsBranch
+Event	items	FailoverNegotiatedEvent: event 'FAILOVER_NEGOTIATED'
+Branch	items	GlusterServerBranch: the branch enum GlusterServerBranch
+Event	items	GuestCrashloadedEvent: event 'GUEST_CRASHLOADED'
+Branch	items	GuestPanicInformationBranch: the branch enum GuestPanicInformationBranch
+Event	items	GuestPanickedEvent: event 'GUEST_PANICKED'
+Event	items	GuestPvshutdownEvent: event 'GUEST_PVSHUTDOWN'
+Event	items	HvBalloonStatusReportEvent: event 'HV_BALLOON_STATUS_REPORT'
+Branch	items	ImageInfoSpecificBranch: the branch enum ImageInfoSpecificBranch
+Branch	items	ImageInfoSpecificQCow2EncryptionBranch: the branch enum ImageInfoSpecificQCow2EncryptionBranch
+Branch	items	InputEventBranch: the branch enum InputEventBranch
+Event	items	JobStatusChangeEvent: event 'JOB_STATUS_CHANGE'
+Branch	items	KeyValueBranch: the branch enum KeyValueBranch
+Event	items	MemUnplugErrorEvent: event 'MEM_UNPLUG_ERROR'
+Branch	items	MemoryDeviceInfoBranch: the branch enum MemoryDeviceInfoBranch
+Event	items	MemoryDeviceSizeChangeEvent: event 'MEMORY_DEVICE_SIZE_CHANGE'
+Event	items	MemoryFailureEvent: event 'MEMORY_FAILURE'
+Branch	items	MigrationAddressBranch: the branch enum MigrationAddressBranch
+Event	items	MigrationEvent: event 'MIGRATION'
+Event	items	MigrationPassEvent: event 'MIGRATION_PASS'
+Branch	items	NetClientOptionsBranch: the branch enum NetClientOptionsBranch
+ImplicitTag	items	NetClientOptionsKind: the generated type NetClientOptionsKind
+Branch	items	NetLegacyOptionsBranch: the branch enum NetLegacyOptionsBranch
+ImplicitTag	items	NetLegacyOptionsKind: the generated type NetLegacyOptionsKind
+Branch	items	NetdevBranch: the branch enum NetdevBranch
+Event	items	NetdevStreamConnectedEvent: event 'NETDEV_STREAM_CONNECTED'
+Event	items	NetdevStreamDisconnectedEvent: event 'NETDEV_STREAM_DISCONNECTED'
+Event	items	NetdevVhostUserConnectedEvent: event 'NETDEV_VHOST_USER_CONNECTED'
+Event	items	NetdevVhostUserDisconnectedEvent: event 'NETDEV_VHOST_USER_DISCONNECTED'
+Event	items	NicRxFilterChangedEvent: event 'NIC_RX_FILTER_CHANGED'
+Branch	items	NumaOptionsBranch: the branch enum NumaOptionsBranch
+ImplicitTag	items	NumaOptionsKind: the generated type NumaOptionsKind
+Branch	items	ObjectOptionsBranch: the branch enum ObjectOptionsBranch
+Inline	items	PciBridgeInfoBus: the generated type PciBridgeInfoBus
+Inline	items	PciDeviceInfoClassInfo: the generated type PciDeviceInfoClassInfo
+Inline	items	PciDeviceInfoId: the generated type PciDeviceInfoId
+Event	items	PowerdownEvent: event 'POWERDOWN'
+Event	items	PrManagerStatusChangedEvent: event 'PR_MANAGER_STATUS_CHANGED'
+Branch	items	QCryptoAkCipherOptionsBranch: the branch enum QCryptoAkCipherOptionsBranch
+Branch	items	QCryptoBlockAmendOptionsBranch: the branch enum QCryptoBlockAmendOptionsBranch
+Branch	items	QCryptoBlockCreateOptionsBranch: the branch enum QCryptoBlockCreateOptionsBranch
+Branch	items	QCryptoBlockInfoBranch: the branch enum QCryptoBlockInfoBranch
+Branch	items	QCryptoBlockOpenOptionsBranch: the branch enum QCryptoBlockOpenOptionsBranch
+Escaped	items	QapiString: struct 'String'
+Event	items	QuorumFailureEvent: event 'QUORUM_FAILURE'
+Event	items	QuorumReportBadEvent: event 'QUORUM_REPORT_BAD'
+Branch	items	RbdEncryptionCreateOptionsBranch: the branch enum RbdEncryptionCreateOptionsBranch
+Branch	items	RbdEncryptionOptionsBranch: the branch enum RbdEncryptionOptionsBranch
+Event	items	RdmaGidStatusChangedEvent: event 'RDMA_GID_STATUS_CHANGED'
+Event	items	ResetEvent: event 'RESET'
+Event	items	ResumeEvent: event 'RESUME'
+Event	items	RtcChangeEvent: event 'RTC_CHANGE'
+Branch	items	SchemaInfoBranch: the branch enum SchemaInfoBranch
+Event	items	SclpCpiInfoAvailableEvent: event 'SCLP_CPI_INFO_AVAILABLE'
+Branch	items	SetPasswordOptionsBranch: the branch enum SetPasswordOptionsBranch
+Branch	items	SevInfoBranch: the branch enum SevInfoBranch
+Branch	items	SheepdogRedundancyBranch: the branch enum SheepdogRedundancyBranch
+Event	items	ShutdownEvent: event 'SHUTDOWN'
+Branch	items	SocketAddressBranch: the branch enum SocketAddressBranch
+Branch	items	SocketAddressFlatBranch: the branch enum SocketAddressFlatBranch
+ImplicitTag	items	SocketAddressKind: the generated type SocketAddressKind
+Branch	items	SocketAddressLegacyBranch: the branch enum SocketAddressLegacyBranch
+ImplicitTag	items	SocketAddressLegacyKind: the generated type SocketAddressLegacyKind
+Event	items	SpiceConnectedEvent: event 'SPICE_CONNECTED'
+Event	items	SpiceDisconnectedEvent: event 'SPICE_DISCONNECTED'
+Event	items	SpiceInitializedEvent: event 'SPICE_INITIALIZED'
+Event	items	SpiceMigrateCompletedEvent: event 'SPICE_MIGRATE_COMPLETED'
+Branch	items	SshHostKeyCheckBranch: the branch enum SshHostKeyCheckBranch
+Branch	items	StatsFilterBranch: the branch enum StatsFilterBranch
+Event	items	StopEvent: event 'STOP'
+Event	items	SuspendDiskEvent: event 'SUSPEND_DISK'
+Event	items	SuspendEvent: event 'SUSPEND'
+Branch	items	TpmTypeOptionsBranch: the branch enum TpmTypeOptionsBranch
+ImplicitTag	items	TpmTypeOptionsKind: the generated type TpmTypeOptionsKind
+Branch	items	TransactionActionBranch: the branch enum TransactionActionBranch
+Event	items	UnplugPrimaryEvent: event 'UNPLUG_PRIMARY'
+Inline	items	VersionInfoQemu: the generated type VersionInfoQemu
+Event	items	VfioMigrationEvent: event 'VFIO_MIGRATION'
+Event	items	VfuClientHangupEvent: event 'VFU_CLIENT_HANGUP'
+Event	items	VncConnectedEvent: event 'VNC_CONNECTED'
+Event	items	VncDisconnectedEvent: event 'VNC_DISCONNECTED'
+Event	items	VncInitializedEvent: event 'VNC_INITIALIZED'
+Event	items	VserportChangeEvent: event 'VSERPORT_CHANGE'
+Event	items	WakeupEvent: event 'WAKEUP'
+Event	items	WatchdogEvent: event 'WATCHDOG'
+Branch	items	YankInstanceBranch: the branch enum YankInstanceBranch
+Lowering	fields of Audiodev	u: member 'u' from 4.0.0
+Escaped	fields of AudiodevAlsaOptions	r#in: member 'in' from 4.0.0
+Legacy	variants of AudiodevBranch	SdlLegacy: value 'sdl' (AudiodevGenericOptions)
+Legacy	variants of AudiodevBranch	DbusLegacy: value 'dbus' (AudiodevGenericOptions)
+Escaped	fields of AudiodevCoreaudioOptions	r#in: member 'in' from 4.0.0
+Escaped	fields of AudiodevDBusOptions	r#in: member 'in' from 10.0.0
+Escaped	fields of AudiodevDsoundOptions	r#in: member 'in' from 4.0.0
+Escaped	fields of AudiodevGenericOptions	r#in: member 'in' from 4.0.0
+Escaped	fields of AudiodevJackOptions	r#in: member 'in' from 5.1.0
+Escaped	fields of AudiodevOssOptions	r#in: member 'in' from 4.0.0
+Escaped	fields of AudiodevPaOptions	r#in: member 'in' from 4.0.0
+Escaped	fields of AudiodevPipewireOptions	r#in: member 'in' from 8.1.0
+Escaped	fields of AudiodevSdlOptions	r#in: member 'in' from 6.0.0
+Escaped	fields of AudiodevSndioOptions	r#in: member 'in' from 7.2.0
+Escaped	fields of AudiodevWavOptions	r#in: member 'in' from 4.0.0
+Legacy	variants of BlkdebugEvent	L1GrowAllocTableLegacy: value 'l1_grow.alloc_table'
+Legacy	variants of BlkdebugEvent	L1GrowWriteTableLegacy: value 'l1_grow.write_table'
+Legacy	variants of BlkdebugEvent	L1GrowActivateTableLegacy: value 'l1_grow.activate_table'
+Legacy	variants of BlkdebugEvent	L2AllocCowReadLegacy: value 'l2_alloc.cow_read'
+Legacy	variants of BlkdebugEvent	L2AllocWriteLegacy: value 'l2_alloc.write'
+Legacy	variants of BlkdebugEvent	RefblockAllocHookupLegacy: value 'refblock_alloc.hookup'
+Legacy	variants of BlkdebugEvent	RefblockAllocWriteLegacy: value 'refblock_alloc.write'
+Legacy	variants of BlkdebugEvent	RefblockAllocWriteBlocksLegacy: value 'refblock_alloc.write_blocks'
+Legacy	variants of BlkdebugEvent	RefblockAllocWriteTableLegacy: value 'refblock_alloc.write_table'
+Legacy	variants of BlkdebugEvent	RefblockAllocSwitchTableLegacy: value 'refblock_alloc.switch_table'
+Legacy	variants of BlkdebugEvent	PwritevRmwHeadLegacy: value 'pwritev_rmw.head'
+Legacy	variants of BlkdebugEvent	PwritevRmwAfterHeadLegacy: value 'pwritev_rmw.after_head'
+Legacy	variants of BlkdebugEvent	PwritevRmwTailLegacy: value 'pwritev_rmw.tail'
+Legacy	variants of BlkdebugEvent	PwritevRmwAfterTailLegacy: value 'pwritev_rmw.after_tail'
+Legacy	fields of BlkdebugInjectErrorOptions	delay_ns_legacy_v10_0: member 'delay-ns' from 10.0.10 until 10.1.0
+Legacy	fields of BlkdebugInjectErrorOptions	delay_ns_legacy_v10_2: member 'delay-ns' from 10.2.3 until 11.0.0
+Legacy	fields of BlockCommit	top_legacy: member 'top' from 1.3.0 until 2.0.1
+Legacy	fields of BlockDeviceInfo	node_name_legacy: member 'node-name' from 2.0.0 until 10.1.0
+Legacy	fields of BlockDirtyBitmapMerge	bitmaps_legacy: member 'bitmaps' from 4.0.0 until 4.1.0
+Legacy	fields of BlockDirtyBitmapMerge	bitmaps_legacy2: member 'bitmaps' from 4.1.0 until 7.1.0
+Legacy	fields of BlockDirtyBitmapMergeCommand	bitmaps_legacy: member 'bitmaps' from 4.0.0 until 4.1.0
+Legacy	fields of BlockDirtyBitmapMergeCommand	bitmaps_legacy2: member 'bitmaps' from 4.1.0 until 7.1.0
+Legacy	fields of BlockDirtyInfo	granularity_legacy: member 'granularity' from 1.4.0 until 2.4.0
+Escaped	fields of BlockExport	r#type: member 'type' from 5.0.0
+Lowering	fields of BlockExport	u: member 'u' from 5.0.0
+Escaped	fields of BlockExportAdd	r#type: member 'type' from 5.2.0
+Lowering	fields of BlockExportAdd	u: member 'u' from 5.2.0
+Legacy	fields of BlockExportAdd	iothread_legacy: member 'iothread' from 5.2.0 until 11.0.0
+Escaped	fields of BlockExportInfo	r#type: member 'type' from 5.2.0
+Escaped	fields of BlockExportOptions	r#type: member 'type' from 5.2.0
+Lowering	fields of BlockExportOptions	u: member 'u' from 5.2.0
+Legacy	fields of BlockExportOptions	iothread_legacy: member 'iothread' from 5.2.0 until 11.0.0
+Legacy	fields of BlockExportOptionsNbd	bitmaps_legacy: member 'bitmaps' from 5.2.0 until 7.1.0
+Escaped	fields of BlockInfo	r#type: member 'type' from 1.0.0
+Legacy	fields of BlockIoErrorEvent	node_name_legacy: member 'node-name' from 2.8.0 until 2.12.0
+Legacy	fields of BlockIoThrottle	device_legacy: member 'device' from 2.7.0 until 2.8.0
+Escaped	fields of BlockJobCancelledEvent	r#type: member 'type' from 3.0.0
+Legacy	fields of BlockJobCancelledEvent	type_legacy: member 'type' from 2.1.0 until 3.0.0
+Escaped	fields of BlockJobChange	r#type: member 'type' from 8.2.0
+Lowering	fields of BlockJobChange	u: member 'u' from 8.2.0
+Escaped	fields of BlockJobChangeOptions	r#type: member 'type' from 8.2.0
+Lowering	fields of BlockJobChangeOptions	u: member 'u' from 8.2.0
+Escaped	fields of BlockJobCompletedEvent	r#type: member 'type' from 3.0.0
+Legacy	fields of BlockJobCompletedEvent	type_legacy: member 'type' from 2.1.0 until 3.0.0
+Escaped	fields of BlockJobInfo	r#type: member 'type' from 8.2.0
+Lowering	fields of BlockJobInfo	u: member 'u' from 8.2.0
+Legacy	fields of BlockJobInfo	status_legacy: member 'status' from 2.12.0 until 3.0.0
+Legacy	fields of BlockJobInfo	type_legacy: member 'type' from 1.1.0 until 8.2.0
+Escaped	fields of BlockJobPendingEvent	r#type: member 'type' from 3.0.0
+Legacy	fields of BlockJobPendingEvent	type_legacy: member 'type' from 2.12.0 until 3.0.0
+Escaped	fields of BlockJobReadyEvent	r#type: member 'type' from 3.0.0
+Legacy	fields of BlockJobReadyEvent	type_legacy: member 'type' from 2.1.0 until 3.0.0
+Legacy	fields of BlockPasswd	device_legacy: member 'device' from 1.1.0 until 2.0.0
+Legacy	fields of BlockResize	device_legacy: member 'device' from 1.1.0 until 2.0.0
+Legacy	fields of BlockSetIoThrottle	device_legacy: member 'device' from 1.1.0 until 2.8.0
+Lowering	fields of BlockStatsSpecific	u: member 'u' from 4.2.0
+Legacy	variants of BlockStatsSpecificBranch	NvmeLegacy: value 'nvme'
+Lowering	fields of BlockdevAction	r_type: member 'type' from 1.1.0
+Lowering	fields of BlockdevAction	u: member 'u' from 1.1.0
+Lowering	fields of BlockdevAdd	u: member 'u' from 2.8.0
+Lowering	fields of BlockdevAmendOptions	u: member 'u' from 5.1.0
+Legacy	fields of BlockdevChangeMedium	device_legacy: member 'device' from 2.5.0 until 2.8.0
+Legacy	fields of BlockdevCloseTray	device_legacy: member 'device' from 2.5.0 until 2.8.0
+Lowering	fields of BlockdevCreateOptions	u: member 'u' from 2.12.0
+Legacy	variants of BlockdevCreateOptionsBranch	BlkdebugLegacy: value 'blkdebug' (BlockdevCreateNotSupported)
+Legacy	variants of BlockdevCreateOptionsBranch	BlkverifyLegacy: value 'blkverify' (BlockdevCreateNotSupported)
+Legacy	variants of BlockdevCreateOptionsBranch	BochsLegacy: value 'bochs' (BlockdevCreateNotSupported)
+Legacy	variants of BlockdevCreateOptionsBranch	CloopLegacy: value 'cloop' (BlockdevCreateNotSupported)
+Legacy	variants of BlockdevCreateOptionsBranch	DmgLegacy: value 'dmg' (BlockdevCreateNotSupported)
+Legacy	variants of BlockdevCreateOptionsBranch	FtpLegacy: value 'ftp' (BlockdevCreateNotSupported)
+Legacy	variants of BlockdevCreateOptionsBranch	FtpsLegacy: value 'ftps' (BlockdevCreateNotSupported)
+Legacy	variants of BlockdevCreateOptionsBranch	HostCdromLegacy: value 'host_cdrom' (BlockdevCreateNotSupported)
+Legacy	variants of BlockdevCreateOptionsBranch	HostDeviceLegacy: value 'host_device' (BlockdevCreateNotSupported)
+Legacy	variants of BlockdevCreateOptionsBranch	HttpLegacy: value 'http' (BlockdevCreateNotSupported)
+Legacy	variants of BlockdevCreateOptionsBranch	HttpsLegacy: value 'https' (BlockdevCreateNotSupported)
+Legacy	variants of BlockdevCreateOptionsBranch	IscsiLegacy: value 'iscsi' (BlockdevCreateNotSupported)
+Legacy	variants of BlockdevCreateOptionsBranch	NbdLegacy: value 'nbd' (BlockdevCreateNotSupported)
+Legacy	variants of BlockdevCreateOptionsBranch	NullAioLegacy: value 'null-aio' (BlockdevCreateNotSupported)
+Legacy	variants of BlockdevCreateOptionsBranch	NullCoLegacy: value 'null-co' (BlockdevCreateNotSupported)
+Legacy	variants of BlockdevCreateOptionsBranch	NvmeLegacy: value 'nvme' (BlockdevCreateNotSupported)
+Legacy	variants of BlockdevCreateOptionsBranch	QuorumLegacy: value 'quorum' (BlockdevCreateNotSupported)
+Legacy	variants of BlockdevCreateOptionsBranch	RawLegacy: value 'raw' (BlockdevCreateNotSupported)
+Legacy	variants of BlockdevCreateOptionsBranch	ReplicationLegacy: value 'replication' (BlockdevCreateNotSupported)
+Legacy	variants of BlockdevCreateOptionsBranch	ThrottleLegacy: value 'throttle' (BlockdevCreateNotSupported)
+Legacy	variants of BlockdevCreateOptionsBranch	VmdkLegacy: value 'vmdk' (BlockdevCreateNotSupported)
+Legacy	variants of BlockdevCreateOptionsBranch	VvfatLegacy: value 'vvfat' (BlockdevCreateNotSupported)
+Legacy	variants of BlockdevCreateOptionsBranch	VxhsLegacy: value 'vxhs' (BlockdevCreateNotSupported)
+Legacy	variants of BlockdevCreateOptionsBranch	VmdkLegacy2: value 'vmdk'
+Legacy	fields of BlockdevCreateOptionsLuks	file_legacy: member 'file' from 2.12.0 until 9.0.0
+Legacy	fields of BlockdevCreateOptionsLuks	cipher_alg_legacy: member 'cipher-alg' from 2.12.0 until 9.2.0
+Legacy	fields of BlockdevCreateOptionsLuks	ivgen_alg_legacy: member 'ivgen-alg' from 2.12.0 until 9.2.0
+Legacy	fields of BlockdevCreateOptionsLuks	ivgen_hash_alg_legacy: member 'ivgen-hash-alg' from 2.12.0 until 9.2.0
+Legacy	fields of BlockdevCreateOptionsLuks	hash_alg_legacy: member 'hash-alg' from 2.12.0 until 9.2.0
+Legacy	fields of BlockdevOpenTray	device_legacy: member 'device' from 2.5.0 until 2.8.0
+Lowering	fields of BlockdevOptions	u: member 'u' from 1.7.0
+Legacy	fields of BlockdevOptions	driver_legacy: member 'driver' from 1.7.0 until 2.0.0
+Legacy	fields of BlockdevOptionsBase	driver_legacy: member 'driver' from 1.7.0 until 2.0.0
+Legacy	variants of BlockdevOptionsBranch	FtpLegacy: value 'ftp' (BlockdevOptionsFile)
+Legacy	variants of BlockdevOptionsBranch	FtpsLegacy: value 'ftps' (BlockdevOptionsFile)
+Legacy	variants of BlockdevOptionsBranch	HttpLegacy: value 'http' (BlockdevOptionsFile)
+Legacy	variants of BlockdevOptionsBranch	HttpsLegacy: value 'https' (BlockdevOptionsFile)
+Legacy	variants of BlockdevOptionsBranch	RawLegacy: value 'raw' (BlockdevOptionsGenericFormat)
+Legacy	variants of BlockdevOptionsBranch	FtpLegacy2: value 'ftp' (BlockdevOptionsCurl)
+Legacy	variants of BlockdevOptionsBranch	FtpsLegacy2: value 'ftps' (BlockdevOptionsCurl)
+Legacy	variants of BlockdevOptionsBranch	HttpLegacy2: value 'http' (BlockdevOptionsCurl)
+Legacy	variants of BlockdevOptionsBranch	HttpsLegacy2: value 'https' (BlockdevOptionsCurl)
+Legacy	variants of BlockdevOptionsBranch	QcowLegacy: value 'qcow' (BlockdevOptionsGenericCOWFormat)
+Legacy	variants of BlockdevOptionsBranch	CopyOnReadLegacy: value 'copy-on-read' (BlockdevOptionsGenericFormat)
+Legacy	fields of BlockdevOptionsGenericCowFormat	backing_legacy: member 'backing' from 1.7.0 until 2.10.0
+Legacy	fields of BlockdevOptionsGluster	server_legacy: member 'server' from 2.7.0 until 2.9.0
+Legacy	fields of BlockdevOptionsGluster	server_legacy2: member 'server' from 2.9.0 until 2.10.0
+Legacy	fields of BlockdevOptionsNbd	server_legacy: member 'server' from 2.8.0 until 2.9.0
+Legacy	fields of BlockdevOptionsNbd	server_legacy2: member 'server' from 2.9.0 until 2.10.0
+Legacy	fields of BlockdevOptionsQcow2	backing_legacy: member 'backing' from 1.7.0 until 2.10.0
+Legacy	fields of BlockdevOptionsSheepdog	server_legacy: member 'server' from 2.9.0 until 2.10.0
+Lowering	fields of BlockdevQcow2Encryption	u: member 'u' from 2.10.0
+Lowering	fields of BlockdevQcowEncryption	u: member 'u' from 2.10.0
+Legacy	fields of BlockdevSnapshot	device_legacy: member 'device' from 1.1.0 until 2.0.0
+Legacy	fields of BlockdevSnapshotSync	device_legacy: member 'device' from 1.1.0 until 2.0.0
+Escaped	fields of CanHostSocketcanProperties	r#if: member 'if' from 6.0.0
+Lowering	fields of ChardevBackend	r_type: member 'type' from 1.4.0 until 6.2.0
+Lowering	fields of ChardevBackend	u: member 'u' from 1.4.0
+Escaped	fields of ChardevBackend	r#type: member 'type' from 6.2.0
+Legacy	variants of ChardevBackendBranch	PtyLegacy: value 'pty' (ChardevDummy)
+Legacy	variants of ChardevBackendBranch	NullLegacy: value 'null' (ChardevDummy)
+Legacy	variants of ChardevBackendBranch	MsmouseLegacy: value 'msmouse' (ChardevDummy)
+Legacy	variants of ChardevBackendBranch	BrailleLegacy: value 'braille' (ChardevDummy)
+Legacy	variants of ChardevBackendBranch	TestdevLegacy: value 'testdev' (ChardevDummy)
+Legacy	variants of ChardevBackendBranch	ConsoleLegacy: value 'console' (ChardevDummy)
+Legacy	variants of ChardevBackendBranch	FileLegacy: value 'file' (ChardevFile)
+Legacy	variants of ChardevBackendBranch	SerialLegacy: value 'serial' (ChardevHostdev)
+Legacy	variants of ChardevBackendBranch	ParallelLegacy: value 'parallel' (ChardevHostdev)
+Legacy	variants of ChardevBackendBranch	PipeLegacy: value 'pipe' (ChardevHostdev)
+Legacy	variants of ChardevBackendBranch	SocketLegacy: value 'socket' (ChardevSocket)
+Legacy	variants of ChardevBackendBranch	UdpLegacy: value 'udp' (ChardevUdp)
+Legacy	variants of ChardevBackendBranch	PtyLegacy2: value 'pty' (ChardevCommon)
+Legacy	variants of ChardevBackendBranch	NullLegacy2: value 'null' (ChardevCommon)
+Legacy	variants of ChardevBackendBranch	MuxLegacy: value 'mux' (ChardevMux)
+Legacy	variants of ChardevBackendBranch	MsmouseLegacy2: value 'msmouse' (ChardevCommon)
+Legacy	variants of ChardevBackendBranch	WctabletLegacy: value 'wctablet' (ChardevCommon)
+Legacy	variants of ChardevBackendBranch	BrailleLegacy2: value 'braille' (ChardevCommon)
+Legacy	variants of ChardevBackendBranch	TestdevLegacy2: value 'testdev' (ChardevCommon)
+Legacy	variants of ChardevBackendBranch	StdioLegacy: value 'stdio' (ChardevStdio)
+Legacy	variants of ChardevBackendBranch	ConsoleLegacy2: value 'console' (ChardevCommon)
+Legacy	variants of ChardevBackendBranch	SpicevmcLegacy: value 'spicevmc' (ChardevSpiceChannel)
+Legacy	variants of ChardevBackendBranch	SpiceportLegacy: value 'spiceport' (ChardevSpicePort)
+Legacy	variants of ChardevBackendBranch	QemuVdagentLegacy: value 'qemu-vdagent' (ChardevQemuVDAgent)
+Legacy	variants of ChardevBackendBranch	VcLegacy: value 'vc' (ChardevVC)
+Legacy	variants of ChardevBackendBranch	RingbufLegacy: value 'ringbuf' (ChardevRingbuf)
+Legacy	variants of ChardevBackendBranch	MemoryLegacy: value 'memory' (ChardevRingbuf)
+Legacy	variants of ChardevBackendBranch	PtyLegacy3: value 'pty' (ChardevCommonWrapper)
+Escaped	fields of ChardevFile	r#in: member 'in' from 1.4.0
+Legacy	fields of ChardevSocket	addr_legacy: member 'addr' from 1.4.0 until 2.10.0
+Escaped	fields of ChardevSpiceChannel	r#type: member 'type' from 1.5.0
+Legacy	fields of ChardevUdp	remote_legacy: member 'remote' from 1.5.0 until 2.10.0
+Legacy	fields of ChardevUdp	local_legacy: member 'local' from 1.5.0 until 2.10.0
+Escaped	fields of CommandLineParameterInfo	r#type: member 'type' from 1.5.0
+Escaped	fields of CpuDefinitionInfo	r#static: member 'static' from 2.8.0
+Alt	fields of CpuInfo	pc_alt: member 'PC' from 1.0.0 until 2.6.0
+Lowering	fields of CpuInfo	u: member 'u' from 2.6.0
+Legacy	variants of CpuInfoBranch	OtherLegacy: value 'other' (CpuInfoOther)
+Lowering	fields of CpuInfoFast	u: member 'u' from 2.12.0
+Legacy	variants of CpuInfoFastBranch	RiscvLegacy: value 'riscv' (CpuInfoRISCV)
+Legacy	variants of CpuInfoFastBranch	MipsLegacy: value 'mips' (CpuInfoOther)
+Legacy	variants of CpuInfoFastBranch	PpcLegacy: value 'ppc' (CpuInfoOther)
+Legacy	variants of CpuInfoFastBranch	SparcLegacy: value 'sparc' (CpuInfoOther)
+Legacy	variants of CpuInfoFastBranch	TricoreLegacy: value 'tricore' (CpuInfoOther)
+Legacy	fields of CpuInfoS390	cpu_state_legacy: member 'cpu-state' from 2.12.0 until 9.2.0
+Legacy	fields of CpuInfoS390	entitlement_legacy: member 'entitlement' from 8.2.0 until 9.2.0
+Legacy	fields of CpuModelExpansionInfo	deprecated_props_legacy: member 'deprecated-props' from 9.1.0 until 10.1.0
+Legacy	fields of CpuPolarizationChangeEvent	polarization_legacy: member 'polarization' from 8.2.0 until 9.2.0
+Legacy	fields of CpuPolarizationInfo	polarization_legacy: member 'polarization' from 8.2.0 until 9.2.0
+Escaped	fields of CxlGeneralMediaEvent	r#type: member 'type' from 11.0.0
+Escaped	fields of CxlInjectCorrectableError	r#type: member 'type' from 8.0.0
+Escaped	fields of CxlInjectDramEvent	r#type: member 'type' from 8.1.0
+Legacy	fields of CxlInjectDramEvent	flags_legacy: member 'flags' from 8.1.0 until 11.0.0
+Escaped	fields of CxlInjectGeneralMediaEvent	r#type: member 'type' from 8.1.0
+Legacy	fields of CxlInjectGeneralMediaEvent	flags_legacy: member 'flags' from 8.1.0 until 11.0.0
+Escaped	fields of CxlInjectMemoryModuleEvent	r#type: member 'type' from 8.1.0
+Legacy	fields of CxlInjectMemoryModuleEvent	flags_legacy: member 'flags' from 8.1.0 until 11.0.0
+Escaped	fields of CxlMemModuleEvent	r#type: member 'type' from 11.0.0
+Escaped	fields of CxlUncorErrorRecord	r#type: member 'type' from 8.0.0
+Escaped	fields of CxldramEvent	r#type: member 'type' from 11.0.0
+Lowering	fields of DeviceAdd	arguments: member 'arguments' from 2.8.0
+Legacy	fields of DeviceAdd	id_legacy: member 'id' from 2.8.0 until 2.9.0
+Returns	items	DeviceListPropertiesReturns: the enum of return types of command 'device-list-properties'
+ReturnsVariant	variants of DeviceListPropertiesReturns	V1_2_0: the return type Vec<DevicePropertyInfo> from 1.2.0
+ReturnsVariant	variants of DeviceListPropertiesReturns	V2_12_0: the return type Vec<ObjectPropertyInfo> from 2.12.0
+Escaped	fields of DevicePropertyInfo	r#type: member 'type' from 1.2.0
+Escaped	fields of DisplayOptions	r#type: member 'type' from 2.12.0
+Lowering	fields of DisplayOptions	u: member 'u' from 2.12.0
+Legacy	fields of DisplayOptions	gl_legacy: member 'gl' from 2.12.0 until 3.0.0
+Legacy	variants of DisplayOptionsBranch	DefaultLegacy: value 'default' (DisplayNoOpts)
+Legacy	variants of DisplayOptionsBranch	NoneLegacy: value 'none' (DisplayNoOpts)
+Legacy	variants of DisplayOptionsBranch	SdlLegacy: value 'sdl' (DisplayNoOpts)
+Legacy	variants of DisplayOptionsBranch	EglHeadlessLegacy: value 'egl-headless' (DisplayNoOpts)
+Legacy	variants of DisplayOptionsBranch	CursesLegacy: value 'curses' (DisplayNoOpts)
+Legacy	variants of DisplayOptionsBranch	CocoaLegacy: value 'cocoa' (DisplayNoOpts)
+Legacy	variants of DisplayOptionsBranch	EglHeadlessLegacy2: value 'egl-headless'
+Legacy	variants of DisplayOptionsBranch	CursesLegacy2: value 'curses'
+Legacy	variants of DisplayOptionsBranch	CocoaLegacy2: value 'cocoa'
+Legacy	variants of DisplayOptionsBranch	SdlLegacy2: value 'sdl'
+Escaped	fields of DisplayReload	r#type: member 'type' from 6.0.0
+Lowering	fields of DisplayReload	u: member 'u' from 6.0.0
+Escaped	fields of DisplayReloadOptions	r#type: member 'type' from 6.0.0
+Lowering	fields of DisplayReloadOptions	u: member 'u' from 6.0.0
+Escaped	fields of DisplayUpdate	r#type: member 'type' from 7.1.0
+Lowering	fields of DisplayUpdate	u: member 'u' from 7.1.0
+Escaped	fields of DisplayUpdateOptions	r#type: member 'type' from 7.1.0
+Lowering	fields of DisplayUpdateOptions	u: member 'u' from 7.1.0
+Legacy	fields of Eject	device_legacy: member 'device' from 1.1.0 until 2.8.0
+Escaped	fields of EvtchnInfo	r#type: member 'type' from 8.0.0
+Lowering	fields of ExpirePassword	u: member 'u' from 7.0.0
+Legacy	fields of ExpirePassword	protocol_legacy: member 'protocol' from 1.1.0 until 7.0.0
+Lowering	fields of ExpirePasswordOptions	u: member 'u' from 7.0.0
+Escaped	variants of FloppyDriveType	_144: value '144'
+Escaped	variants of FloppyDriveType	_288: value '288'
+Escaped	variants of FloppyDriveType	_120: value '120'
+Escaped	fields of GlusterServer	r#type: member 'type' from 2.7.0
+Lowering	fields of GlusterServer	u: member 'u' from 2.7.0
+Escaped	variants of GranuleMode	_4k: value '4k'
+Escaped	variants of GranuleMode	_8k: value '8k'
+Escaped	variants of GranuleMode	_16k: value '16k'
+Escaped	variants of GranuleMode	_64k: value '64k'
+Escaped	fields of GuestPanicInformation	r#type: member 'type' from 2.9.0
+Lowering	fields of GuestPanicInformation	u: member 'u' from 2.9.0
+Escaped	fields of HotpluggableCpu	r#type: member 'type' from 2.7.0
+Lowering	fields of ImageInfoSpecific	r_type: member 'type' from 1.7.0 until 6.2.0
+Lowering	fields of ImageInfoSpecific	u: member 'u' from 1.7.0
+Escaped	fields of ImageInfoSpecific	r#type: member 'type' from 6.2.0
+Legacy	variants of ImageInfoSpecificBranch	Qcow2Legacy: value 'qcow2' (ImageInfoSpecificQCow2)
+Legacy	variants of ImageInfoSpecificBranch	VmdkLegacy: value 'vmdk' (ImageInfoSpecificVmdk)
+Legacy	variants of ImageInfoSpecificBranch	LuksLegacy: value 'luks' (QCryptoBlockInfoLUKS)
+Legacy	variants of ImageInfoSpecificBranch	RbdLegacy: value 'rbd' (ImageInfoSpecificRbd)
+Lowering	fields of ImageInfoSpecificQCow2Encryption	u: member 'u' from 2.10.0
+Legacy	variants of ImageInfoSpecificQCow2EncryptionBranch	AesLegacy: value 'aes' (QCryptoBlockInfoQCow)
+Legacy	fields of ImageInfoSpecificVmdk	extents_legacy: member 'extents' from 1.7.0 until 8.0.0
+Legacy	variants of InputAxis	XLegacy: value 'X'
+Legacy	variants of InputAxis	YLegacy: value 'Y'
+Legacy	variants of InputButton	LeftLegacy: value 'Left'
+Legacy	variants of InputButton	MiddleLegacy: value 'Middle'
+Legacy	variants of InputButton	RightLegacy: value 'Right'
+Legacy	variants of InputButton	WheelUpLegacy: value 'WheelUp'
+Legacy	variants of InputButton	WheelDownLegacy: value 'WheelDown'
+Lowering	fields of InputEvent	r_type: member 'type' from 2.0.0 until 6.2.0
+Lowering	fields of InputEvent	u: member 'u' from 2.0.0
+Escaped	fields of InputEvent	r#type: member 'type' from 6.2.0
+Legacy	variants of InputEventBranch	KeyLegacy: value 'key' (InputKeyEvent)
+Legacy	variants of InputEventBranch	BtnLegacy: value 'btn' (InputBtnEvent)
+Legacy	variants of InputEventBranch	RelLegacy: value 'rel' (InputMoveEvent)
+Legacy	variants of InputEventBranch	AbsLegacy: value 'abs' (InputMoveEvent)
+Escaped	fields of InputMultiTouchEvent	r#type: member 'type' from 8.1.0
+Escaped	fields of JobInfo	r#type: member 'type' from 3.0.0
+Lowering	fields of KeyValue	r_type: member 'type' from 1.3.0 until 6.2.0
+Lowering	fields of KeyValue	u: member 'u' from 1.3.0
+Escaped	fields of KeyValue	r#type: member 'type' from 6.2.0
+Legacy	variants of KeyValueBranch	NumberLegacy: value 'number' (int)
+Legacy	variants of KeyValueBranch	QcodeLegacy: value 'qcode' (QKeyCode)
+Lowering	fields of MemoryDeviceInfo	r_type: member 'type' from 2.1.0 until 6.2.0
+Lowering	fields of MemoryDeviceInfo	u: member 'u' from 2.1.0
+Escaped	fields of MemoryDeviceInfo	r#type: member 'type' from 6.2.0
+Legacy	variants of MemoryDeviceInfoBranch	DimmLegacy: value 'dimm' (PCDIMMDeviceInfo)
+Legacy	variants of MemoryDeviceInfoBranch	NvdimmLegacy: value 'nvdimm' (PCDIMMDeviceInfo)
+Legacy	variants of MemoryDeviceInfoBranch	VirtioPmemLegacy: value 'virtio-pmem' (VirtioPMEMDeviceInfo)
+Legacy	variants of MemoryDeviceInfoBranch	VirtioMemLegacy: value 'virtio-mem' (VirtioMEMDeviceInfo)
+Legacy	fields of Memsave	val_legacy: member 'val' from 1.1.0 until 9.1.0
+Legacy	fields of Memsave	size_legacy: member 'size' from 1.1.0 until 9.1.0
+Legacy	fields of Migrate	uri_legacy: member 'uri' from 1.1.0 until 8.2.2
+Legacy	fields of MigrateIncoming	uri_legacy: member 'uri' from 2.3.0 until 8.2.0
+Legacy	fields of MigrateSetParameters	tls_creds_legacy: member 'tls-creds' from 2.7.0 until 2.10.0
+Legacy	fields of MigrateSetParameters	tls_hostname_legacy: member 'tls-hostname' from 2.7.0 until 2.10.0
+Legacy	fields of MigrateSetParameters	compress_level_legacy: member 'compress-level' from 2.4.0 until 6.0.0
+Legacy	fields of MigrateSetParameters	compress_threads_legacy: member 'compress-threads' from 2.4.0 until 6.0.0
+Legacy	fields of MigrateSetParameters	decompress_threads_legacy: member 'decompress-threads' from 2.4.0 until 6.0.0
+Legacy	fields of MigrateSetParameters	throttle_trigger_threshold_legacy: member 'throttle-trigger-threshold' from 5.0.0 until 6.0.0
+Legacy	fields of MigrateSetParameters	cpu_throttle_initial_legacy: member 'cpu-throttle-initial' from 2.7.0 until 6.0.0
+Legacy	fields of MigrateSetParameters	cpu_throttle_increment_legacy: member 'cpu-throttle-increment' from 2.7.0 until 6.0.0
+Legacy	fields of MigrateSetParameters	max_bandwidth_legacy: member 'max-bandwidth' from 2.8.0 until 6.0.0
+Legacy	fields of MigrateSetParameters	downtime_limit_legacy: member 'downtime-limit' from 2.8.0 until 6.0.0
+Legacy	fields of MigrateSetParameters	x_checkpoint_delay_legacy: member 'x-checkpoint-delay' from 2.8.0 until 6.0.0
+Legacy	fields of MigrateSetParameters	multifd_channels_legacy: member 'multifd-channels' from 4.0.0 until 6.0.0
+Legacy	fields of MigrateSetParameters	max_cpu_throttle_legacy: member 'max-cpu-throttle' from 3.1.0 until 6.0.0
+Legacy	fields of MigrateSetParameters	multifd_zlib_level_legacy: member 'multifd-zlib-level' from 5.0.0 until 6.0.0
+Legacy	fields of MigrateSetParameters	multifd_zstd_level_legacy: member 'multifd-zstd-level' from 5.0.0 until 6.0.0
+Lowering	fields of MigrationAddress	u: member 'u' from 8.2.0
+Legacy	fields of MigrationInfo	status_legacy: member 'status' from 1.0.0 until 2.3.0
+Legacy	fields of MigrationInfo	ram_legacy: member 'ram' from 1.0.0 until 11.1.0
+Legacy	fields of MigrationParameters	compress_level_legacy: member 'compress-level' from 2.4.0 until 2.8.0
+Legacy	fields of MigrationParameters	compress_threads_legacy: member 'compress-threads' from 2.4.0 until 2.8.0
+Legacy	fields of MigrationParameters	decompress_threads_legacy: member 'decompress-threads' from 2.4.0 until 2.8.0
+Legacy	fields of MigrationParameters	cpu_throttle_initial_legacy: member 'cpu-throttle-initial' from 2.7.0 until 2.8.0
+Legacy	fields of MigrationParameters	cpu_throttle_increment_legacy: member 'cpu-throttle-increment' from 2.7.0 until 2.8.0
+Legacy	fields of MigrationParameters	tls_creds_legacy: member 'tls-creds' from 2.7.0 until 2.8.0
+Legacy	fields of MigrationParameters	tls_hostname_legacy: member 'tls-hostname' from 2.7.0 until 2.8.0
+Legacy	fields of MigrationParameters	compress_level_legacy2: member 'compress-level' from 2.8.0 until 2.12.0
+Legacy	fields of MigrationParameters	compress_threads_legacy2: member 'compress-threads' from 2.8.0 until 2.12.0
+Legacy	fields of MigrationParameters	decompress_threads_legacy2: member 'decompress-threads' from 2.8.0 until 2.12.0
+Legacy	fields of MigrationParameters	cpu_throttle_initial_legacy2: member 'cpu-throttle-initial' from 2.8.0 until 2.12.0
+Legacy	fields of MigrationParameters	cpu_throttle_increment_legacy2: member 'cpu-throttle-increment' from 2.8.0 until 2.12.0
+Legacy	fields of MigrationParameters	max_bandwidth_legacy: member 'max-bandwidth' from 2.8.0 until 2.12.0
+Legacy	fields of MigrationParameters	downtime_limit_legacy: member 'downtime-limit' from 2.8.0 until 2.12.0
+Legacy	fields of MigrationParameters	x_checkpoint_delay_legacy: member 'x-checkpoint-delay' from 2.8.0 until 2.12.0
+Legacy	fields of MigrationParameters	x_multifd_channels_legacy: member 'x-multifd-channels' from 2.11.0 until 2.12.0
+Legacy	fields of MigrationParameters	x_multifd_page_count_legacy: member 'x-multifd-page-count' from 2.11.0 until 2.12.0
+Legacy	fields of MigrationParameters	tls_creds_legacy2: member 'tls-creds' from 2.8.0 until 11.0.0
+Legacy	fields of MigrationParameters	tls_hostname_legacy2: member 'tls-hostname' from 2.8.0 until 11.0.0
+Legacy	fields of MigrationParameters	tls_authz_legacy: member 'tls-authz' from 4.0.0 until 11.0.0
+Legacy	fields of NbdServerRemove	mode_legacy: member 'mode' from 2.12.0 until 5.2.0
+Legacy	fields of NbdServerStart	addr_legacy: member 'addr' from 1.3.0 until 2.10.0
+Lowering	fields of NetClientOptions	r_type: member 'type' from 1.2.0
+Lowering	fields of NetClientOptions	u: member 'u' from 1.2.0
+Legacy	fields of NetLegacy	opts_legacy: member 'opts' from 1.2.0 until 2.7.0
+Lowering	fields of NetLegacyOptions	r_type: member 'type' from 2.7.0 until 2.9.0
+Lowering	fields of NetLegacyOptions	u: member 'u' from 2.7.0
+Escaped	fields of NetLegacyOptions	r#type: member 'type' from 2.9.0
+Legacy	variants of NetLegacyOptionsBranch	NoneLegacy: value 'none' (NetdevNoneOptions)
+Escaped	fields of Netdev	r#type: member 'type' from 2.7.0
+Lowering	fields of Netdev	u: member 'u' from 2.7.0
+Escaped	fields of NetdevAdd	r#type: member 'type' from 5.0.0
+Lowering	fields of NetdevAdd	arguments: member 'arguments' from 1.2.0 until 5.0.0
+Lowering	fields of NetdevAdd	u: member 'u' from 5.0.0
+Legacy	fields of NetdevAdd	type_legacy: member 'type' from 1.2.0 until 5.0.0
+Legacy	variants of NetdevBranch	NoneLegacy: value 'none' (NetdevNoneOptions)
+Legacy	variants of NetdevBranch	PasstLegacy: value 'passt' (NetDevPasstOptions)
+Legacy	fields of NetdevStreamOptions	reconnect_legacy: member 'reconnect' from 8.0.0 until 9.2.0
+Legacy	fields of NetdevUserOptions	dnssearch_legacy: member 'dnssearch' from 1.3.0 until 11.1.0
+Legacy	fields of NetdevUserOptions	hostfwd_legacy: member 'hostfwd' from 1.2.0 until 11.1.0
+Legacy	fields of NetdevUserOptions	guestfwd_legacy: member 'guestfwd' from 1.2.0 until 11.1.0
+Escaped	fields of NfsServer	r#type: member 'type' from 2.8.0
+Lowering	fields of NumaOptions	r_type: member 'type' from 2.1.0 until 2.9.0
+Lowering	fields of NumaOptions	u: member 'u' from 2.1.0
+Escaped	fields of NumaOptions	r#type: member 'type' from 2.9.0
+Escaped	variants of OasMode	_32: value '32'
+Escaped	variants of OasMode	_36: value '36'
+Escaped	variants of OasMode	_40: value '40'
+Escaped	variants of OasMode	_42: value '42'
+Escaped	variants of OasMode	_44: value '44'
+Escaped	variants of OasMode	_48: value '48'
+Escaped	variants of OasMode	_52: value '52'
+Escaped	variants of OasMode	_56: value '56'
+Lowering	fields of ObjectAdd	arguments: member 'arguments' from 5.0.0 until 6.0.0
+Lowering	fields of ObjectAdd	u: member 'u' from 6.0.0
+Legacy	fields of ObjectAdd	arguments_legacy: member 'arguments' from 2.0.0 until 2.5.0
+Legacy	fields of ObjectAdd	qom_type_legacy: member 'qom-type' from 2.0.0 until 6.0.0
+Lowering	fields of ObjectOptions	u: member 'u' from 6.0.0
+Escaped	fields of ObjectPropertyInfo	r#type: member 'type' from 1.1.0
+Escaped	fields of ObjectPropertyValue	r#type: member 'type' from 10.1.0
+Escaped	fields of ObjectTypeInfo	r#abstract: member 'abstract' from 2.10.0
+Legacy	fields of PciBridgeInfo	bus_legacy: member 'bus' from 1.0.0 until 2.4.0
+Legacy	fields of PciDeviceInfo	class_info_legacy: member 'class_info' from 1.0.0 until 2.4.0
+Legacy	fields of PciDeviceInfo	id_legacy: member 'id' from 1.0.0 until 2.4.0
+Escaped	fields of PciMemoryRegion	r#type: member 'type' from 1.0.0
+Escaped	variants of PcieLinkSpeed	_25: value '2_5'
+Escaped	variants of PcieLinkSpeed	_5: value '5'
+Escaped	variants of PcieLinkSpeed	_8: value '8'
+Escaped	variants of PcieLinkSpeed	_16: value '16'
+Escaped	variants of PcieLinkSpeed	_32: value '32'
+Escaped	variants of PcieLinkSpeed	_64: value '64'
+Escaped	variants of PcieLinkWidth	_1: value '1'
+Escaped	variants of PcieLinkWidth	_2: value '2'
+Escaped	variants of PcieLinkWidth	_4: value '4'
+Escaped	variants of PcieLinkWidth	_8: value '8'
+Escaped	variants of PcieLinkWidth	_12: value '12'
+Escaped	variants of PcieLinkWidth	_16: value '16'
+Escaped	variants of PcieLinkWidth	_32: value '32'
+Legacy	fields of Pmemsave	val_legacy: member 'val' from 1.1.0 until 9.1.0
+Legacy	fields of Pmemsave	size_legacy: member 'size' from 1.1.0 until 9.1.0
+Escaped	fields of QAuthZListRule	r#match: member 'match' from 4.0.0
+Lowering	fields of QCryptoAkCipherOptions	u: member 'u' from 7.1.0
+Legacy	fields of QCryptoAkCipherOptions	alg_legacy: member 'alg' from 7.1.0 until 9.2.0
+Legacy	fields of QCryptoAkCipherOptionsRsa	hash_alg_legacy: member 'hash-alg' from 7.1.0 until 9.2.0
+Legacy	fields of QCryptoAkCipherOptionsRsa	padding_alg_legacy: member 'padding-alg' from 7.1.0 until 9.2.0
+Lowering	fields of QCryptoBlockAmendOptions	u: member 'u' from 5.1.0
+Lowering	fields of QCryptoBlockCreateOptions	u: member 'u' from 2.6.0
+Legacy	fields of QCryptoBlockCreateOptionsLuks	cipher_alg_legacy: member 'cipher-alg' from 2.6.0 until 9.2.0
+Legacy	fields of QCryptoBlockCreateOptionsLuks	ivgen_alg_legacy: member 'ivgen-alg' from 2.6.0 until 9.2.0
+Legacy	fields of QCryptoBlockCreateOptionsLuks	ivgen_hash_alg_legacy: member 'ivgen-hash-alg' from 2.6.0 until 9.2.0
+Legacy	fields of QCryptoBlockCreateOptionsLuks	hash_alg_legacy: member 'hash-alg' from 2.6.0 until 9.2.0
+Lowering	fields of QCryptoBlockInfo	u: member 'u' from 2.7.0
+Legacy	variants of QCryptoBlockInfoBranch	QcowLegacy: value 'qcow' (QCryptoBlockInfoQCow)
+Legacy	fields of QCryptoBlockInfoLuks	cipher_alg_legacy: member 'cipher-alg' from 2.7.0 until 9.2.0
+Legacy	fields of QCryptoBlockInfoLuks	ivgen_alg_legacy: member 'ivgen-alg' from 2.7.0 until 9.2.0
+Legacy	fields of QCryptoBlockInfoLuks	ivgen_hash_alg_legacy: member 'ivgen-hash-alg' from 2.7.0 until 9.2.0
+Legacy	fields of QCryptoBlockInfoLuks	hash_alg_legacy: member 'hash-alg' from 2.7.0 until 9.2.0
+Lowering	fields of QCryptoBlockOpenOptions	u: member 'u' from 2.6.0
+Escaped	variants of QCryptoCipherAlgo	_3des: value '3des'
+Escaped	variants of QCryptoCipherAlgorithm	_3des: value '3des'
+Escaped	fields of QCryptodevBackendClient	r#type: member 'type' from 8.0.0
+Escaped	variants of QKeyCode	_1: value '1'
+Escaped	variants of QKeyCode	_2: value '2'
+Escaped	variants of QKeyCode	_3: value '3'
+Escaped	variants of QKeyCode	_4: value '4'
+Escaped	variants of QKeyCode	_5: value '5'
+Escaped	variants of QKeyCode	_6: value '6'
+Escaped	variants of QKeyCode	_7: value '7'
+Escaped	variants of QKeyCode	_8: value '8'
+Escaped	variants of QKeyCode	_9: value '9'
+Escaped	variants of QKeyCode	_0: value '0'
+Lowering	fields of QomGet	arguments: member 'arguments' from 1.1.0 until 2.5.0
+Escaped	fields of QomListTypes	r#abstract: member 'abstract' from 1.1.0
+Lowering	fields of QomSet	arguments: member 'arguments' from 1.1.0 until 2.5.0
+Escaped	fields of QueryCpuModelExpansion	r#type: member 'type' from 2.8.0
+Lowering	fields of QueryQmpSchema	arguments: member 'arguments' from 2.5.0 until 6.0.0
+Escaped	fields of QueryRockerOfDpaGroups	r#type: member 'type' from 2.4.0
+Lowering	fields of QueryStats	u: member 'u' from 7.1.0
+Returns	items	QueryTargetReturns: the enum of return types of command 'query-target'
+ReturnsVariant	variants of QueryTargetReturns	V1_2_0: the return type TargetInfo from 1.2.0
+ReturnsVariant	variants of QueryTargetReturns	V10_1_0: the return type QemuTargetInfo from 10.1.0
+Escaped	fields of QuorumReportBadEvent	r#type: member 'type' from 2.6.0
+Lowering	fields of RbdEncryptionCreateOptions	u: member 'u' from 6.1.0
+Legacy	fields of RbdEncryptionCreateOptionsLuks	cipher_alg_legacy: member 'cipher-alg' from 6.1.0 until 9.2.0
+Legacy	fields of RbdEncryptionCreateOptionsLuks2	cipher_alg_legacy: member 'cipher-alg' from 6.1.0 until 9.2.0
+Legacy	fields of RbdEncryptionCreateOptionsLuksBase	cipher_alg_legacy: member 'cipher-alg' from 6.1.0 until 9.2.0
+Lowering	fields of RbdEncryptionOptions	u: member 'u' from 6.1.0
+Escaped	fields of RockerOfDpaGroup	r#type: member 'type' from 2.4.0
+Lowering	fields of SchemaInfo	u: member 'u' from 2.5.0
+Escaped	fields of SchemaInfoAlternateMember	r#type: member 'type' from 2.5.0
+Legacy	fields of SchemaInfoCommand	allow_oob_legacy: member 'allow-oob' from 2.12.0 until 3.0.0
+Escaped	fields of SchemaInfoObjectMember	r#type: member 'type' from 2.5.0
+Escaped	fields of SchemaInfoObjectVariant	r#type: member 'type' from 2.5.0
+Legacy	fields of SetCpuTopology	entitlement_legacy: member 'entitlement' from 8.2.0 until 9.2.0
+Escaped	fields of SetNumaNode	r#type: member 'type' from 3.0.0
+Lowering	fields of SetNumaNode	u: member 'u' from 3.0.0
+Lowering	fields of SetPassword	u: member 'u' from 7.0.0
+Legacy	fields of SetPassword	protocol_legacy: member 'protocol' from 1.1.0 until 7.0.0
+Legacy	fields of SetPassword	connected_legacy: member 'connected' from 1.1.0 until 7.0.0
+Lowering	fields of SetPasswordOptions	u: member 'u' from 7.0.0
+Lowering	fields of SevInfo	u: member 'u' from 9.1.0
+Legacy	fields of SgxInfo	sections_legacy: member 'sections' from 7.0.0 until 10.1.0
+Escaped	fields of SheepdogRedundancy	r#type: member 'type' from 2.12.0
+Lowering	fields of SheepdogRedundancy	u: member 'u' from 2.12.0
+Escaped	variants of SmbiosEntryPointType	_32: value '32'
+Escaped	variants of SmbiosEntryPointType	_64: value '64'
+Lowering	fields of SocketAddress	r_type: member 'type' from 1.3.0 until 2.10.0
+Lowering	fields of SocketAddress	u: member 'u' from 1.3.0
+Escaped	fields of SocketAddress	r#type: member 'type' from 2.10.0
+Legacy	variants of SocketAddressBranch	FdLegacy: value 'fd' (String)
+Escaped	fields of SocketAddressFlat	r#type: member 'type' from 2.9.0
+Lowering	fields of SocketAddressFlat	u: member 'u' from 2.9.0
+Lowering	fields of SocketAddressLegacy	r_type: member 'type' from 2.10.0 until 6.2.0
+Lowering	fields of SocketAddressLegacy	u: member 'u' from 2.10.0
+Escaped	fields of SocketAddressLegacy	r#type: member 'type' from 6.2.0
+Legacy	variants of SocketAddressLegacyBranch	InetLegacy: value 'inet' (InetSocketAddress)
+Legacy	variants of SocketAddressLegacyBranch	UnixLegacy: value 'unix' (UnixSocketAddress)
+Legacy	variants of SocketAddressLegacyBranch	VsockLegacy: value 'vsock' (VsockSocketAddress)
+Legacy	variants of SocketAddressLegacyBranch	FdLegacy: value 'fd' (String)
+Legacy	variants of SocketAddressLegacyBranch	FdLegacy2: value 'fd' (StringWrapper)
+Legacy	fields of SpiceChannel	family_legacy: member 'family' from 1.0.0 until 2.1.0
+Lowering	fields of SshHostKeyCheck	u: member 'u' from 2.12.0
+Legacy	variants of SshHostKeyCheckBranch	NoneLegacy: value 'none' (SshHostKeyDummy)
+Legacy	variants of SshHostKeyCheckBranch	KnownHostsLegacy: value 'known_hosts' (SshHostKeyDummy)
+Escaped	fields of SshHostKeyHash	r#type: member 'type' from 2.12.0
+Escaped	variants of SsidSizeMode	_0: value '0'
+Escaped	variants of SsidSizeMode	_1: value '1'
+Escaped	variants of SsidSizeMode	_2: value '2'
+Escaped	variants of SsidSizeMode	_3: value '3'
+Escaped	variants of SsidSizeMode	_4: value '4'
+Escaped	variants of SsidSizeMode	_5: value '5'
+Escaped	variants of SsidSizeMode	_6: value '6'
+Escaped	variants of SsidSizeMode	_7: value '7'
+Escaped	variants of SsidSizeMode	_8: value '8'
+Escaped	variants of SsidSizeMode	_9: value '9'
+Escaped	variants of SsidSizeMode	_10: value '10'
+Escaped	variants of SsidSizeMode	_11: value '11'
+Escaped	variants of SsidSizeMode	_12: value '12'
+Escaped	variants of SsidSizeMode	_13: value '13'
+Escaped	variants of SsidSizeMode	_14: value '14'
+Escaped	variants of SsidSizeMode	_15: value '15'
+Escaped	variants of SsidSizeMode	_16: value '16'
+Escaped	variants of SsidSizeMode	_17: value '17'
+Escaped	variants of SsidSizeMode	_18: value '18'
+Escaped	variants of SsidSizeMode	_19: value '19'
+Escaped	variants of SsidSizeMode	_20: value '20'
+Lowering	fields of StatsFilter	u: member 'u' from 7.1.0
+Escaped	fields of StatsSchemaValue	r#type: member 'type' from 7.1.0
+Legacy	fields of TargetInfo	arch_legacy: member 'arch' from 1.2.0 until 1.6.0
+Legacy	fields of TargetInfo	arch_legacy2: member 'arch' from 1.6.0 until 3.0.0
+Lowering	fields of TpmTypeOptions	r_type: member 'type' from 1.5.0 until 6.2.0
+Lowering	fields of TpmTypeOptions	u: member 'u' from 1.5.0
+Escaped	fields of TpmTypeOptions	r#type: member 'type' from 6.2.0
+Legacy	variants of TpmTypeOptionsBranch	PassthroughLegacy: value 'passthrough' (TPMPassthroughOptions)
+Legacy	variants of TpmTypeOptionsBranch	EmulatorLegacy: value 'emulator' (TPMEmulatorOptions)
+Legacy	fields of Transaction	actions_legacy: member 'actions' from 1.1.0 until 1.6.0
+Lowering	fields of TransactionAction	r_type: member 'type' from 1.6.0 until 6.2.0
+Lowering	fields of TransactionAction	u: member 'u' from 1.6.0
+Escaped	fields of TransactionAction	r#type: member 'type' from 6.2.0
+Legacy	variants of TransactionActionBranch	BlockdevSnapshotSyncLegacy: value 'blockdev-snapshot-sync' (BlockdevSnapshot)
+Legacy	variants of TransactionActionBranch	AbortLegacy: value 'abort' (Abort)
+Legacy	variants of TransactionActionBranch	BlockDirtyBitmapAddLegacy: value 'block-dirty-bitmap-add' (BlockDirtyBitmapAdd)
+Legacy	variants of TransactionActionBranch	BlockDirtyBitmapRemoveLegacy: value 'block-dirty-bitmap-remove' (BlockDirtyBitmap)
+Legacy	variants of TransactionActionBranch	BlockDirtyBitmapClearLegacy: value 'block-dirty-bitmap-clear' (BlockDirtyBitmap)
+Legacy	variants of TransactionActionBranch	BlockDirtyBitmapEnableLegacy: value 'block-dirty-bitmap-enable' (BlockDirtyBitmap)
+Legacy	variants of TransactionActionBranch	BlockDirtyBitmapDisableLegacy: value 'block-dirty-bitmap-disable' (BlockDirtyBitmap)
+Legacy	variants of TransactionActionBranch	BlockDirtyBitmapMergeLegacy: value 'block-dirty-bitmap-merge' (BlockDirtyBitmapMerge)
+Legacy	variants of TransactionActionBranch	BlockdevBackupLegacy: value 'blockdev-backup' (BlockdevBackup)
+Legacy	variants of TransactionActionBranch	BlockdevSnapshotLegacy: value 'blockdev-snapshot' (BlockdevSnapshot)
+Legacy	variants of TransactionActionBranch	BlockdevSnapshotInternalSyncLegacy: value 'blockdev-snapshot-internal-sync' (BlockdevSnapshotInternal)
+Legacy	variants of TransactionActionBranch	BlockdevSnapshotSyncLegacy2: value 'blockdev-snapshot-sync' (BlockdevSnapshotSync)
+Legacy	variants of TransactionActionBranch	DriveBackupLegacy: value 'drive-backup' (DriveBackup)
+Escaped	fields of UnixSocketAddress	r#abstract: member 'abstract' from 5.1.0
+Legacy	fields of VersionInfo	qemu_legacy: member 'qemu' from 1.0.0 until 2.4.0
+Legacy	fields of VfioMigrationEvent	device_state_legacy: member 'device-state' from 9.1.0 until 9.2.0
+Legacy	fields of VncClientInfo	family_legacy: member 'family' from 1.0.0 until 2.1.0
+Legacy	fields of VncInfo	family_legacy: member 'family' from 1.0.0 until 2.1.0
+Legacy	fields of VncInfo2	server_legacy: member 'server' from 2.3.0 until 2.9.0
+Legacy	fields of WatchdogEvent	action_legacy: member 'action' from 2.1.0 until 2.11.0
+Lowering	fields of XBlockdevCreate	u: member 'u' from 2.12.0
+Legacy	fields of XBlockdevDel	node_name_legacy: member 'node-name' from 2.5.0 until 2.8.0
+Legacy	fields of XBlockdevInsertMedium	device_legacy: member 'device' from 2.5.0 until 2.8.0
+Legacy	fields of XBlockdevRemoveMedium	device_legacy: member 'device' from 2.5.0 until 2.8.0
+Lowering	fields of XBlockdevReopen	u: member 'u' from 4.0.0
+Escaped	fields of XDbgBlockGraphNode	r#type: member 'type' from 4.0.0
+Legacy	fields of XbzrleCacheStats	cache_size_legacy: member 'cache-size' from 1.2.0 until 6.0.0
+Escaped	fields of YankInstance	r#type: member 'type' from 6.0.0
+Lowering	fields of YankInstance	u: member 'u' from 6.0.0

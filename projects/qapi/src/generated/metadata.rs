@@ -2060,8 +2060,8 @@ static FIELDS_BlkdebugInjectErrorOptions: &[FieldMeta] = &[
     FieldMeta { name: "immediately", wire_name: "immediately", ty: &TYPES[9], optional: true, discriminator: &[], boxed: false, since: (2u32, 0u32, 0u32), until: None, deprecated: &[], unstable: &[] },
     FieldMeta { name: "iotype", wire_name: "iotype", ty: &TYPES[48], optional: true, discriminator: &[], boxed: false, since: (4u32, 1u32, 0u32), until: None, deprecated: &[], unstable: &[] },
     FieldMeta { name: "delay_ns", wire_name: "delay-ns", ty: &TYPES[7], optional: true, discriminator: &[], boxed: false, since: (11u32, 0u32, 1u32), until: None, deprecated: &[], unstable: &[] },
-    FieldMeta { name: "delay_ns_legacy", wire_name: "delay-ns", ty: &TYPES[7], optional: true, discriminator: &[], boxed: false, since: (10u32, 0u32, 10u32), until: Some((10u32, 1u32, 0u32)), deprecated: &[], unstable: &[] },
-    FieldMeta { name: "delay_ns_legacy2", wire_name: "delay-ns", ty: &TYPES[7], optional: true, discriminator: &[], boxed: false, since: (10u32, 2u32, 3u32), until: Some((11u32, 0u32, 0u32)), deprecated: &[], unstable: &[] },
+    FieldMeta { name: "delay_ns_legacy_v10_0", wire_name: "delay-ns", ty: &TYPES[7], optional: true, discriminator: &[], boxed: false, since: (10u32, 0u32, 10u32), until: Some((10u32, 1u32, 0u32)), deprecated: &[], unstable: &[] },
+    FieldMeta { name: "delay_ns_legacy_v10_2", wire_name: "delay-ns", ty: &TYPES[7], optional: true, discriminator: &[], boxed: false, since: (10u32, 2u32, 3u32), until: Some((11u32, 0u32, 0u32)), deprecated: &[], unstable: &[] },
 ];
 static STRUCT_BlkdebugInjectErrorOptions: StructMeta = StructMeta {
     name: "BlkdebugInjectErrorOptions",

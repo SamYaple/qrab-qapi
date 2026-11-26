@@ -1217,6 +1217,7 @@ pub struct DeviceDel {
 #[qapi(added = "1.2.0")]
 #[qapi(returns(added = "1.2.0", value = "Vec<DevicePropertyInfo>"))]
 #[qapi(returns(added = "2.12.0", value = "Vec<ObjectPropertyInfo>"))]
+#[qapi(returns_enum = "DeviceListPropertiesReturns")]
 pub struct DeviceListProperties {
     pub typename: String,
 }
@@ -2709,6 +2710,7 @@ pub struct QueryStatus {}
 #[qapi(added = "1.2.0")]
 #[qapi(returns(added = "1.2.0", value = "TargetInfo"))]
 #[qapi(returns(added = "10.1.0", value = "QemuTargetInfo"))]
+#[qapi(returns_enum = "QueryTargetReturns")]
 pub struct QueryTarget {}
 
 /// QMP command `query-tpm`; see the QEMU QMP Reference Manual.

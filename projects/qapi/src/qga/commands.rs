@@ -137,6 +137,7 @@ pub struct GuestFsfreezeThaw {}
 #[qapi(added = "1.2.0")]
 #[qapi(returns(added = "1.2.0", value = "()"))]
 #[qapi(returns(added = "2.4.0", value = "GuestFilesystemTrimResponse"))]
+#[qapi(returns_enum = "GuestFstrimReturns")]
 pub struct GuestFstrim {
     pub minimum: Option<i64>,
 }

@@ -38,7 +38,7 @@ pub use registry::{build_qga_registry, build_qmp_registry};
 /// tuple of its first three components.
 pub type Version = (u32, u32, u32);
 
-fn version_str(v: Version) -> String {
+pub(crate) fn version_str(v: Version) -> String {
     format!("{}.{}.{}", v.0, v.1, v.2)
 }
 
@@ -258,6 +258,10 @@ pub struct UnifiedStruct {
     /// release that returns that Rust type. The newest is the `returns`
     /// attribute of `ir`.
     pub returns_history: Vec<(Version, String)>,
+    /// The name of the enum of the return types, which a command with two
+    /// or more of them in `returns_history` needs: planned after the merge,
+    /// as `{Command}Returns` unless the generator's naming table names it.
+    pub returns_enum: Option<String>,
 }
 
 impl UnifiedStruct {
@@ -483,6 +487,8 @@ mod enum_history_tests;
 mod field_history_tests;
 #[cfg(test)]
 mod flag_timeline_tests;
+#[cfg(test)]
+mod naming_tests;
 #[cfg(test)]
 mod registry_tests;
 #[cfg(test)]

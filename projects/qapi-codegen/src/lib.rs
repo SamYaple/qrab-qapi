@@ -19,6 +19,8 @@ mod arrays;
 mod builtins;
 mod metadata_emit;
 #[doc(hidden)]
+pub mod namespace;
+#[doc(hidden)]
 pub mod parsers;
 #[doc(hidden)]
 pub mod qapi_ir;

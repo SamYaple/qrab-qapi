@@ -77,8 +77,8 @@ pub(crate) fn synthesized(rust_name: &str) -> String {
 
 /// A helper type's or event's claim on a name in one release.
 enum RoleClaim<'a> {
-    /// A union's branch enum or, as a `request`, a command's request type.
-    Helper { request: bool },
+    /// A union's branch enum or a command's request type.
+    Helper,
     /// The `run`th run of an event that has `runs` of them.
     Event {
         raw: &'a String,
@@ -97,18 +97,15 @@ enum RoleClaim<'a> {
 /// kind or returns after an absence, a command or event when it returns. A
 /// newer release therefore never renames a symbol of the older ones.
 ///
-/// A name that can carry a command, that of a command or of its request
-/// type, also holds that name with `Returns` appended: `#[qapi]` names the
-/// enum of a command's return types so. A claim whose `Returns` name is held
-/// already gets a generated name instead.
+/// The plan holds no name for the enum of a command's return types: only a
+/// command whose merged return type changes needs one, and
+/// [`crate::namespace`] gives it, refusing a name that another symbol holds.
 #[derive(Default)]
 pub(crate) struct SchemaNames {
     versions: BTreeSet<Version>,
     /// Every planned name, which the types that the lowering extracts avoid.
     pub names: HashSet<String>,
     owners: HashMap<String, Owner>,
-    /// The names that hold their `Returns` name.
-    returns: HashSet<String>,
     roles: BTreeMap<String, String>,
     unions: BTreeMap<String, BTreeSet<Version>>,
     aliases: BTreeMap<String, String>,
@@ -204,75 +201,54 @@ impl SchemaNames {
         }
     }
 
-    /// Whether a claim that can carry a command may take `name`: no other
-    /// claim holds its `Returns` name.
-    fn returns_free(&self, name: &str) -> bool {
-        self.returns.contains(name) || !self.owners.contains_key(&format!("{name}Returns"))
-    }
-
-    /// Hold the `Returns` name of `name`, which can carry a command.
-    fn hold_returns(&mut self, name: &str) {
-        if self.returns.insert(name.to_owned()) {
-            self.owners.insert(format!("{name}Returns"), Owner::Role);
-        }
-    }
-
-    /// Take `preferred` unless another claim holds it, or a claim that can
-    /// carry a command (`command`) would clash with the `Returns` name.
-    fn take_plain(&mut self, preferred: &str, owner: Owner, command: bool) -> Option<String> {
+    /// Take `preferred` unless another claim holds it.
+    fn take_plain(&mut self, preferred: &str, owner: Owner) -> Option<String> {
         let free = match self.owners.get(preferred) {
             None => true,
             Some(Owner::Type) => owner == Owner::Command,
             Some(Owner::Command) => owner == Owner::Type,
             Some(Owner::Role) => false,
         };
-        (free && (!command || self.returns_free(preferred))).then(|| {
+        free.then(|| {
             self.owners.entry(preferred.to_owned()).or_insert(owner);
-            if command {
-                self.hold_returns(preferred);
-            }
             preferred.to_owned()
         })
     }
 
     /// Take the first of `{preferred}Generated`, `{preferred}Generated2`, ...
-    /// that no claim holds, with its `Returns` name for a `command`.
-    fn take_generated(&mut self, preferred: &str, owner: Owner, command: bool) -> String {
+    /// that no claim holds.
+    fn take_generated(&mut self, preferred: &str, owner: Owner) -> String {
         let base = format!("{preferred}Generated");
         let mut name = base.clone();
         let mut suffix = 2;
-        while self.owners.contains_key(&name) || (command && !self.returns_free(&name)) {
+        while self.owners.contains_key(&name) {
             name = format!("{base}{suffix}");
             suffix += 1;
         }
         self.owners.insert(name.clone(), owner);
-        if command {
-            self.hold_returns(&name);
-        }
         name
     }
 
     /// Name the claims of one release, in order: plain names first, so that
     /// no generated name takes the plain name of a claim of the same release.
     /// A later run never takes the plain name, which its first run holds. A
-    /// claim is `(preferred, owner, later, command)`, where `command` says
-    /// that the name can carry a command.
-    fn take_all(&mut self, claims: &[(String, Owner, bool, bool)]) -> Vec<String> {
+    /// claim is `(preferred, owner, later)`.
+    fn take_all(&mut self, claims: &[(String, Owner, bool)]) -> Vec<String> {
         let plain: Vec<_> = claims
             .iter()
-            .map(|(preferred, owner, later, command)| {
+            .map(|(preferred, owner, later)| {
                 if *later {
                     None
                 } else {
-                    self.take_plain(preferred, *owner, *command)
+                    self.take_plain(preferred, *owner)
                 }
             })
             .collect();
         plain
             .into_iter()
             .zip(claims)
-            .map(|(name, (preferred, owner, _, command))| {
-                name.unwrap_or_else(|| self.take_generated(preferred, *owner, *command))
+            .map(|(name, (preferred, owner, _))| {
+                name.unwrap_or_else(|| self.take_generated(preferred, *owner))
             })
             .collect()
     }
@@ -336,7 +312,7 @@ impl SchemaNames {
             let mut runs = Vec::new();
             for (index, starts) in type_starts.iter().enumerate() {
                 if let Some(run) = starts.iter().position(|since| *since == version) {
-                    claims.push((identities[index].0.clone(), Owner::Type, run > 0, false));
+                    claims.push((identities[index].0.clone(), Owner::Type, run > 0));
                     runs.push((index, run));
                 }
             }
@@ -362,7 +338,7 @@ impl SchemaNames {
             let mut runs = Vec::new();
             for (raw, starts) in &command_starts {
                 if let Some(run) = starts.iter().position(|since| *since == version) {
-                    claims.push((rustify_name(raw), Owner::Command, run > 0, true));
+                    claims.push((rustify_name(raw), Owner::Command, run > 0));
                     runs.push((raw, run, starts.len()));
                 }
             }
@@ -382,23 +358,23 @@ impl SchemaNames {
 
             // The helper types and event types that this release adds.
             let mut claims = Vec::new();
-            let mut helpers = BTreeMap::new();
+            let mut helpers = BTreeSet::new();
             for (raw, versions) in &self.unions {
                 if versions.contains(&version) {
                     let root = self.type_name_at(raw, version);
-                    helpers.insert(format!("{root}Branch"), false);
+                    helpers.insert(format!("{root}Branch"));
                 }
             }
             for (raw, starts) in &command_starts {
                 if starts.first() == Some(&version) {
-                    helpers.insert(format!("{}Command", self.command_root(raw)), true);
+                    helpers.insert(format!("{}Command", self.command_root(raw)));
                 }
             }
-            helpers.retain(|preferred, _| !self.roles.contains_key(preferred));
+            helpers.retain(|preferred| !self.roles.contains_key(preferred));
             claims.extend(
                 helpers
                     .into_iter()
-                    .map(|(preferred, request)| (preferred, RoleClaim::Helper { request })),
+                    .map(|preferred| (preferred, RoleClaim::Helper)),
             );
             for (raw, starts) in &event_starts {
                 if let Some(run) = starts.iter().position(|since| *since == version) {
@@ -412,14 +388,15 @@ impl SchemaNames {
                 .iter()
                 .map(|(preferred, claim)| {
                     let later = matches!(claim, RoleClaim::Event { run, .. } if *run > 0);
-                    let command = matches!(claim, RoleClaim::Helper { request: true });
-                    (preferred.clone(), Owner::Role, later, command)
+                    // A composed name is escaped like a schema name.
+                    let name = crate::qapi_ir::escape_reserved(preferred.clone());
+                    (name, Owner::Role, later)
                 })
                 .collect();
             let names = self.take_all(&requests);
             for ((preferred, claim), name) in claims.into_iter().zip(names) {
                 match claim {
-                    RoleClaim::Helper { .. } => {
+                    RoleClaim::Helper => {
                         self.roles.insert(preferred, name);
                     }
                     RoleClaim::Event { raw, run, runs } => {
@@ -761,38 +738,22 @@ mod tests {
         assert_eq!(plan.type_name("FooBAR"), "FooBarGenerated2");
     }
 
+    /// The plan holds no `Returns` name: a type named like the enum of a
+    /// command's return types keeps its name, and a command that would need
+    /// that enum is refused after the merge (`crate::namespace`).
     #[test]
-    fn no_type_takes_the_name_of_a_command_s_returns_enum() {
-        let releases = [
-            (
-                (5, 0, 0),
-                "{'command':'ping'} {'struct':'EchoReturns','data':{}}",
-            ),
-            (
-                (5, 1, 0),
-                "{'command':'ping'} {'struct':'PingReturns','data':{}}
-                 {'struct':'PingCommandReturns','data':{}}
-                 {'struct':'EchoReturns','data':{}} {'command':'echo'}",
-            ),
-        ];
-        let after = symbols(&releases);
-        // A later type yields the names of the enums of the command and of
-        // its request type...
+    fn types_named_like_an_enum_of_return_types_keep_their_names() {
+        let after = symbols(&[(
+            (5, 0, 0),
+            "{'command':'ping'} {'struct':'PingReturns','data':{}}
+             {'struct':'PingCommandReturns','data':{}}",
+        )]);
         assert_eq!(after["(5, 0, 0) request ping"], "Ping");
-        assert_eq!(after["(5, 1, 0) type PingReturns"], "PingReturnsGenerated");
+        assert_eq!(after["(5, 0, 0) type PingReturns"], "PingReturns");
         assert_eq!(
-            after["(5, 1, 0) type PingCommandReturns"],
-            "PingCommandReturnsGenerated"
+            after["(5, 0, 0) type PingCommandReturns"],
+            "PingCommandReturns"
         );
-        // ...and a later command, whose enum would take an earlier type's
-        // name, a name of its own.
-        assert_eq!(after["(5, 0, 0) type EchoReturns"], "EchoReturns");
-        assert_eq!(after["(5, 1, 0) request echo"], "EchoGenerated");
-        // The types that the lowering names avoid them too.
-        let plan = planned(&releases);
-        for name in ["PingReturns", "PingCommandReturns", "EchoGeneratedReturns"] {
-            assert!(plan.names.contains(name), "{name}");
-        }
     }
 
     #[test]

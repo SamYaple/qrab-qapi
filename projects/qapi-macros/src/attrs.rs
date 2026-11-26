@@ -17,9 +17,10 @@
 //!   QAPI's built-in features;
 //! - on structs: `command`, `event`, the repeatable `simple_union`, and on
 //!   commands `returns = "Type"`, the repeatable `returns(added = "V", value
-//!   = "Type")` and the repeatable flags `allow_oob`, `allow_preconfig` and
-//!   `no_success_response`; each flag and `simple_union` is bare or has a
-//!   version range;
+//!   = "Type")` with `returns_enum = "Name"`, the name of the enum of those
+//!   return types, and the repeatable flags `allow_oob`, `allow_preconfig`
+//!   and `no_success_response`; each flag and `simple_union` is bare or has
+//!   a version range;
 //! - on enums: `union_branch`.
 //!
 //! On a member of a type: `name = "wire"`, `added`, `removed`,
@@ -95,6 +96,7 @@ pub(crate) struct TypeAttrs {
     pub(crate) features: Vec<String>,
     pub(crate) returns: Option<LitStr>,
     pub(crate) returns_history: Vec<(Version, LitStr)>,
+    pub(crate) returns_enum: Option<LitStr>,
     pub(crate) allow_oob: Vec<AttrRange>,
     pub(crate) allow_preconfig: Vec<AttrRange>,
     pub(crate) no_success_response: Vec<AttrRange>,
@@ -636,6 +638,9 @@ impl TypeAttrs {
                     Meta::List(_) => self.returns_history.push(parse_returns_history(item)?),
                     _ => once(&mut self.returns, item, lit_str(item, &key)?.clone())?,
                 },
+                "returns_enum" => {
+                    once(&mut self.returns_enum, item, lit_str(item, &key)?.clone())?;
+                }
                 _ => return Err(unknown(item, &key)),
             }
         }
@@ -656,6 +661,9 @@ impl TypeAttrs {
             self.returns_history
                 .first()
                 .map(|(_, text)| (text.span(), "returns")),
+            self.returns_enum
+                .as_ref()
+                .map(|text| (text.span(), "returns_enum")),
             ranges("allow_oob", &self.allow_oob),
             ranges("allow_preconfig", &self.allow_preconfig),
             ranges("no_success_response", &self.no_success_response),

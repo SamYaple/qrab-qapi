@@ -101,7 +101,7 @@ fn reintroduced_variants_keep_the_gap_between_lifetimes() {
     for (major, value) in [(1, &present), (2, &absent), (3, &present)] {
         merge_enum(&mut registry, "Example", value, (major, 0, 0));
     }
-    materialize_variant_history(&mut registry);
+    materialize_variant_history(&mut registry, "QMP").unwrap();
     let UnifiedType::Enum(value) = &registry.types["Example"] else {
         panic!()
     };
@@ -131,8 +131,8 @@ fn payload_history_keeps_each_shape_and_avoids_real_variant_name_collisions() {
         });
         merge_enum(&mut registry, "Example", &input, (major, 0, 0));
     }
-    materialize_variant_history(&mut registry);
-    materialize_field_history(&mut registry);
+    materialize_variant_history(&mut registry, "QMP").unwrap();
+    materialize_field_history(&mut registry, "QMP").unwrap();
     let UnifiedType::Enum(value) = &registry.types["Example"] else {
         panic!()
     };
@@ -144,11 +144,11 @@ fn payload_history_keeps_each_shape_and_avoids_real_variant_name_collisions() {
     assert_eq!(value.ir.variants.len(), 4);
     assert_eq!(value.variant_versions["value"].since, (3, 0, 0));
     assert_eq!(
-        value.variant_versions["ValueLegacy2"].until,
+        value.variant_versions["ValueLegacyV1p0"].until,
         Some((2, 0, 0))
     );
     assert_eq!(
-        value.variant_versions["ValueLegacy3"].until,
+        value.variant_versions["ValueLegacyV2p0"].until,
         Some((3, 0, 0))
     );
     assert!(
@@ -179,8 +179,8 @@ fn wire_renames_with_the_same_rust_name_keep_both_spellings() {
         &enumeration("foo_bar", EnumVariantKind::Unit, false),
         (2, 0, 0),
     );
-    materialize_variant_history(&mut registry);
-    materialize_field_history(&mut registry);
+    materialize_variant_history(&mut registry, "QMP").unwrap();
+    materialize_field_history(&mut registry, "QMP").unwrap();
     let UnifiedType::Enum(value) = &registry.types["Example"] else {
         panic!()
     };
