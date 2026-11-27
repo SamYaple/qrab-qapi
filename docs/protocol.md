@@ -1,8 +1,9 @@
 # Protocol clients
 
 `qapi-protocol` targets the vendored QEMU **11.1.3** protocol. It
-provides Tokio Unix-socket clients and bounded mock sessions, without
-depending on systemd, Kubernetes or guest hardware. Each connection speaks
+provides Tokio Unix-socket clients, behind the default `tokio` feature, and
+bounded mock sessions, without depending on systemd, Kubernetes or guest
+hardware. Each connection speaks
 its own peer's release, older ones included, as their schemas describe them
 (see [Types and errors](#types-and-errors)). The tests cover older releases
 through their schemas and the mock sessions; the opt-in live tests run against

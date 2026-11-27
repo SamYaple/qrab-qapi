@@ -27,6 +27,10 @@ async fn print_status() -> qapi_protocol::Result<()> {
 }
 ```
 
+The clients run on Tokio and need the `tokio` feature, which is on by
+default. Without it, the crate has only its types that need no runtime, such
+as `Error` and `ClientOptions`.
+
 The mock servers are the `server` module, behind the `mock` feature:
 
 ```toml

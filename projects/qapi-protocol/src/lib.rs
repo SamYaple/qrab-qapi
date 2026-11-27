@@ -8,14 +8,19 @@
 //! repository's `docs/protocol.md` describes the client lifecycle, the mock
 //! server API and the internals, and `docs/testing.md` the tests.
 
+#[cfg(feature = "tokio")]
 mod framing;
+#[cfg(feature = "tokio")]
 pub mod qga;
+#[cfg(feature = "tokio")]
 mod qmp;
 #[cfg(feature = "mock")]
 pub mod server;
+#[cfg(feature = "tokio")]
 mod wire;
 
 use qapi::QapiCommand;
+#[cfg(feature = "tokio")]
 pub use qmp::{Greeting, QMP_QUEUE_CAPACITY, QemuVersion, Qmp, QmpEvents, VersionInfo};
 use std::{collections::BTreeSet, fmt, sync::Arc, time::Duration};
 
@@ -130,7 +135,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub enum InvalidRequestKind {
     /// A [`ClientOptions`] field is zero or out of range: a timeout that
     /// cannot be added to the current time, or an event capacity above
-    /// Tokio's semaphore limit.
+    /// `usize::MAX >> 3`.
     #[error("the {option} option must be nonzero and in range")]
     #[non_exhaustive]
     Options {
@@ -356,6 +361,7 @@ pub struct PeerCommands {
 }
 
 impl PeerCommands {
+    #[cfg(feature = "tokio")]
     pub(crate) fn new(
         enabled: impl IntoIterator<Item = String>,
         disabled: impl IntoIterator<Item = String>,
@@ -382,6 +388,7 @@ impl PeerCommands {
     }
 
     /// Why the peer cannot run `name`, if it cannot.
+    #[cfg(feature = "tokio")]
     pub(crate) fn refusal(&self, name: &str) -> Option<Unavailability> {
         if self.offers(name) {
             None
@@ -426,6 +433,7 @@ impl Required {
 
     /// Why a peer of `version`, with the command list `peer` if it gave
     /// one, cannot run the command: its release first, then its list.
+    #[cfg(feature = "tokio")]
     pub(crate) fn refusal(
         &self,
         version: (u32, u32, u32),
@@ -440,6 +448,7 @@ impl Required {
 
 /// Check every command of `required` against a peer, and list all those it
 /// cannot run.
+#[cfg(feature = "tokio")]
 pub(crate) fn require(
     required: &[Required],
     version: (u32, u32, u32),
@@ -570,6 +579,7 @@ impl ClientOptions {
         self
     }
 
+    #[cfg(feature = "tokio")]
     pub(crate) fn validate(&self) -> Result<()> {
         let now = tokio::time::Instant::now();
         let bad_timeout =
@@ -582,8 +592,7 @@ impl ClientOptions {
             ("max_event_bytes", self.max_event_bytes == 0),
             (
                 "event_capacity",
-                self.event_capacity == 0
-                    || self.event_capacity > tokio::sync::Semaphore::MAX_PERMITS,
+                self.event_capacity == 0 || self.event_capacity > MAX_EVENT_CAPACITY,
             ),
         ];
         match invalid
@@ -597,6 +606,13 @@ impl ClientOptions {
         }
     }
 }
+
+/// The largest event capacity that [`ClientOptions`] accepts.
+#[cfg(feature = "tokio")]
+const MAX_EVENT_CAPACITY: usize = usize::MAX >> 3;
+// The event queue is a Tokio channel, which holds at most that many.
+#[cfg(feature = "tokio")]
+const _: () = assert!(MAX_EVENT_CAPACITY <= tokio::sync::Semaphore::MAX_PERMITS);
 
 /// An error reply from the peer. Unknown error classes from newer or patched
 /// peers are kept verbatim.

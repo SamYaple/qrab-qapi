@@ -14,6 +14,9 @@ qapi_crates=(
 )
 cargo clippy --locked -p qrab-qapi-codegen -p qrab-qapi-macros "${qapi_crates[@]}" --all-targets \
     -- -D warnings
+# Without its default tokio feature, qrab-qapi-protocol has only the types that
+# need no runtime.
+cargo clippy --locked -p qrab-qapi-protocol --no-default-features -- -D warnings
 cargo test --locked --release -p qrab-qapi-codegen -- --test-threads=2
 cargo test --locked -p qrab-qapi-macros "${qapi_crates[@]}"
 
