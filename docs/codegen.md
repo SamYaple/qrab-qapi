@@ -764,7 +764,9 @@ variant or field of a value that the peer's release does not have. A type,
 variant or field that the newest pinned release no longer has is Rust
 `#[deprecated]` with the note "removed in QEMU X", and one that it deprecates
 with "deprecated since QEMU X", so that new code finds its replacement while
-code for older peers keeps compiling. A deprecation that QEMU later dropped
+code for older peers keeps compiling. A new "removed in QEMU X" mark makes
+the next `qrab-qapi` release a breaking one
+([versioning.md](versioning.md#the-bump-rule)). A deprecation that QEMU later dropped
 marks nothing; each deprecation still warns once at run time when a value is
 serialized for a release it covers. The command constants, the documentation of
 unstable types and unscoped decoding describe the newest pinned release.

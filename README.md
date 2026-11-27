@@ -183,7 +183,9 @@ The project site is <https://qrab.dev>.
 ## Status
 
 qrab-qapi is pre-1.0. The APIs may change between minor releases, and each
-crate is versioned separately.
+crate is versioned separately: [docs/versioning.md](docs/versioning.md) has
+the policy, [docs/releases.md](docs/releases.md) the release procedure, and
+each crate's `CHANGELOG.md` its releases.
 Report bugs and propose features in this repository's GitHub issues, and
 security problems privately as described in [SECURITY.md](SECURITY.md).
 

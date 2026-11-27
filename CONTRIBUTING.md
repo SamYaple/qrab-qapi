@@ -96,14 +96,15 @@ are not required checks.
   with the newest release tag (`v*`) in the history of the pull request's
   base, so a change that breaks the public API since the last release
   fails unless the crate's version has the bump that the change needs:
-  before 1.0, the minor version for a breaking change. Until the first
+  before 1.0, the minor version for a breaking change
+  ([docs/versioning.md](docs/versioning.md) has the bump rule). Until the first
   release is tagged it compares with the base itself and only reports
   what it finds, with a warning. `qrab-qapi-macros` is a proc-macro
   crate, which cargo-semver-checks cannot check, and `qrab-qapi` is
   checked without the `schema-docs` feature, which changes only the
   documentation. cargo-semver-checks does not yet detect every breaking
-  change, such as a changed type of a public field, so review the API
-  as well.
+  change, such as a changed type of a public field or a new "removed in
+  QEMU X" mark, so review the API as well.
 
   ```sh
   cargo install --locked cargo-semver-checks@0.51.0
