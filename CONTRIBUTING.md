@@ -92,21 +92,20 @@ are not required checks.
   ```
 
 - `semver` runs `cargo-semver-checks` on the library crates through
-  [`contrib/check-semver.sh`](contrib/check-semver.sh). It compares them
-  with the newest release tag (`v*`) in the history of the pull request's
-  base, so a change that breaks the public API since the last release
-  fails unless the crate's version has the bump that the change needs:
-  before 1.0, the minor version for a breaking change
-  ([docs/versioning.md](docs/versioning.md) has the bump rule). Until the first
-  release is tagged it compares with the base itself and only reports
-  what it finds, with a warning. `qrab-qapi-macros` is a proc-macro
-  crate, which cargo-semver-checks cannot check, and `qrab-qapi` is
-  checked without the `schema-docs` feature, which changes only the
-  documentation. A crate that the baseline does not have yet is skipped.
-  cargo-semver-checks does not follow re-exports from other crates, so
-  while the baseline's `qrab-qapi` still defines the runtime that it now
-  re-exports from `qrab-qapi-core`, the check of `qrab-qapi` only reports,
-  and `qrab-qapi-core`'s own check covers the runtime. Nor does
+  [`contrib/check-semver.sh`](contrib/check-semver.sh). It compares each
+  crate with its last release in the history of the pull request's base:
+  the crate's newest tag `<package>-v<version>`, or before it has one,
+  `v0.1.0`, which released the first four crates together. A change that
+  breaks a crate's public API since its last release fails unless the
+  crate's version has the bump that the change needs: before 1.0, the
+  minor version for a breaking change
+  ([docs/versioning.md](docs/versioning.md) has the bump rule).
+  `qrab-qapi-macros` is a proc-macro crate, which cargo-semver-checks
+  cannot check, and `qrab-qapi` is checked without the `schema-docs`
+  feature, which changes only the documentation. A crate that its last
+  release does not have yet is skipped. cargo-semver-checks does not
+  follow re-exports from other crates, so `qrab-qapi-core`'s own check
+  covers the runtime that `qrab-qapi` re-exports. Nor does
   cargo-semver-checks detect every breaking change yet, such as a changed
   type of a public field or a new "removed in QEMU X" mark, so review the
   API as well.

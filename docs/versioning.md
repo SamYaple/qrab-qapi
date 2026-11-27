@@ -123,9 +123,9 @@ only into the previous minor.
 
 Before tagging, compare each crate with its last release. The `semver` CI
 job, [`contrib/check-semver.sh`](../contrib/check-semver.sh), runs
-cargo-semver-checks on the library crates against the newest `v*` release
-tag and fails a breaking change without the minor bump. It cannot read
-`qrab-qapi-macros`, whose changes reach users through the API of
+cargo-semver-checks on each library crate against that crate's last
+release tag and fails a breaking change without the minor bump. It cannot
+read `qrab-qapi-macros`, whose changes reach users through the API of
 `qrab-qapi`, and it misses what only the generated sources show: a field
 that changes type, and a new "removed in QEMU X" mark. Review the diff of
 `projects/qapi/src/generated` and `projects/qapi/src/qga` since the last

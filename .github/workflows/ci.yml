@@ -168,11 +168,10 @@ jobs:
         if: hashFiles('Cargo.toml') != ''
         run: cargo check --locked --workspace --all-targets
 
-  # cargo-semver-checks of the library crates against the newest release
-  # tag in the history of the base: the PR's base, or for a push the
-  # previous tip of main, which a fast-forward makes the PR's base. Until
-  # the first release is tagged it compares with the base itself and only
-  # reports, with a warning; contrib/check-semver.sh has the details.
+  # cargo-semver-checks of each library crate against its last release tag
+  # in the history of the base: the PR's base, or for a push the previous
+  # tip of main, which a fast-forward makes the PR's base.
+  # contrib/check-semver.sh has the details.
   semver:
     name: semver
     runs-on: ubuntu-24.04
