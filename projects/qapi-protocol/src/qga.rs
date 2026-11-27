@@ -19,7 +19,7 @@ use crate::{
     framing::{self, JsonReader, SyncLine},
     wire,
 };
-use qapi::QapiCommand;
+use qapi_core::QapiCommand;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use std::path::Path;
@@ -51,10 +51,28 @@ fn sync_refusal(line: &[u8]) -> Option<RemoteError> {
     }
 }
 
+/// The part of a `guest-info` reply that the handshake reads. The reply's
+/// shape has not changed since qemu-ga 1.1, so the client decodes it
+/// itself rather than through the generated types.
+#[derive(serde::Deserialize)]
+struct GuestInfo {
+    version: String,
+    /// qemu-ga 1.1 and later list their commands; 0.15 sends only the version.
+    #[serde(default)]
+    supported_commands: Option<Vec<GuestCommand>>,
+}
+
+/// One entry of `guest-info`'s `supported_commands`.
+#[derive(serde::Deserialize)]
+struct GuestCommand {
+    name: String,
+    enabled: bool,
+}
+
 /// The commands of a `guest-info` reply, enabled and disabled. A list that
 /// does not name `guest-info` itself, which every agent that answers it
 /// has, is no command list, as from a mock that sends none.
-fn agent_commands(info: &qapi::qga::GuestAgentInfo) -> Option<PeerCommands> {
+fn agent_commands(info: &GuestInfo) -> Option<PeerCommands> {
     let listed = info.supported_commands.as_deref()?;
     if !listed
         .iter()
@@ -156,9 +174,9 @@ impl Qga {
             let info = wire::request("guest-info", json!({}), false)?;
             framing::write_json(&mut session.writer, &info, options.max_message_bytes).await?;
             let reply = session.reader.next().await?;
-            let info: qapi::qga::GuestAgentInfo =
-                wire::decode(wire::response(&wire::envelope(&reply)?)?)?;
-            let version = qapi::parse_qga_version(&info.version).map_err(Error::AgentVersion)?;
+            let info: GuestInfo = wire::decode(wire::response(&wire::envelope(&reply)?)?)?;
+            let version =
+                qapi_core::parse_qga_version(&info.version).map_err(Error::AgentVersion)?;
             let commands = options
                 .probe_commands
                 .then(|| agent_commands(&info))
@@ -293,7 +311,7 @@ impl Qga {
         if matches!(raw, Ok(_) | Err(Error::Remote(_))) {
             self.session = Some(session);
         }
-        qapi::with_version(self.version, || wire::decode(raw?))
+        qapi_core::with_version(self.version, || wire::decode(raw?))
     }
 
     /// Send an explicitly response-less command and close the connection.

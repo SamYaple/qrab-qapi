@@ -245,8 +245,9 @@ range. A mock session reports a request that breaks the protocol as `Protocol`
 too, such as `exec-oob` before the client enabled OOB.
 
 `RemoteError` retains the exact string `class` and `desc` of an error reply,
-including new error classes; `known_class()` optionally maps it to the
-generated enum, and `RemoteError::new(class, desc)` builds one.
+including new error classes; `known_class()` maps a class that QEMU
+defines to the protocol's own `ErrorClass`, and `RemoteError::new(class,
+desc)` builds one.
 
 `Greeting`, `VersionInfo`, `QemuVersion`, `QmpEvent`, `Timestamp` and
 `RemoteError` are `#[non_exhaustive]`, with readable fields, so a release can

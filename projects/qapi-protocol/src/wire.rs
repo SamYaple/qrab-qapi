@@ -2,7 +2,7 @@ use crate::{
     Error, InvalidRequestKind, PeerCommands, ProtocolViolation, RemoteError, Required, Result,
     Unavailability,
 };
-use qapi::QapiCommand;
+use qapi_core::QapiCommand;
 use serde::{Deserialize, Deserializer, de::DeserializeOwned};
 use serde_json::{Value, json, value::RawValue};
 use std::any::TypeId;
@@ -43,8 +43,8 @@ pub(crate) fn command<C: QapiCommand>(
             reason,
         });
     }
-    let args = qapi::to_value(version, cmd).map_err(|error| match error {
-        qapi::EncodeError::Unavailable { name, version } => Error::Unavailable {
+    let args = qapi_core::to_value(version, cmd).map_err(|error| match error {
+        qapi_core::EncodeError::Unavailable { name, version } => Error::Unavailable {
             name,
             version,
             reason: Unavailability::Release,

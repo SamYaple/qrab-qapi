@@ -5,6 +5,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the version numbers follow the policy in the repository's
 `docs/versioning.md`.
 
+## Unreleased
+
+- Breaking: the crate depends on `qrab-qapi-core` instead of `qrab-qapi`.
+  The typed calls take any `qapi_core::QapiCommand`, and `Error::Encode`
+  wraps `qapi_core::EncodeError`. `qrab-qapi` re-exports both from 0.1.1
+  on, so its types work as before. With `qrab-qapi` 0.1.0, which defined
+  them itself, typed calls do not compile: update it to 0.1.1.
+- A breaking release of `qrab-qapi`, such as a QEMU refresh with a removal,
+  no longer needs a release of this crate.
+- Breaking: `RemoteError::known_class` returns the new `ErrorClass`, the
+  error classes of QEMU and its guest agent, instead of
+  `qapi::QapiErrorClass`. `RemoteError::class` still holds the string.
+- The client decodes the handshake's `guest-info` reply itself.
+
 ## 0.1.0
 
 The first release, requiring `qrab-qapi` 0.1.

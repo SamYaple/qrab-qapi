@@ -19,7 +19,7 @@ pub mod server;
 #[cfg(feature = "tokio")]
 mod wire;
 
-use qapi::QapiCommand;
+use qapi_core::QapiCommand;
 #[cfg(feature = "tokio")]
 pub use qmp::{Greeting, QMP_QUEUE_CAPACITY, QemuVersion, Qmp, QmpEvents, VersionInfo};
 use std::{collections::BTreeSet, fmt, sync::Arc, time::Duration};
@@ -49,7 +49,7 @@ pub enum Error {
     #[non_exhaustive]
     Unavailable {
         /// The QAPI command name, or the Rust name of the type, variant or
-        /// field, as [`qapi::EncodeError::Unavailable`] names it.
+        /// field, as [`qapi_core::EncodeError::Unavailable`] names it.
         name: String,
         /// The peer's version.
         version: (u32, u32, u32),
@@ -70,7 +70,7 @@ pub enum Error {
     /// The request could not be serialized for another reason than
     /// [`Unavailable`](Error::Unavailable). Nothing was sent.
     #[error("cannot encode the request: {0}")]
-    Encode(#[source] qapi::EncodeError),
+    Encode(#[source] qapi_core::EncodeError),
     /// A well-formed reply does not match the expected return type.
     #[error("cannot decode the reply: {0}")]
     Decode(#[source] serde_json::Error),
@@ -92,7 +92,7 @@ pub enum Error {
     /// The guest agent's `guest-info` reports a version that is not a
     /// release number, so no client was returned.
     #[error(transparent)]
-    AgentVersion(#[from] qapi::VersionParseError),
+    AgentVersion(#[from] qapi_core::VersionParseError),
     /// The guest agent answered `guest-sync-delimited`, which the client
     /// synchronizes with, with this error reply instead of its nonce: an
     /// agent before qemu-ga 1.1 lacks the command, and one started with it
@@ -632,8 +632,62 @@ impl RemoteError {
         }
     }
 
-    pub fn known_class(&self) -> Option<qapi::QapiErrorClass> {
-        serde_json::from_value(serde_json::Value::String(self.class.clone())).ok()
+    /// The class as an [`ErrorClass`], or `None` for a class that this
+    /// crate does not know, which [`class`](Self::class) keeps verbatim.
+    pub fn known_class(&self) -> Option<ErrorClass> {
+        Some(match self.class.as_str() {
+            "CommandNotFound" => ErrorClass::CommandNotFound,
+            "DeviceEncrypted" => ErrorClass::DeviceEncrypted,
+            "DeviceNotActive" => ErrorClass::DeviceNotActive,
+            "DeviceNotFound" => ErrorClass::DeviceNotFound,
+            "GenericError" => ErrorClass::GenericError,
+            "KVMMissingCap" => ErrorClass::KvmMissingCap,
+            _ => return None,
+        })
+    }
+}
+
+/// The error classes that QEMU and its guest agent report in an error reply,
+/// [`RemoteError::class`] as a type.
+///
+/// Most errors are [`GenericError`](Self::GenericError); the others mark the
+/// few conditions that a client may want to tell apart.
+///
+/// ```
+/// use qapi_protocol::{ErrorClass, RemoteError};
+///
+/// let error = RemoteError::new("KVMMissingCap", "this host has no KVM");
+/// assert_eq!(error.known_class(), Some(ErrorClass::KvmMissingCap));
+/// assert_eq!(ErrorClass::KvmMissingCap.as_str(), "KVMMissingCap");
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum ErrorClass {
+    /// The peer has no such command, or a guest agent has it disabled.
+    CommandNotFound,
+    /// The device is encrypted. QEMU stopped reporting this class in 2.10.
+    DeviceEncrypted,
+    /// The device is not active.
+    DeviceNotActive,
+    /// The device does not exist.
+    DeviceNotFound,
+    /// Any other error.
+    GenericError,
+    /// KVM lacks a capability that the command needs (`KVMMissingCap`).
+    KvmMissingCap,
+}
+
+impl ErrorClass {
+    /// The class as it appears on the wire.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::CommandNotFound => "CommandNotFound",
+            Self::DeviceEncrypted => "DeviceEncrypted",
+            Self::DeviceNotActive => "DeviceNotActive",
+            Self::DeviceNotFound => "DeviceNotFound",
+            Self::GenericError => "GenericError",
+            Self::KvmMissingCap => "KVMMissingCap",
+        }
     }
 }
 

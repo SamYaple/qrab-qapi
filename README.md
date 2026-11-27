@@ -34,7 +34,8 @@ How they fit together:
   `qapi::QapiCommand`.
 - `qrab-qapi-protocol` connects to a QEMU monitor (QMP) socket, learns the
   peer's QEMU version during the handshake, and sends and decodes
-  `qrab-qapi` types checked against that version.
+  the types of `qrab-qapi`, through the traits of `qrab-qapi-core`,
+  checked against that version.
   Its guest agent (QGA) client does the same with the agent's own version.
 
 Most users want `qrab-qapi-protocol` together with `qrab-qapi`.
@@ -76,7 +77,7 @@ dependencies to the library names, so that the `[dependencies]` keys match:
 ```toml
 [dependencies]
 qapi = { package = "qrab-qapi", version = "0.1" }
-qapi-protocol = { package = "qrab-qapi-protocol", version = "0.1" }
+qapi-protocol = { package = "qrab-qapi-protocol", version = "0.2" }
 ```
 
 Query a running QEMU over its QMP socket, inside an async function:

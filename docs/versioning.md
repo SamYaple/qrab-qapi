@@ -64,7 +64,7 @@ decoding errors: `#[non_exhaustive]` changes nothing at run time.
 | `qrab-qapi` | `qrab-qapi-macros` | `=0.y.z`, exact | The expansion calls run-time items of `qrab-qapi` that are not public API (`qapi::__private`), and the generated sources use attribute keys that only some macro versions accept. |
 | `qrab-qapi` | `qrab-qapi-codegen`, the optional build dependency of `schema-docs` | `=0.y.z`, exact | `schema-docs` must regenerate the same API with the generator that wrote the checked-in sources. |
 | `qrab-qapi` | `qrab-qapi-core` | `0.y.z`, a caret on its minor | The runtime, which `qrab-qapi` re-exports at the same paths. The expansion uses only its public API. |
-| `qrab-qapi-protocol` | `qrab-qapi` | `0.y.z`, a caret on its minor | Its API is made of `qrab-qapi` types, below. |
+| `qrab-qapi-protocol` | `qrab-qapi-core` | `0.y.z`, a caret on its minor | Its API takes the runtime's traits and errors, not the generated types, below. |
 
 The exact requirements follow serde, which requires its derive crate
 exactly because the derived code uses serde items that SemVer does not
@@ -79,29 +79,32 @@ fix. A tooling change that no `qrab-qapi` release needs, such as a fix of
 the generator's command line, or a parser fix that changes no output, is a
 patch of that crate alone.
 
-`qrab-qapi-protocol` follows the breaking releases of `qrab-qapi`.
-`Qmp::execute` and `Qga::execute` take any `qapi::QapiCommand`, its `Error`
-wraps `qapi::EncodeError`, and `RemoteError::known_class` returns the
-generated `qapi::QapiErrorClass`. If a protocol release accepted a new
-`qrab-qapi` minor, an application still on the old minor would build two
-copies of `qrab-qapi`, and a command of its copy would not implement the
-trait that `execute` asks for. So each breaking `qrab-qapi` release is
-followed by a minor of `qrab-qapi-protocol` that requires it, even when
-that requirement is the protocol crate's only change.
+`qrab-qapi-protocol` depends on `qrab-qapi-core`, not on `qrab-qapi`.
+`Qmp::execute` and `Qga::execute` take any `qapi_core::QapiCommand`, its
+`Error` wraps `qapi_core::EncodeError`, and `RemoteError::known_class`
+returns the protocol's own `ErrorClass`. Every `qrab-qapi` release from
+0.1.1 on re-exports those items and implements the traits for its types,
+so a breaking `qrab-qapi` release, such as a QEMU refresh with a removal,
+needs no protocol release. Two `qrab-qapi` minors in one dependency graph
+can even use the same protocol release. Only a breaking release of
+`qrab-qapi-core` moves both: `qrab-qapi` and the protocol then each take a
+minor that requires it.
 
 ## Examples
 
-Starting from 0.1.0 of every crate, on QEMU 11.1.3:
+Starting from `qrab-qapi-core` 0.1.0, `qrab-qapi` 0.1.1, `qrab-qapi-protocol`
+0.2.0 and the tooling crates at 0.1.0, on QEMU 11.1.3:
 
 | Change | Releases |
 | --- | --- |
 | QEMU 11.1.4 is pinned, and the regenerated sources are identical, the usual case for a QEMU stable release | None. The pin waits in the repository, and the next `qrab-qapi` release names 11.1.4 in its changelog. |
-| A QEMU release adds types, variants and optional fields, and deprecates some | `qrab-qapi` 0.1.1. The protocol crate's requirement on `qrab-qapi` 0.1 takes it up. |
-| A QEMU release no longer has a command that 11.1.3 has, so the command is marked "removed in QEMU X" | `qrab-qapi` 0.2.0, then `qrab-qapi-protocol` 0.2.0 requiring it. |
-| A QEMU release changes a field's type, as 11.0.0 changed `BlockExportAdd.iothread` from `Option<String>` to `Option<BlockExportIothreads>` | `qrab-qapi` 0.2.0, then `qrab-qapi-protocol` 0.2.0 requiring it. |
+| A QEMU release adds types, variants and optional fields, and deprecates some | `qrab-qapi` 0.1.2 alone. |
+| A QEMU release no longer has a command that 11.1.3 has, so the command is marked "removed in QEMU X" | `qrab-qapi` 0.2.0 alone; the protocol works with it unchanged. |
+| A QEMU release changes a field's type, as 11.0.0 changed `BlockExportAdd.iothread` from `Option<String>` to `Option<BlockExportIothreads>` | `qrab-qapi` 0.2.0 alone. |
 | A parser fix that changes no generated output | `qrab-qapi-codegen` 0.1.1 alone. |
-| A macro fix, such as a wrong serialization in the expansion | `qrab-qapi-macros` 0.2.0, then `qrab-qapi` 0.1.1 requiring `=0.2.0` of it, or 0.2.0 if the fix changes the API of `qrab-qapi` incompatibly. |
-| A bug fix in the clients | `qrab-qapi-protocol` 0.1.1 alone. |
+| A macro fix, such as a wrong serialization in the expansion | `qrab-qapi-macros` 0.2.0, then `qrab-qapi` 0.1.2 requiring `=0.2.0` of it, or 0.2.0 if the fix changes the API of `qrab-qapi` incompatibly. |
+| A bug fix in the clients | `qrab-qapi-protocol` 0.2.1 alone. |
+| A breaking change of the runtime, such as a new item of `QapiCommand` without a default | `qrab-qapi-core` 0.2.0, then a `qrab-qapi` minor and a `qrab-qapi-protocol` minor that require it. |
 
 ## Minimum Rust version
 

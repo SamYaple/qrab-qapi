@@ -1,6 +1,6 @@
 [package]
 name = "qrab-qapi-protocol"
-version = "0.1.0"
+version = "0.2.0"
 description = "Async QEMU QMP and guest agent (QGA) clients and mock servers"
 edition.workspace = true
 rust-version.workspace = true
@@ -33,7 +33,7 @@ nix = { workspace = true, features = ["socket", "uio"], optional = true }
 thiserror = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true, features = ["raw_value"] }
-qapi = { workspace = true }
+qapi-core = { workspace = true }
 
 [dependencies.tokio]
 workspace = true
@@ -43,6 +43,8 @@ features = ["net", "io-util", "sync", "rt", "macros", "time"]
 [dev-dependencies]
 # The crate's own tests use the mock sessions.
 qrab-qapi-protocol = { path = ".", features = ["mock"] }
+# The generated types of the tests and the documentation's examples.
+qapi = { workspace = true }
 tempfile = { workspace = true }
 
 [dev-dependencies.tokio]

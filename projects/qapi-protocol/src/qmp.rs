@@ -4,7 +4,7 @@ use crate::{
     framing::{self, JsonReader},
     wire::{self, Envelope},
 };
-use qapi::QapiCommand;
+use qapi_core::QapiCommand;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::{Value, json, value::RawValue};
 use std::{
@@ -379,7 +379,7 @@ impl Qmp {
         }
         let request = wire::command(cmd, self.version(), self.commands(), false)?;
         let reply = self.dispatch(request, Vec::new(), false, duration).await?;
-        qapi::with_version(self.version(), || wire::decode(&reply))
+        qapi_core::with_version(self.version(), || wire::decode(&reply))
     }
 
     pub async fn execute_oob<C: QapiCommand>(&self, cmd: &C) -> Result<C::Returns> {
@@ -402,7 +402,7 @@ impl Qmp {
         }
         let request = wire::command(cmd, self.version(), self.commands(), true)?;
         let reply = self.dispatch(request, Vec::new(), true, duration).await?;
-        qapi::with_version(self.version(), || wire::decode(&reply))
+        qapi_core::with_version(self.version(), || wire::decode(&reply))
     }
 
     /// Run the command `name` with `args`, a JSON object (`{}` for none),
@@ -490,7 +490,7 @@ impl Qmp {
         let request = wire::request(name, args, oob)?;
         wire::offered(name, self.version(), self.commands())?;
         let reply = self.dispatch(request, fds, oob, duration).await?;
-        qapi::with_version(self.version(), || wire::decode(&reply))
+        qapi_core::with_version(self.version(), || wire::decode(&reply))
     }
 
     fn disconnected(&self) -> Error {

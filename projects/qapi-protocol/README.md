@@ -1,7 +1,8 @@
 # qrab-qapi-protocol
 
 Async clients for QEMU's QMP monitor and the QEMU guest agent (QGA) over Unix
-sockets, built on Tokio and the generated types of `qrab-qapi`, plus bounded
+sockets, built on Tokio, for the generated types of `qrab-qapi` or any other
+types that implement the traits of `qrab-qapi-core`, plus bounded
 mock servers for tests. Each connection negotiates and owns its peer's QEMU
 version, so requests and replies are checked against that release, and asks
 the peer once for the commands it offers, so that a command this QEMU or
@@ -12,7 +13,7 @@ The package is `qrab-qapi-protocol`; the library is `qapi_protocol`:
 ```toml
 [dependencies]
 qapi = { package = "qrab-qapi", version = "0.1" }
-qapi-protocol = { package = "qrab-qapi-protocol", version = "0.1" }
+qapi-protocol = { package = "qrab-qapi-protocol", version = "0.2" }
 ```
 
 ```rust,no_run
@@ -35,7 +36,7 @@ The mock servers are the `server` module, behind the `mock` feature:
 
 ```toml
 [dev-dependencies]
-qapi-protocol = { package = "qrab-qapi-protocol", version = "0.1", features = ["mock"] }
+qapi-protocol = { package = "qrab-qapi-protocol", version = "0.2", features = ["mock"] }
 ```
 
 ## License
