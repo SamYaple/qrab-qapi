@@ -11,7 +11,7 @@ documentation = "https://docs.rs/qrab-qapi"
 readme = "README.md"
 keywords = ["qemu", "qmp", "qga", "qapi", "virtualization"]
 categories = ["api-bindings", "virtualization", "emulators"]
-include = ["/src/**", "/tests/**", "/build.rs", "/README.md", "/LICENSE", "/NOTICE"]
+include = ["/src/**", "/tests/**", "/build.rs", "/README.md", "/CHANGELOG.md", "/LICENSE", "/NOTICE"]
 
 [package.metadata.docs.rs]
 # docs.rs builds the default features only. Keep `schema-docs` off there:

@@ -11,7 +11,7 @@ documentation = "https://docs.rs/qrab-qapi-codegen"
 readme = "README.md"
 keywords = ["qemu", "qapi", "qmp", "codegen", "virtualization"]
 categories = ["development-tools::build-utils", "command-line-utilities", "virtualization"]
-include = ["/src/**", "/qemu-versions.lock", "/KNOWN_ISSUES.md", "/README.md", "/LICENSE", "/NOTICE"]
+include = ["/src/**", "/qemu-versions.lock", "/KNOWN_ISSUES.md", "/README.md", "/CHANGELOG.md", "/LICENSE", "/NOTICE"]
 
 [package.metadata.docs.rs]
 targets = ["x86_64-unknown-linux-gnu"]

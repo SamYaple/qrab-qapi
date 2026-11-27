@@ -11,7 +11,7 @@ documentation = "https://docs.rs/qrab-qapi-protocol"
 readme = "README.md"
 keywords = ["qemu", "qmp", "qga", "async", "virtualization"]
 categories = ["api-bindings", "asynchronous", "virtualization"]
-include = ["/src/**", "/tests/**", "/README.md", "/LICENSE", "/NOTICE"]
+include = ["/src/**", "/tests/**", "/README.md", "/CHANGELOG.md", "/LICENSE", "/NOTICE"]
 
 [package.metadata.docs.rs]
 features = ["mock"]

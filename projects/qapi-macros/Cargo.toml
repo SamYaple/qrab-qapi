@@ -11,7 +11,7 @@ documentation = "https://docs.rs/qrab-qapi-macros"
 readme = "README.md"
 keywords = ["qemu", "qapi", "qmp", "serde", "virtualization"]
 categories = ["development-tools::procedural-macro-helpers", "virtualization"]
-include = ["/src/**", "/README.md", "/LICENSE", "/NOTICE"]
+include = ["/src/**", "/README.md", "/CHANGELOG.md", "/LICENSE", "/NOTICE"]
 
 [package.metadata.docs.rs]
 targets = ["x86_64-unknown-linux-gnu"]
