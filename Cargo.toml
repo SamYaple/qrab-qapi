@@ -29,9 +29,13 @@ quote = "1"
 syn = { version = "3.0.10", features = ["full"] }
 tempfile = "3"
 # The QAPI crates: the qrab-qapi* packages, under the names the code uses.
+# Only qrab-qapi uses the macros and the generator, and it requires both
+# exactly (docs/versioning.md): the macros expand to calls of its hidden
+# run-time items, and its schema-docs build regenerates with the generator
+# that wrote the checked-in sources.
 qapi = { package = "qrab-qapi", path = "projects/qapi", version = "0.1.0" }
-qapi-codegen = { package = "qrab-qapi-codegen", path = "projects/qapi-codegen", version = "0.1.0" }
-qapi-macros = { package = "qrab-qapi-macros", path = "projects/qapi-macros", version = "0.1.0" }
+qapi-codegen = { package = "qrab-qapi-codegen", path = "projects/qapi-codegen", version = "=0.1.0" }
+qapi-macros = { package = "qrab-qapi-macros", path = "projects/qapi-macros", version = "=0.1.0" }
 qapi-protocol = { package = "qrab-qapi-protocol", path = "projects/qapi-protocol", version = "0.1.0" }
 
 # Optimize the generator when the qrab-qapi `schema-docs` feature runs it from build.rs.
