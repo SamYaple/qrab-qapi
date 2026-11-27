@@ -42,11 +42,16 @@ publishes.
 
 ## 3. Sign the tag
 
-Sign the tag on C with the maintainer's SSH signing key, and check the
-signature, but do not push the tag yet:
+Sign the tag on C with the maintainer's SSH signing key, under the public
+name and address of their commits, and check it, but do not push it yet.
+Give the identity on the command line: otherwise the tag records the
+clone's own `user.name` and `user.email`, and a published tag can only be
+replaced by relaxing the tag rules.
 
 ```sh
-git -c gpg.format=ssh -c user.signingkey=<key> tag -s v0.1.0 -m "qrab-qapi 0.1.0" C
+git -c user.name=<name> -c user.email=<public address> \
+    -c gpg.format=ssh -c user.signingkey=<key> tag -s v0.1.0 -m "qrab-qapi 0.1.0" C
+git cat-file tag v0.1.0 | grep '^tagger'
 git -c gpg.ssh.allowedSignersFile=<allowed signers> tag -v v0.1.0
 ```
 
