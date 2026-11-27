@@ -5,7 +5,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the version numbers follow the policy in the repository's
 `docs/versioning.md`.
 
-## Unreleased
+## 0.1.0
 
 The first release, with the runtime that `qrab-qapi` 0.1.0 held itself.
 `qrab-qapi` re-exports it at the same paths.

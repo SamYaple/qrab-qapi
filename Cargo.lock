@@ -174,7 +174,7 @@ dependencies = [
 
 [[package]]
 name = "qrab-qapi"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "qrab-qapi-codegen",
  "qrab-qapi-core",

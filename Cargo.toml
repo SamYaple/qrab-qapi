@@ -36,7 +36,7 @@ tempfile = "3"
 # are not public API, and its schema-docs build regenerates with the
 # generator that wrote the checked-in sources. The runtime, qrab-qapi-core,
 # is a caret requirement.
-qapi = { package = "qrab-qapi", path = "projects/qapi", version = "0.1.0" }
+qapi = { package = "qrab-qapi", path = "projects/qapi", version = "0.1.1" }
 qapi-core = { package = "qrab-qapi-core", path = "projects/qapi-core", version = "0.1.0" }
 qapi-codegen = { package = "qrab-qapi-codegen", path = "projects/qapi-codegen", version = "=0.1.0" }
 qapi-macros = { package = "qrab-qapi-macros", path = "projects/qapi-macros", version = "=0.1.0" }

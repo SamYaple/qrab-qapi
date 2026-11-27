@@ -6,7 +6,9 @@ the version numbers follow the policy in the repository's
 `docs/versioning.md`. Each entry names the QEMU baseline, the newest QEMU
 release that its types are generated from.
 
-## Unreleased
+## 0.1.1
+
+QEMU baseline: 11.1.3.
 
 - The runtime moves to the new crate `qrab-qapi-core`: the traits
   `QapiCommand`, `PreconfigSafe` and `QapiEvent`, the version contexts and
