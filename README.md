@@ -42,8 +42,8 @@ Most users want `qrab-qapi-protocol` together with `qrab-qapi`.
   QMP from QEMU 1.0, where its schema first appears, and QGA from 0.15,
   through the current baseline, **QEMU 11.1.3**.
 - **Maintained matrix.** The release series **9.2, 10.0, 10.1, 10.2, 11.0
-  and 11.1** are maintained. CI compiles `qrab-qapi` bounded to each of them,
-  using the latest pinned patch release of each series.
+  and 11.1** are maintained: the generator's tests compare the latest pinned
+  patch of each series with that release's own QAPI parser.
 - **Protocol clients.** `qrab-qapi-protocol` targets the QEMU 11.1.3
   protocol. Each connection checks requests and replies against its own
   peer's version.
@@ -64,8 +64,9 @@ behaviour.
 ## Usage
 
 The packages carry a `qrab-` prefix, while their library names stay `qapi`,
-`qapi_protocol`, `qapi_macros` and `qapi_codegen`. Rename the dependency so
-code imports `qapi::...`:
+`qapi_protocol`, `qapi_macros` and `qapi_codegen`: code imports `qapi::...`
+from a dependency on `qrab-qapi`. These snippets also rename the
+dependencies to the library names, so that the `[dependencies]` keys match:
 
 ```toml
 [dependencies]
@@ -145,8 +146,9 @@ The generated sources under `projects/qapi/src/generated` (QMP) and
 work and regeneration need the QEMU source as the `vendor/qemu` git
 submodule, which points at the QEMU repository URL in
 [.gitmodules](.gitmodules), with the release tags pinned in
-`projects/qapi-codegen/qemu-versions.lock`. Git and Python 3.14 or newer are
-also needed:
+`projects/qapi-codegen/qemu-versions.lock`. Regeneration also needs Git, and
+the generator's tests, which compare with QEMU's own parser, Python 3.14 or
+newer:
 
 ```sh
 git submodule update --init vendor/qemu
@@ -155,10 +157,11 @@ bash contrib/check-qapi.sh
 ```
 
 [`contrib/check-qapi.sh`](contrib/check-qapi.sh) runs strict Clippy on all
-four crates, tests the generator against QEMU's own parser, regenerates QMP
-and QGA and compares the output byte for byte with the checked-in sources,
-compiles `qrab-qapi` for each maintained QEMU series and builds the API
-documentation with warnings treated as errors. The submodule is used only by
+four crates, and on `qrab-qapi-protocol` without its default features, tests
+the generator against QEMU's own parser and tests the other crates,
+regenerates QMP and QGA and compares the output byte for byte with the
+checked-in sources, and builds the API documentation with warnings treated
+as errors. The submodule is used only by
 the generator, its tests and the `schema-docs` build; the published crates
 do not include it.
 

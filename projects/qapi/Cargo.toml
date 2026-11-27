@@ -15,8 +15,8 @@ include = ["/src/**", "/tests/**", "/build.rs", "/README.md", "/LICENSE", "/NOTI
 
 [package.metadata.docs.rs]
 # docs.rs builds the default features only. Keep `schema-docs` off there:
-# without QRAB_QAPI_SCHEMA_DOCS it renders no QEMU schema documentation, but
-# the release checks refuse it all the same.
+# docs.rs cannot set QRAB_QAPI_SCHEMA_DOCS, so the feature would only compile
+# the generator into the build script.
 targets = ["x86_64-unknown-linux-gnu"]
 
 [lib]

@@ -37,9 +37,10 @@ git -C vendor/qemu fetch origin --tags
 ## Compatibility policy
 
 The maintained QEMU matrix covers release series **9.2, 10.0, 10.1, 10.2,
-11.0 and 11.1**. The latest pinned patch in each series is the representative
-schema input. Schema coverage does not imply live runtime testing of every
-release.
+11.0 and 11.1**. The generator's tests compare the latest pinned patch of
+each series with that release's own QAPI parser
+(`recent_release_matrix_matches_each_releases_own_parser`). Schema coverage
+does not imply live runtime testing of every release.
 
 Older QEMU is **untested, not unsupported** below this matrix. Historical
 schemas remain generation inputs and regression fixtures back to QEMU 1.0,
@@ -135,8 +136,10 @@ To move to a newer stable QEMU release, from the repository root:
    `pinned_releases_are_ordered_and_end_at_current_baseline` names the
    newest pin, and `CURRENT` in `tests/upstream_corpus.rs` is the current
    grammar for that test's own inputs.
-4. Run `bash contrib/check-qapi.sh`, which runs the generator's tests, and
-   commit the gitlink and the lockfile together, with the changes above.
+4. Regenerate both trees ([Regeneration](#regeneration)), run
+   `bash contrib/check-qapi.sh`, which runs the generator's tests, and
+   commit the regenerated trees, the gitlink and the lockfile together, with
+   the changes above.
 
 ## Regeneration
 
@@ -160,9 +163,7 @@ rendered docs carry schema prose with both the feature and
 `QRAB_QAPI_SCHEMA_DOCS`, and none with only one of them.
 
 When advancing the QEMU baseline, regenerate both trees once the new release
-is pinned, and commit them with the pins. A release that starts a new series
-of the maintained matrix also joins the series that `contrib/check-qapi.sh`
-compiles the generated code for.
+is pinned, and commit them with the pins.
 
 ## Reading the full QEMU docs locally
 
@@ -178,8 +179,9 @@ the schema documentation included. That takes two settings:
 
 A dependency can enable a feature but cannot set the variable, so only the
 person running cargo turns the mode on. With the feature alone, as under
-`--all-features`, on docs.rs or when a dependent enables it, the build
-compiles the generator, uses the checked-in sources and prints a warning. The
+`--all-features` or when a dependent enables it, the build compiles the
+generator, uses the checked-in sources and prints a warning; docs.rs builds
+the default features. The
 variable alone also builds the checked-in sources, with a warning. Cargo shows
 build script warnings only for local packages, so a registry dependency gives
 no sign of either. Default builds neither need a QEMU tree nor build
@@ -721,9 +723,9 @@ hand sets only `Returns`, `NAME` and `AVAILABLE_SINCE`, and the others default
 to a stable, still available command that replies and runs neither out of band
 nor in preconfig.
 
-A command whose return type changed across the releases that a build
-supports has an enum as its `Returns`, with a variant per return type named
-by the release that introduced it:
+A command whose return type changed across the pinned releases has an enum
+as its `Returns`, with a variant per return type named by the release that
+introduced it:
 `qapi::commands::QueryTargetReturns` is `V1_2_0(TargetInfo)` or
 `V3_0_0(QemuTargetInfo)`. A reply decoded in a peer's version scope, as the
 protocol clients decode them, takes the variant of the peer's release, and

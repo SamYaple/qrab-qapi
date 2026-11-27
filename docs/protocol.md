@@ -59,7 +59,7 @@ version, at no extra cost. A reply with another ID than the request's fails
 the handshake with `ProtocolViolation::CommandsReplyId`.
 
 Every call checks the list before anything is sent. A typed call is refused
-first for its release, as before (`Unavailability::Release`), then for the
+first for its release (`Unavailability::Release`), then for the
 list: `Unavailability::NotOffered` for a command the peer did not name, or
 `Unavailability::Disabled` for one a guest agent lists as disabled, both as
 `Error::Unavailable` with the command, the peer's version and the reason. A

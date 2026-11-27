@@ -24,7 +24,8 @@ It requires Git, Python 3.14 or newer (the oracle tests import old releases'
 Python 2 lexers, which parse only since PEP 758) and the initialized
 `vendor/qemu` submodule with the release tags pinned in
 `projects/qapi-codegen/qemu-versions.lock`. It runs strict Clippy
-on all four crates, the generated sources included, compares
+on all four crates, the generated sources included, and on
+`qrab-qapi-protocol` without its default features, compares
 definition coverage with QEMU's own parser, tests the generator, and
 regenerates QMP and QGA to verify the checked-in outputs byte for byte. It also
 builds the API documentation with warnings treated as errors, in both the
@@ -55,10 +56,12 @@ QRAB_TEST_QEMU=/path/to/qemu-system-x86_64 \
 It uses `-machine none -accel tcg` and a temporary QMP socket: no KVM, guest
 image, network download or root privileges. It checks the greeting, typed
 query-version/query-status, query-commands against generated metadata, typed
-query-qmp-schema decoding, concurrent and OOB commands, error recovery, and
-clean quit. Both compact and pretty monitor output are tested through `-mon`.
+query-qmp-schema decoding, concurrent and OOB commands, the refusal of a
+command that QEMU did not list, and clean quit. Both compact and pretty monitor output are tested through `-mon`.
 If the binary advertises QEMU 11.1's `monitor-qmp` object, the same checks
-also run through that frontend.
+also run through that frontend. A second test starts QEMU with
+`--preconfig`: the command list arrives before the machine exists, and with
+`probe_commands` off QEMU itself refuses an unknown command.
 
 A minimal current-QEMU build for this test is:
 

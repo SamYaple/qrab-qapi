@@ -61,7 +61,8 @@ bash contrib/check-qapi.sh
   schema prose only with both the `schema-docs` feature and
   `QRAB_QAPI_SCHEMA_DOCS`
 - strict Clippy on all four crates, the generated sources included, and
-  the tests of the other crates
+  on `qrab-qapi-protocol` without its default features, and the tests of
+  the other crates
 - the API documentation of all four crates, with warnings treated as errors
 
 It needs the QEMU source with its release tags:
@@ -137,11 +138,12 @@ internals, the compatibility policy and the correctness rules are in
 
 ### Advancing the QEMU baseline
 
-A newer QEMU release is pinned, both trees are regenerated and committed
-with the pins, as
+A newer QEMU release is pinned, and both trees are regenerated and
+committed with the pins, as
 [docs/codegen.md](docs/codegen.md#advancing-the-qemu-baseline) describes.
-Update the baseline that [docs/protocol.md](docs/protocol.md) and
-[docs/testing.md](docs/testing.md) name in the same change.
+Update the baseline that [README.md](README.md),
+[docs/protocol.md](docs/protocol.md) and [docs/testing.md](docs/testing.md)
+name in the same change.
 
 ### Protocol changes
 
