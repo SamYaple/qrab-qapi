@@ -4,8 +4,9 @@ A maintainer publishes the crates to crates.io from a commit on `main`, by
 hand, with the steps below. [versioning.md](versioning.md) says which
 crates a change releases, their version numbers and their tags.
 
-crates.io's Trusted Publishing cannot create a crate, so the first release,
-0.1.0 of all four crates, is published with a crates.io API token. Only the
+crates.io's Trusted Publishing cannot create a crate, so the first release of
+a crate, such as 0.1.0 of the four crates in `v0.1.0`, is published with a
+crates.io API token. Only the
 maintainer holds the token, and only in the shell that publishes.
 
 ## 1. Prepare the release commit
@@ -29,7 +30,7 @@ git clone https://github.com/qrab-dev/qrab-qapi && cd qrab-qapi
 git checkout --detach C
 git status --porcelain     # must print nothing
 cargo publish --dry-run --locked \
-  -p qrab-qapi-codegen -p qrab-qapi-macros -p qrab-qapi -p qrab-qapi-protocol
+  -p qrab-qapi-core -p qrab-qapi-codegen -p qrab-qapi-macros -p qrab-qapi -p qrab-qapi-protocol
 ```
 
 The dry run packages each crate and builds the package the way crates.io
@@ -54,7 +55,7 @@ git -c gpg.ssh.allowedSignersFile=<allowed signers> tag -v v0.1.0
 ```sh
 read -rs CARGO_REGISTRY_TOKEN && export CARGO_REGISTRY_TOKEN
 cargo publish --locked \
-  -p qrab-qapi-codegen -p qrab-qapi-macros -p qrab-qapi -p qrab-qapi-protocol
+  -p qrab-qapi-core -p qrab-qapi-codegen -p qrab-qapi-macros -p qrab-qapi -p qrab-qapi-protocol
 unset CARGO_REGISTRY_TOKEN
 ```
 

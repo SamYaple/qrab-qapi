@@ -1,0 +1,25 @@
+[package]
+name = "qrab-qapi-core"
+version = "0.1.0"
+description = "The runtime of the QEMU QMP and guest agent (QGA) types of qrab-qapi: their traits and version contexts"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository = "https://github.com/qrab-dev/qrab-qapi"
+homepage = "https://qrab.dev"
+documentation = "https://docs.rs/qrab-qapi-core"
+readme = "README.md"
+keywords = ["qemu", "qmp", "qga", "qapi", "virtualization"]
+categories = ["api-bindings", "virtualization"]
+include = ["/src/**", "/tests/**", "/README.md", "/CHANGELOG.md", "/LICENSE", "/NOTICE"]
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[lib]
+name = "qapi_core"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }

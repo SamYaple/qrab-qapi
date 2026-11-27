@@ -124,8 +124,9 @@ pub fn rustify_name(input: &str) -> String {
     }
 }
 
-/// The types and traits that `qrab-qapi` defines at its root, where a
-/// generated type of the same name, re-exported by glob, would be shadowed.
+/// The types and traits at the root of `qrab-qapi`, its own and those it
+/// re-exports from `qrab-qapi-core`, where a generated type of the same
+/// name, re-exported by glob, would be shadowed.
 pub(crate) const RUNTIME_ITEMS: &[&str] = &[
     "EncodeError",
     "PreconfigSafe",
@@ -383,30 +384,50 @@ mod tests {
     /// `qrab-qapi` declares at its root.
     #[test]
     fn runtime_items_are_the_root_types_and_traits_of_qrab_qapi() {
-        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../qapi/src/lib.rs");
-        let source = std::fs::read_to_string(path).unwrap();
-        let mut declared: Vec<_> = source
-            .lines()
-            .filter_map(|line| {
-                [
-                    "pub struct ",
-                    "pub enum ",
-                    "pub trait ",
-                    "pub type ",
-                    "pub union ",
-                ]
-                .iter()
-                .find_map(|keyword| line.strip_prefix(keyword))
-            })
-            .map(|rest| {
-                let end = rest
-                    .find(|c: char| !c.is_alphanumeric() && c != '_')
-                    .unwrap_or(rest.len());
-                &rest[..end]
-            })
-            .collect();
-        declared.sort_unstable();
-        assert_eq!(declared, RUNTIME_ITEMS);
+        fn declared(source: &str) -> Vec<&str> {
+            source
+                .lines()
+                .filter_map(|line| {
+                    [
+                        "pub struct ",
+                        "pub enum ",
+                        "pub trait ",
+                        "pub type ",
+                        "pub union ",
+                    ]
+                    .iter()
+                    .find_map(|keyword| line.strip_prefix(keyword))
+                })
+                .map(|rest| {
+                    let end = rest
+                        .find(|c: char| !c.is_alphanumeric() && c != '_')
+                        .unwrap_or(rest.len());
+                    &rest[..end]
+                })
+                .collect()
+        }
+        let read = |path: &str| std::fs::read_to_string(path).unwrap();
+        let qapi = read(concat!(env!("CARGO_MANIFEST_DIR"), "/../qapi/src/lib.rs"));
+        let core = read(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../qapi-core/src/lib.rs"
+        ));
+        // The names in qrab-qapi's `pub use qapi_core::{...};` at its root,
+        // which starts a line, unlike the one inside `__private`.
+        let start = qapi
+            .find("\npub use qapi_core::{")
+            .expect("the runtime re-export")
+            + 21;
+        let end = start + qapi[start..].find("};").unwrap();
+        let reexported: Vec<&str> = qapi[start..end].split(',').map(str::trim).collect();
+        let mut root = declared(&qapi);
+        root.extend(
+            declared(&core)
+                .into_iter()
+                .filter(|name| reexported.contains(name)),
+        );
+        root.sort_unstable();
+        assert_eq!(root, RUNTIME_ITEMS);
     }
 
     #[test]

@@ -1,6 +1,6 @@
 # Versioning
 
-The four crates follow [Semantic Versioning](https://semver.org/) as Cargo
+The crates follow [Semantic Versioning](https://semver.org/) as Cargo
 applies it
 ([Cargo's SemVer guide](https://doc.rust-lang.org/cargo/reference/semver.html)):
 before 1.0, in `0.y.z`, a new `y` is a breaking release and a new `z` a
@@ -10,12 +10,12 @@ the crates require each other, and how releases are tagged.
 
 ## Each crate has its own version
 
-`qrab-qapi-codegen`, `qrab-qapi-macros`, `qrab-qapi` and
+`qrab-qapi-codegen`, `qrab-qapi-macros`, `qrab-qapi-core`, `qrab-qapi` and
 `qrab-qapi-protocol` are versioned and released separately. A crate gets a
 release when its own public API or behaviour changes, and not otherwise: a
 generator change that leaves the generated sources of `qrab-qapi` as they
 are releases `qrab-qapi-codegen` alone, and a fix in the clients releases
-`qrab-qapi-protocol` alone. The first release, 0.1.0 of all four, is the one
+`qrab-qapi-protocol` alone. The first release, 0.1.0 of the four crates that existed then, is the one
 release they share.
 
 Versions carry no build metadata such as `0.2.0+qemu.11.2.0`. The changelog
@@ -63,6 +63,7 @@ decoding errors: `#[non_exhaustive]` changes nothing at run time.
 | --- | --- | --- | --- |
 | `qrab-qapi` | `qrab-qapi-macros` | `=0.y.z`, exact | The expansion calls run-time items of `qrab-qapi` that are not public API (`qapi::__private`), and the generated sources use attribute keys that only some macro versions accept. |
 | `qrab-qapi` | `qrab-qapi-codegen`, the optional build dependency of `schema-docs` | `=0.y.z`, exact | `schema-docs` must regenerate the same API with the generator that wrote the checked-in sources. |
+| `qrab-qapi` | `qrab-qapi-core` | `0.y.z`, a caret on its minor | The runtime, which `qrab-qapi` re-exports at the same paths. The expansion uses only its public API. |
 | `qrab-qapi-protocol` | `qrab-qapi` | `0.y.z`, a caret on its minor | Its API is made of `qrab-qapi` types, below. |
 
 The exact requirements follow serde, which requires its derive crate
@@ -90,7 +91,7 @@ that requirement is the protocol crate's only change.
 
 ## Examples
 
-Starting from 0.1.0 of all four crates, on QEMU 11.1.3:
+Starting from 0.1.0 of every crate, on QEMU 11.1.3:
 
 | Change | Releases |
 | --- | --- |
@@ -104,7 +105,7 @@ Starting from 0.1.0 of all four crates, on QEMU 11.1.3:
 
 ## Minimum Rust version
 
-All four crates declare one minimum Rust version, `rust-version` in the
+All the crates declare one minimum Rust version, `rust-version` in the
 root `Cargo.toml`, currently 1.88, which the `msrv` CI job checks. It is
 raised only in a breaking release of each crate it affects, bundled with
 other breaking changes where possible, and only to a stable Rust at least

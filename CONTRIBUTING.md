@@ -38,8 +38,8 @@ You need:
 - For generator work: Git, Python 3.14 or newer, and the `vendor/qemu`
   submodule with its release tags (see below).
 
-The default workspace members (`qrab-qapi-macros`, `qrab-qapi` and
-`qrab-qapi-protocol`) build from the checked-in generated sources and need
+The default workspace members (`qrab-qapi-core`, `qrab-qapi-macros`,
+`qrab-qapi` and `qrab-qapi-protocol`) build from the checked-in generated sources and need
 no QEMU source, Python, KVM, root privileges or network access. From the
 repository root, these are the checks CI runs:
 
@@ -60,10 +60,10 @@ bash contrib/check-qapi.sh
   lines, and the documentation of `qrab-qapi` built with it, which carries
   schema prose only with both the `schema-docs` feature and
   `QRAB_QAPI_SCHEMA_DOCS`
-- strict Clippy on all four crates, the generated sources included, and
+- strict Clippy on all five crates, the generated sources included, and
   on `qrab-qapi-protocol` without its default features, and the tests of
   the other crates
-- the API documentation of all four crates, with warnings treated as errors
+- the API documentation of all five crates, with warnings treated as errors
 
 It needs the QEMU source with its release tags:
 
@@ -102,9 +102,14 @@ are not required checks.
   what it finds, with a warning. `qrab-qapi-macros` is a proc-macro
   crate, which cargo-semver-checks cannot check, and `qrab-qapi` is
   checked without the `schema-docs` feature, which changes only the
-  documentation. cargo-semver-checks does not yet detect every breaking
-  change, such as a changed type of a public field or a new "removed in
-  QEMU X" mark, so review the API as well.
+  documentation. A crate that the baseline does not have yet is skipped.
+  cargo-semver-checks does not follow re-exports from other crates, so
+  while the baseline's `qrab-qapi` still defines the runtime that it now
+  re-exports from `qrab-qapi-core`, the check of `qrab-qapi` only reports,
+  and `qrab-qapi-core`'s own check covers the runtime. Nor does
+  cargo-semver-checks detect every breaking change yet, such as a changed
+  type of a public field or a new "removed in QEMU X" mark, so review the
+  API as well.
 
   ```sh
   cargo install --locked cargo-semver-checks@0.51.0

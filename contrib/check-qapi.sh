@@ -6,19 +6,19 @@ cd "$(dirname "$0")/.."
 # cache, so a fresh checkout (CI) needs every locked package downloaded first.
 cargo fetch --locked
 
-# Strict Clippy on all four crates, the generated QMP and QGA sources included.
+# Strict Clippy on all five crates, the generated QMP and QGA sources included.
 # The crates built on the macros, one per line:
 qapi_crates=(
     -p qrab-qapi
     -p qrab-qapi-protocol
 )
-cargo clippy --locked -p qrab-qapi-codegen -p qrab-qapi-macros "${qapi_crates[@]}" --all-targets \
+cargo clippy --locked -p qrab-qapi-core -p qrab-qapi-codegen -p qrab-qapi-macros "${qapi_crates[@]}" --all-targets \
     -- -D warnings
 # Without its default tokio feature, qrab-qapi-protocol has only the types that
 # need no runtime.
 cargo clippy --locked -p qrab-qapi-protocol --no-default-features -- -D warnings
 cargo test --locked --release -p qrab-qapi-codegen -- --test-threads=2
-cargo test --locked -p qrab-qapi-macros "${qapi_crates[@]}"
+cargo test --locked -p qrab-qapi-core -p qrab-qapi-macros "${qapi_crates[@]}"
 
 qapi_check_dir=$(mktemp -d)
 trap 'rm -rf "$qapi_check_dir"' EXIT
@@ -86,5 +86,5 @@ qapi_has_schema_docs "$qapi_schema_docs_target"
 # The variable alone changes nothing either: the ordinary documentation, built
 # with it set, carries no schema prose.
 QRAB_QAPI_SCHEMA_DOCS="$PWD/vendor/qemu" RUSTDOCFLAGS="${RUSTDOCFLAGS:+$RUSTDOCFLAGS }-D warnings" \
-    cargo doc --locked --no-deps -p qrab-qapi-codegen -p qrab-qapi-macros "${qapi_crates[@]}"
+    cargo doc --locked --no-deps -p qrab-qapi-core -p qrab-qapi-codegen -p qrab-qapi-macros "${qapi_crates[@]}"
 qapi_no_schema_docs "${CARGO_TARGET_DIR:-target}"

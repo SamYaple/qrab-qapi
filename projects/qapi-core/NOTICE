@@ -1,0 +1,25 @@
+qrab-qapi
+Copyright The qrab Authors
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+Documentation is licensed under the Creative Commons Attribution 4.0
+International License, CC-BY-4.0 (see LICENSE-docs).
+
+Third-party components
+======================
+
+QEMU (https://gitlab.com/qemu-project/qemu)
+  Location: vendor/qemu, a git submodule reference. No QEMU source is
+            stored in this repository or included in the published crates.
+  License:  GPL-2.0-or-later for the QAPI schema files and their
+            documentation comments.
+  Use:      qrab-qapi-codegen reads the schemas as input. The checked-in
+            generated sources (projects/qapi/src/generated and
+            projects/qapi/src/qga) carry names, types and version facts
+            needed for the wire protocol and no QEMU schema prose.
+            projects/qapi-codegen/qemu-versions.lock lists QEMU release tag
+            names and commit IDs. Building qrab-qapi with the opt-in
+            `schema-docs` feature and QRAB_QAPI_SCHEMA_DOCS set to a QEMU
+            tree copies QEMU's GPL-2.0-or-later schema documentation into
+            the build output for local reading; such output must not be
+            published or shipped. The feature alone does not.

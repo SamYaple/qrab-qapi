@@ -1,6 +1,6 @@
 //! Parsing the version a guest agent reports in `guest-info`.
 
-use qapi::{VersionComponent, VersionParseErrorKind, parse_qga_version};
+use qapi_core::{VersionComponent, VersionParseErrorKind, parse_qga_version};
 use std::num::IntErrorKind;
 
 #[test]

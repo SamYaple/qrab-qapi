@@ -1,7 +1,7 @@
 # Testing
 
-The default workspace members (`qrab-qapi-macros`, `qrab-qapi` and
-`qrab-qapi-protocol`) build from the checked-in generated sources. Their tests
+The default workspace members (`qrab-qapi-core`, `qrab-qapi-macros`,
+`qrab-qapi` and `qrab-qapi-protocol`) build from the checked-in generated sources. Their tests
 need no QEMU checkout, Python, KVM, root privileges or network:
 
 ```sh

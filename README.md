@@ -11,7 +11,8 @@ against the version of the peer you are talking to.
 
 | Package | Library | Contents |
 | --- | --- | --- |
-| [`qrab-qapi`](projects/qapi/README.md) | `qapi` | Generated QMP and QGA types plus the `QapiCommand`, `QapiEvent` and `PreconfigSafe` traits |
+| [`qrab-qapi`](projects/qapi/README.md) | `qapi` | Generated QMP and QGA types, with the runtime of `qrab-qapi-core` re-exported |
+| [`qrab-qapi-core`](projects/qapi-core/README.md) | `qapi_core` | The runtime of the types: the `QapiCommand`, `QapiEvent` and `PreconfigSafe` traits and the version contexts |
 | [`qrab-qapi-protocol`](projects/qapi-protocol/README.md) | `qapi_protocol` | Async Unix-socket QMP and QGA clients on Tokio, plus bounded mock servers for tests |
 | [`qrab-qapi-macros`](projects/qapi-macros/README.md) | `qapi_macros` | The `#[qapi(...)]` attribute: version-aware Serde and trait implementations |
 | [`qrab-qapi-codegen`](projects/qapi-codegen/README.md) | `qapi_codegen` | Parses QEMU's QAPI schema language and generates the unified, version-annotated Rust types |
@@ -27,6 +28,10 @@ How they fit together:
   trait implementations that check QEMU version lifetimes. `qrab-qapi`
   re-exports the attribute, so you do not depend on the macros crate
   directly.
+- `qrab-qapi-core` holds the runtime of those types: the traits of
+  commands and events, and the version contexts that their serialization
+  checks. `qrab-qapi` re-exports it at the same paths, such as
+  `qapi::QapiCommand`.
 - `qrab-qapi-protocol` connects to a QEMU monitor (QMP) socket, learns the
   peer's QEMU version during the handshake, and sends and decodes
   `qrab-qapi` types checked against that version.
@@ -133,7 +138,8 @@ page says so. See [NOTICE](NOTICE).
 
 You need a Rust toolchain from [rustup](https://rustup.rs/), Rust 1.88 or
 newer; CI uses a pinned stable toolchain, currently 1.97.1. The default
-workspace members (`qrab-qapi-macros`, `qrab-qapi` and `qrab-qapi-protocol`)
+workspace members (`qrab-qapi-core`, `qrab-qapi-macros`, `qrab-qapi` and
+`qrab-qapi-protocol`)
 build from the checked-in generated sources and need no QEMU checkout,
 Python, KVM, root privileges or network access:
 
@@ -157,7 +163,7 @@ bash contrib/check-qapi.sh
 ```
 
 [`contrib/check-qapi.sh`](contrib/check-qapi.sh) runs strict Clippy on all
-four crates, and on `qrab-qapi-protocol` without its default features, tests
+five crates, and on `qrab-qapi-protocol` without its default features, tests
 the generator against QEMU's own parser and tests the other crates,
 regenerates QMP and QGA and compares the output byte for byte with the
 checked-in sources, and builds the API documentation with warnings treated

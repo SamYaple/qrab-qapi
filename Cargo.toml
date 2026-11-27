@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
+    "projects/qapi-core",
     "projects/qapi-codegen",
     "projects/qapi-macros",
     "projects/qapi",
@@ -8,6 +9,7 @@ members = [
 ]
 # Schema generation is an explicit package selection.
 default-members = [
+    "projects/qapi-core",
     "projects/qapi-macros",
     "projects/qapi",
     "projects/qapi-protocol",
@@ -30,10 +32,12 @@ syn = { version = "3.0.10", features = ["full"] }
 tempfile = "3"
 # The QAPI crates: the qrab-qapi* packages, under the names the code uses.
 # Only qrab-qapi uses the macros and the generator, and it requires both
-# exactly (docs/versioning.md): the macros expand to calls of its hidden
-# run-time items, and its schema-docs build regenerates with the generator
-# that wrote the checked-in sources.
+# exactly (docs/versioning.md): the macros expand to paths of qrab-qapi that
+# are not public API, and its schema-docs build regenerates with the
+# generator that wrote the checked-in sources. The runtime, qrab-qapi-core,
+# is a caret requirement.
 qapi = { package = "qrab-qapi", path = "projects/qapi", version = "0.1.0" }
+qapi-core = { package = "qrab-qapi-core", path = "projects/qapi-core", version = "0.1.0" }
 qapi-codegen = { package = "qrab-qapi-codegen", path = "projects/qapi-codegen", version = "=0.1.0" }
 qapi-macros = { package = "qrab-qapi-macros", path = "projects/qapi-macros", version = "=0.1.0" }
 qapi-protocol = { package = "qrab-qapi-protocol", path = "projects/qapi-protocol", version = "0.1.0" }

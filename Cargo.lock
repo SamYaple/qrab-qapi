@@ -177,10 +177,10 @@ name = "qrab-qapi"
 version = "0.1.0"
 dependencies = [
  "qrab-qapi-codegen",
+ "qrab-qapi-core",
  "qrab-qapi-macros",
  "serde",
  "serde_json",
- "thiserror",
 ]
 
 [[package]]
@@ -195,6 +195,15 @@ dependencies = [
  "syn",
  "tar",
  "tempfile",
+ "thiserror",
+]
+
+[[package]]
+name = "qrab-qapi-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
  "thiserror",
 ]
 
