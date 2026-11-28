@@ -22,10 +22,10 @@ pub mod server;
 mod wire;
 
 #[cfg(feature = "tokio")]
-pub use engine::{Greeting, QemuVersion, VersionInfo};
+pub use engine::{Greeting, QMP_QUEUE_CAPACITY, QemuVersion, VersionInfo};
 use qapi_core::QapiCommand;
 #[cfg(feature = "tokio")]
-pub use qmp::{QMP_QUEUE_CAPACITY, Qmp, QmpEvents};
+pub use qmp::{Qmp, QmpEvents};
 use std::{collections::BTreeSet, fmt, sync::Arc, time::Duration};
 
 /// Why a connection or a call failed.

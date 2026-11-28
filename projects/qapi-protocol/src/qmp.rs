@@ -3,6 +3,7 @@ use crate::{
     Required, Result, TimeoutPhase,
     engine::{
         self,
+        connection::{MAX_FDS, OOB_CAPACITY, QMP_QUEUE_CAPACITY},
         qmp::{Established, QmpHandshake},
     },
     framing::JsonReader,
@@ -28,13 +29,6 @@ use tokio::{
     task::AbortHandle,
     time::{Instant, timeout, timeout_at},
 };
-
-/// QEMU recommends at most eight unanswered in-band commands so it continues
-/// reading OOB requests. See the vendored docs/interop/qmp-spec.rst.
-pub const QMP_QUEUE_CAPACITY: usize = 8;
-const OOB_CAPACITY: usize = 8;
-/// Linux's SCM_MAX_FD: `sendmsg` refuses more descriptors in one message.
-const MAX_FDS: usize = 253;
 
 // A request's dispatch state. The driver claims a queued request before
 // writing it, and a caller whose deadline elapses abandons it if it can,
