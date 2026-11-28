@@ -5,7 +5,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the version numbers follow the policy in the repository's
 `docs/versioning.md`.
 
-## Unreleased
+## 0.2.1
 
 - The client sends file descriptors with rustix instead of nix, which is
   no longer a dependency.

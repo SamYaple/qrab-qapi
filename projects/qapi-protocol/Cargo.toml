@@ -1,6 +1,6 @@
 [package]
 name = "qrab-qapi-protocol"
-version = "0.2.0"
+version = "0.2.1"
 description = "Async QEMU QMP and guest agent (QGA) clients and mock servers"
 edition.workspace = true
 rust-version.workspace = true
