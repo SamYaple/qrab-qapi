@@ -6,7 +6,7 @@
 //! qapi-protocol = { package = "qrab-qapi-protocol", version = "0.1", features = ["mock"] }
 //! ```
 use crate::{
-    Error, ProtocolViolation, Result,
+    Error, ProtocolViolation, Result, engine,
     framing::{self, JsonReader},
 };
 use serde_json::{Value, json};
@@ -303,7 +303,7 @@ impl QgaSession {
             .as_i64()
             .ok_or(Error::Protocol(ProtocolViolation::MissingSyncNonce))?;
         let mut bytes = vec![0xff];
-        bytes.extend(framing::encode(&json!({"return": nonce}), LIMIT)?);
+        bytes.extend(engine::encode(&json!({"return": nonce}), LIMIT)?);
         self.writer.writer.write_all(&bytes).await?;
         Ok(nonce)
     }

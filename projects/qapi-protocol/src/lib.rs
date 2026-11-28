@@ -9,6 +9,8 @@
 //! server API and the internals, and `docs/testing.md` the tests.
 
 #[cfg(feature = "tokio")]
+mod engine;
+#[cfg(feature = "tokio")]
 mod framing;
 #[cfg(feature = "tokio")]
 pub mod qga;

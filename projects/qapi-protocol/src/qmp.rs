@@ -1,6 +1,6 @@
 use crate::{
     ClientOptions, Error, InvalidRequestKind, PeerCommands, ProtocolViolation, QmpEvent, Required,
-    Result, TimeoutPhase,
+    Result, TimeoutPhase, engine,
     framing::{self, JsonReader},
     wire::{self, Envelope},
 };
@@ -512,7 +512,7 @@ impl Qmp {
         oob: bool,
         duration: Duration,
     ) -> Result<Box<RawValue>> {
-        framing::encode(&request, self.options.max_message_bytes)?;
+        engine::encode(&request, self.options.max_message_bytes)?;
         if oob && !self.oob {
             return Err(Error::InvalidRequest(InvalidRequestKind::OobNotNegotiated));
         }
@@ -779,7 +779,7 @@ async fn drive(
                 if state.compare_exchange(QUEUED, DISPATCHED, Ordering::AcqRel, Ordering::Acquire).is_err() { continue; }
                 id = id.checked_add(1).ok_or(Error::Protocol(ProtocolViolation::IdsExhausted))?;
                 json["id"] = json!(id);
-                let bytes = match framing::encode(&json, limit) {
+                let bytes = match engine::encode(&json, limit) {
                     Ok(bytes) => bytes,
                     Err(error) => { let _ = reply.send(Err(error)); continue; }
                 };

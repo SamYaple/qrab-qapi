@@ -16,7 +16,8 @@
 use crate::{
     ClientOptions, Error, InvalidRequestKind, PeerCommands, RemoteError, Required, Result,
     TimeoutPhase,
-    framing::{self, JsonReader, SyncLine},
+    engine::{self, SyncLine},
+    framing::{self, JsonReader},
     wire,
 };
 use qapi_core::QapiCommand;
@@ -148,7 +149,7 @@ impl Qga {
             let nonce = i64::from_ne_bytes(nonce);
             let command = wire::request("guest-sync-delimited", json!({"id": nonce}), false)?;
             let mut bytes = vec![0xff];
-            bytes.extend(framing::encode(&command, options.max_message_bytes)?);
+            bytes.extend(engine::encode(&command, options.max_message_bytes)?);
             session.writer.write_all(&bytes).await?;
             loop {
                 match session.reader.sync_message().await? {
@@ -280,7 +281,7 @@ impl Qga {
         if max_reply_bytes == 0 {
             return Err(Error::InvalidRequest(InvalidRequestKind::ZeroReplyLimit));
         }
-        let bytes = framing::encode(&request, self.options.max_message_bytes)?;
+        let bytes = engine::encode(&request, self.options.max_message_bytes)?;
         // Ownership leaves self before any I/O await. Cancellation drops the
         // session, so a late reply cannot be mistaken for the next command.
         let mut session = self.session.take().ok_or(Error::Closed)?;
@@ -324,7 +325,7 @@ impl Qga {
             }));
         }
         let request = wire::command(cmd, self.version, self.commands(), false)?;
-        let bytes = framing::encode(&request, self.options.max_message_bytes)?;
+        let bytes = engine::encode(&request, self.options.max_message_bytes)?;
         let mut session = self.session.take().ok_or(Error::Closed)?;
         let mut sent = false;
         let written = timeout(
