@@ -1,11 +1,15 @@
 use crate::{
-    ClientOptions, Error, InvalidRequestKind, PeerCommands, ProtocolViolation, QmpEvent, Required,
-    Result, TimeoutPhase, engine,
-    framing::{self, JsonReader},
+    ClientOptions, Error, Greeting, InvalidRequestKind, PeerCommands, ProtocolViolation, QmpEvent,
+    Required, Result, TimeoutPhase,
+    engine::{
+        self,
+        qmp::{Established, QmpHandshake},
+    },
+    framing::JsonReader,
     wire::{self, Envelope},
 };
 use qapi_core::QapiCommand;
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use serde::de::DeserializeOwned;
 use serde_json::{Value, json, value::RawValue};
 use std::{
     collections::HashMap,
@@ -38,32 +42,6 @@ const MAX_FDS: usize = 253;
 const QUEUED: u8 = 0;
 const DISPATCHED: u8 = 1;
 const ABANDONED: u8 = 2;
-
-/// The QMP greeting, as [`Qmp::greeting`] returns it.
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[non_exhaustive]
-pub struct Greeting {
-    pub version: VersionInfo,
-    /// The capabilities the peer offers, such as `oob`.
-    pub capabilities: Vec<String>,
-}
-
-/// The peer's release and its package string.
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[non_exhaustive]
-pub struct VersionInfo {
-    pub qemu: QemuVersion,
-    pub package: String,
-}
-
-/// A QEMU release number; [`Qmp::version`] returns it as a tuple.
-#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
-#[non_exhaustive]
-pub struct QemuVersion {
-    pub major: u32,
-    pub minor: u32,
-    pub micro: u32,
-}
 
 /// The events of one QMP connection, in the order the peer sent them.
 ///
@@ -110,27 +88,24 @@ struct Events {
 
 impl Events {
     fn publish(&self, bytes: &[u8], envelope: &Envelope) -> Result<()> {
-        if envelope.ret.is_some() || envelope.error.is_some() || envelope.id.is_some() {
-            return Err(Error::Protocol(ProtocolViolation::EventWithResponseFields));
-        }
-        if envelope
-            .data
-            .is_some_and(|data| !data.get().starts_with('{'))
-        {
-            return Err(Error::Protocol(ProtocolViolation::EventDataNotObject));
-        }
-        // Checked before parsing, so a large event never becomes a tree.
-        if bytes.len() > self.limit {
-            self.dropped.fetch_add(1, Ordering::Relaxed);
-            return Ok(());
-        }
-        let event: QmpEvent = serde_json::from_slice(bytes)
-            .map_err(|error| Error::Protocol(ProtocolViolation::InvalidEvent(error)))?;
-        if let Err(mpsc::error::TrySendError::Full(_)) = self.tx.try_send(event) {
-            self.dropped.fetch_add(1, Ordering::Relaxed);
-        }
-        // Dropping the event receiver does not close a healthy QMP connection.
+        self.deliver(engine::qmp::event(bytes, envelope, self.limit)?);
         Ok(())
+    }
+
+    /// Queue an event, or count it as dropped: one too large to parse
+    /// (`None`), or one that finds the queue full. Dropping the event
+    /// receiver does not close a healthy QMP connection.
+    fn deliver(&self, event: Option<QmpEvent>) {
+        let dropped = match event {
+            Some(event) => matches!(
+                self.tx.try_send(event),
+                Err(mpsc::error::TrySendError::Full(_))
+            ),
+            None => true,
+        };
+        if dropped {
+            self.dropped.fetch_add(1, Ordering::Relaxed);
+        }
     }
 }
 
@@ -202,37 +177,32 @@ impl Qmp {
             tx: event_tx,
             dropped: dropped_events.clone(),
         };
-        let (greeting, oob, commands) = timeout(options.handshake_timeout, async {
-            let bytes = reader.next().await?;
-            let greeting = wire::envelope(&bytes)?
-                .greeting
-                .ok_or(Error::Protocol(ProtocolViolation::MissingGreeting))?;
-            let greeting: Greeting = serde_json::from_str(greeting.get())
-                .map_err(|error| Error::Protocol(ProtocolViolation::InvalidGreeting(error)))?;
-            let oob = greeting.capabilities.iter().any(|cap| cap == "oob");
-            let mut request = json!({"execute": "qmp_capabilities", "id": 0});
-            if oob {
-                request["arguments"] = json!({"enable": ["oob"]});
+        let established = timeout(options.handshake_timeout, async {
+            let mut handshake = QmpHandshake::new(&options);
+            loop {
+                if let Some(frame) = handshake.poll_transmit() {
+                    write.write_all(&frame).await?;
+                }
+                if handshake.is_done() {
+                    break;
+                }
+                handshake.handle_frame(&reader.next().await?)?;
             }
-            framing::write_json(&mut write, &request, options.max_message_bytes).await?;
-            let reply =
-                reply_to_id_zero(&mut reader, &events, ProtocolViolation::CapabilitiesReplyId)
-                    .await?;
-            let value: Value = wire::decode(wire::response(&wire::envelope(&reply)?)?)?;
-            if !value.as_object().is_some_and(|o| o.is_empty()) {
-                return Err(Error::Protocol(ProtocolViolation::CapabilitiesReply));
-            }
-            let commands = if options.probe_commands {
-                probe_commands(&mut reader, &mut write, &events, options.max_message_bytes).await?
-            } else {
-                None
-            };
-            Ok((greeting, oob, commands))
+            Ok::<_, Error>(handshake.finish())
         })
         .await
         .map_err(|_| Error::Timeout {
             phase: TimeoutPhase::Handshake,
         })??;
+        let Established {
+            greeting,
+            oob,
+            commands,
+            events: early,
+        } = established;
+        for event in early {
+            events.deliver(event);
+        }
 
         let normal = Arc::new(Semaphore::new(QMP_QUEUE_CAPACITY));
         let out_of_band = Arc::new(Semaphore::new(OOB_CAPACITY));
@@ -573,57 +543,6 @@ impl Qmp {
         timeout_at(deadline, operation)
             .await
             .unwrap_or_else(|_| Err(timed_out()))
-    }
-}
-
-/// Read the handshake's reply to its request with ID 0, publishing the
-/// events that arrive first. A reply with another ID breaks `violation`.
-async fn reply_to_id_zero(
-    reader: &mut JsonReader<tokio::net::unix::OwnedReadHalf>,
-    events: &Events,
-    violation: ProtocolViolation,
-) -> Result<Vec<u8>> {
-    loop {
-        let bytes = reader.next().await?;
-        let envelope = wire::envelope(&bytes)?;
-        if envelope.event.is_some() {
-            events.publish(&bytes, &envelope)?;
-            continue;
-        }
-        if envelope.numeric_id() != Some(0) {
-            return Err(Error::Protocol(violation));
-        }
-        return Ok(bytes);
-    }
-}
-
-/// Ask the peer for its commands, once, right after capability
-/// negotiation: one `query-commands`, a list of names that the session
-/// keeps. An error reply leaves the list unknown, so that only the checks
-/// against the peer's release apply.
-async fn probe_commands(
-    reader: &mut JsonReader<tokio::net::unix::OwnedReadHalf>,
-    write: &mut tokio::net::unix::OwnedWriteHalf,
-    events: &Events,
-    limit: usize,
-) -> Result<Option<PeerCommands>> {
-    #[derive(Deserialize)]
-    struct Command {
-        name: String,
-    }
-    let request = json!({"execute": "query-commands", "id": 0});
-    framing::write_json(write, &request, limit).await?;
-    let reply = reply_to_id_zero(reader, events, ProtocolViolation::CommandsReplyId).await?;
-    match wire::response(&wire::envelope(&reply)?) {
-        Ok(raw) => {
-            let commands: Vec<Command> = wire::decode(raw)?;
-            Ok(Some(PeerCommands::new(
-                commands.into_iter().map(|command| command.name),
-                [],
-            )))
-        }
-        Err(Error::Remote(_)) => Ok(None),
-        Err(error) => Err(error),
     }
 }
 

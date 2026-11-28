@@ -5,8 +5,11 @@
 //! Nothing here reads or writes a socket, reads a clock or awaits, so the
 //! clients of every runtime share these rules.
 mod inbound;
+pub(crate) mod qga;
+pub(crate) mod qmp;
 
 pub(crate) use inbound::{Inbound, SyncLine};
+pub use qmp::{Greeting, QemuVersion, VersionInfo};
 
 use crate::{Error, InvalidRequestKind, Result};
 use serde_json::Value;

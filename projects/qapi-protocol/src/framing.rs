@@ -1,8 +1,7 @@
 use crate::{
     Result,
-    engine::{self, Inbound, SyncLine},
+    engine::{Inbound, SyncLine, qga::QgaCall},
 };
-use serde_json::Value;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 /// The messages of a peer, read from `R` into the engine's [`Inbound`].
@@ -83,31 +82,30 @@ impl<R: AsyncRead + Unpin> JsonReader<R> {
 
 /// write_all can partially write or be cancelled. The owner must discard the
 /// session on any failure; putting bytes in one buffer does not make I/O atomic.
+#[cfg(feature = "mock")]
 pub(crate) async fn write_json<W: AsyncWrite + Unpin>(
     writer: &mut W,
-    value: &Value,
+    value: &serde_json::Value,
     limit: usize,
 ) -> Result<()> {
-    let bytes = engine::encode(value, limit)?;
+    let bytes = crate::engine::encode(value, limit)?;
     writer.write_all(&bytes).await?;
     Ok(())
 }
 
-/// Write a whole frame, recording in `sent` whether any byte left. `write()`
-/// is cancellation safe, so a cancelled call with `sent` false wrote nothing.
-pub(crate) async fn write_frame<W: AsyncWrite + Unpin>(
+/// Write a guest agent call's request, recording each write in the call.
+/// `write()` is cancellation safe, so a cancelled write leaves the call's
+/// count of written bytes right.
+pub(crate) async fn write_call<W: AsyncWrite + Unpin>(
     writer: &mut W,
-    bytes: &[u8],
-    sent: &mut bool,
+    call: &mut QgaCall,
 ) -> Result<()> {
-    let mut offset = 0;
-    while offset < bytes.len() {
-        let n = writer.write(&bytes[offset..]).await?;
+    while !call.transmit().is_empty() {
+        let n = writer.write(call.transmit()).await?;
         if n == 0 {
             return Err(std::io::Error::from(std::io::ErrorKind::WriteZero).into());
         }
-        *sent = true;
-        offset += n;
+        call.advance(n);
     }
     Ok(())
 }
