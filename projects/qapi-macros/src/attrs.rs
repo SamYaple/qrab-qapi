@@ -62,13 +62,10 @@
 
 use crate::support::Version;
 use proc_macro2::Span;
-use syn::ext::IdentExt;
-use syn::parse::ParseStream;
-use syn::punctuated::Punctuated;
-use syn::spanned::Spanned;
 use syn::{
-    Expr, ExprLit, Ident, Lit, LitStr, MacroDelimiter, Meta, MetaList, MetaNameValue, Path, Token,
-    parenthesized,
+    Expr, ExprLit, Ident, Lit, LitStr, MacroDelimiter, Meta, MetaList,
+    MetaNameValue, Path, Token, ext::IdentExt, parenthesized,
+    parse::ParseStream, punctuated::Punctuated, spanned::Spanned,
 };
 
 /// The lifetime of a flag such as `unstable`: from `added` (or the start)
@@ -207,17 +204,16 @@ pub(crate) fn qapi_attr_items(
     attrs
         .iter()
         .filter(|attr| {
-            attr.path()
-                .segments
-                .last()
-                .is_some_and(|last| last.ident == "qapi")
+            attr.path().segments.last().is_some_and(|last| last.ident == "qapi")
         })
         .map(|attr| match &attr.meta {
             _ if !attr.path().is_ident("qapi") => Err(syn::Error::new_spanned(
                 attr.path(),
                 "qapi: write the keys of a type or member as `#[qapi(...)]`",
             )),
-            Meta::List(list) if matches!(list.delimiter, MacroDelimiter::Paren(_)) => {
+            Meta::List(list)
+                if matches!(list.delimiter, MacroDelimiter::Paren(_)) =>
+            {
                 list_items(list)
             }
             meta => Err(syn::Error::new_spanned(
@@ -229,10 +225,9 @@ pub(crate) fn qapi_attr_items(
 
 /// The key of an attribute item, as written (`if` included).
 fn key(meta: &Meta) -> syn::Result<String> {
-    meta.path()
-        .get_ident()
-        .map(|ident| ident.unraw().to_string())
-        .ok_or_else(|| syn::Error::new_spanned(meta.path(), "qapi: expected a key"))
+    meta.path().get_ident().map(|ident| ident.unraw().to_string()).ok_or_else(
+        || syn::Error::new_spanned(meta.path(), "qapi: expected a key"),
+    )
 }
 
 fn unknown(meta: &Meta, key: &str) -> syn::Error {
@@ -249,16 +244,17 @@ fn once<T>(slot: &mut Option<T>, meta: &Meta, value: T) -> syn::Result<()> {
 }
 
 /// Set a bare flag that may appear only once.
-fn once_flag(slot: &mut Option<Span>, meta: &Meta, key: &str) -> syn::Result<()> {
+fn once_flag(
+    slot: &mut Option<Span>,
+    meta: &Meta,
+    key: &str,
+) -> syn::Result<()> {
     flag(meta, key)?;
     once(slot, meta, meta.path().span())
 }
 
 fn duplicate(meta: &Meta) -> syn::Error {
-    let key = meta
-        .path()
-        .get_ident()
-        .map(|ident| ident.unraw().to_string());
+    let key = meta.path().get_ident().map(|ident| ident.unraw().to_string());
     syn::Error::new_spanned(
         meta.path(),
         format!("qapi: duplicate key `{}`", key.unwrap_or_default()),
@@ -269,11 +265,7 @@ fn duplicate(meta: &Meta) -> syn::Error {
 fn lit_str<'a>(meta: &'a Meta, key: &str) -> syn::Result<&'a LitStr> {
     match meta {
         Meta::NameValue(MetaNameValue {
-            value:
-                Expr::Lit(ExprLit {
-                    lit: Lit::Str(text),
-                    ..
-                }),
+            value: Expr::Lit(ExprLit { lit: Lit::Str(text), .. }),
             ..
         }) if text.suffix().is_empty() => Ok(text),
         Meta::NameValue(nv) => Err(syn::Error::new_spanned(
@@ -335,7 +327,10 @@ fn flag(meta: &Meta, key: &str) -> syn::Result<()> {
 }
 
 /// The items of `key(...)`.
-fn nested<'a>(meta: &'a Meta, key: &str) -> syn::Result<(&'a MetaList, MetaArgs)> {
+fn nested<'a>(
+    meta: &'a Meta,
+    key: &str,
+) -> syn::Result<(&'a MetaList, MetaArgs)> {
     match meta {
         Meta::List(list) => Ok((list, list_items(list)?)),
         _ => Err(syn::Error::new_spanned(
@@ -356,7 +351,9 @@ fn check_order(
     {
         return Err(syn::Error::new(
             span,
-            format!("qapi: `removed` ({removed}) must be later than `added` ({added})"),
+            format!(
+                "qapi: `removed` ({removed}) must be later than `added` ({added})"
+            ),
         ));
     }
     Ok(())
@@ -366,11 +363,8 @@ fn check_order(
 /// but not both.
 fn parse_attr_range(meta: &Meta, key: &str) -> syn::Result<AttrRange> {
     let (list, items) = nested(meta, key)?;
-    let mut range = AttrRange {
-        span: meta.path().span(),
-        added: None,
-        removed: None,
-    };
+    let mut range =
+        AttrRange { span: meta.path().span(), added: None, removed: None };
     let mut removed_span = None;
     for item in &items {
         match self::key(item)?.as_str() {
@@ -395,11 +389,9 @@ fn parse_attr_range(meta: &Meta, key: &str) -> syn::Result<AttrRange> {
 /// A bare flag, or a flag with a version range.
 fn flag_range(meta: &Meta, key: &str) -> syn::Result<AttrRange> {
     match meta {
-        Meta::Path(path) => Ok(AttrRange {
-            span: path.span(),
-            added: None,
-            removed: None,
-        }),
+        Meta::Path(path) => {
+            Ok(AttrRange { span: path.span(), added: None, removed: None })
+        }
         _ => parse_attr_range(meta, key),
     }
 }
@@ -419,14 +411,11 @@ fn parse_deprecated(meta: &Meta) -> syn::Result<Deprecation> {
             other => return Err(unknown(item, other)),
         }
     }
-    let added = added
-        .ok_or_else(|| syn::Error::new_spanned(list, "qapi: `deprecated(...)` needs `added`"))?;
+    let added = added.ok_or_else(|| {
+        syn::Error::new_spanned(list, "qapi: `deprecated(...)` needs `added`")
+    })?;
     check_order(Some(added), removed, removed_span)?;
-    Ok(Deprecation {
-        span: meta.span(),
-        added,
-        removed,
-    })
+    Ok(Deprecation { span: meta.span(), added, removed })
 }
 
 /// The built-in QAPI features that change the expansion.
@@ -492,7 +481,8 @@ impl LifetimeSpans {
         let mut previous_end = None;
         for run in deprecated.iter() {
             let added = run.added;
-            let error = |message: String| Err(syn::Error::new(run.span, message));
+            let error =
+                |message: String| Err(syn::Error::new(run.span, message));
             if let Some(since) = since
                 && added < since
             {
@@ -597,16 +587,22 @@ fn check_ranges(
 impl TypeAttrs {
     /// Parse the attribute's arguments and every `#[qapi(...)]` attribute of
     /// the item, and check them together.
-    pub(crate) fn parse(args: &MetaArgs, attrs: &[syn::Attribute]) -> syn::Result<Self> {
+    pub(crate) fn parse(
+        args: &MetaArgs,
+        attrs: &[syn::Attribute],
+    ) -> syn::Result<Self> {
         let mut parsed = Self::default();
         parsed.parse_list(args)?;
         for items in qapi_attr_items(attrs) {
             parsed.parse_list(&items?)?;
         }
-        parsed
-            .spans
-            .check(parsed.since, parsed.until, &mut parsed.deprecated)?;
-        let ranges = |key, list| check_ranges(key, list, parsed.since, parsed.until);
+        parsed.spans.check(
+            parsed.since,
+            parsed.until,
+            &mut parsed.deprecated,
+        )?;
+        let ranges =
+            |key, list| check_ranges(key, list, parsed.since, parsed.until);
         ranges("unstable", &parsed.unstable)?;
         ranges("simple_union", &parsed.simple_union)?;
         ranges("allow_oob", &parsed.allow_oob)?;
@@ -632,25 +628,49 @@ impl TypeAttrs {
             match key.as_str() {
                 "feature" => feature(&mut self.features, item)?,
                 "name" => once(&mut self.name, item, type_name(item)?.clone())?,
-                "condition" => once(&mut self.condition, item, condition(item)?)?,
+                "condition" => {
+                    once(&mut self.condition, item, condition(item)?)?
+                }
                 "unstable" => self.unstable.push(parse_attr_range(item, &key)?),
-                "union_branch" => once_flag(&mut self.union_branch, item, &key)?,
-                "simple_union" => self.simple_union.push(flag_range(item, &key)?),
+                "union_branch" => {
+                    once_flag(&mut self.union_branch, item, &key)?
+                }
+                "simple_union" => {
+                    self.simple_union.push(flag_range(item, &key)?)
+                }
                 "allow_oob" => self.allow_oob.push(flag_range(item, &key)?),
-                "allow_preconfig" => self.allow_preconfig.push(flag_range(item, &key)?),
-                "no_success_response" => self.no_success_response.push(flag_range(item, &key)?),
+                "allow_preconfig" => {
+                    self.allow_preconfig.push(flag_range(item, &key)?)
+                }
+                "no_success_response" => {
+                    self.no_success_response.push(flag_range(item, &key)?)
+                }
                 "command" => once_flag(&mut self.command, item, &key)?,
                 "event" => once_flag(&mut self.event, item, &key)?,
                 "returns" => match item {
-                    Meta::List(_) => self.returns_history.push(parse_returns_history(item)?),
-                    _ => once(&mut self.returns, item, lit_str(item, &key)?.clone())?,
+                    Meta::List(_) => {
+                        self.returns_history.push(parse_returns_history(item)?)
+                    }
+                    _ => once(
+                        &mut self.returns,
+                        item,
+                        lit_str(item, &key)?.clone(),
+                    )?,
                 },
                 "alias" => {
                     let (added, value) = parse_alias(item)?;
-                    once(&mut self.alias, item, (added, value, item.path().span()))?;
+                    once(
+                        &mut self.alias,
+                        item,
+                        (added, value, item.path().span()),
+                    )?;
                 }
                 "returns_enum" => {
-                    once(&mut self.returns_enum, item, lit_str(item, &key)?.clone())?;
+                    once(
+                        &mut self.returns_enum,
+                        item,
+                        lit_str(item, &key)?.clone(),
+                    )?;
                 }
                 _ => return Err(unknown(item, &key)),
             }
@@ -663,7 +683,9 @@ impl TypeAttrs {
     }
 
     /// The keys that only a command takes, by the span of each.
-    pub(crate) fn command_keys(&self) -> impl Iterator<Item = (Span, &'static str)> + '_ {
+    pub(crate) fn command_keys(
+        &self,
+    ) -> impl Iterator<Item = (Span, &'static str)> + '_ {
         let ranges = |ranges: &'static str, list: &[AttrRange]| {
             list.first().map(|range| (range.span, ranges))
         };
@@ -687,10 +709,8 @@ impl TypeAttrs {
     pub(crate) fn struct_key(&self) -> Option<(Span, &'static str)> {
         let command = self.command.map(|span| (span, "command"));
         let event = self.event.map(|span| (span, "event"));
-        let simple_union = self
-            .simple_union
-            .first()
-            .map(|range| (range.span, "simple_union"));
+        let simple_union =
+            self.simple_union.first().map(|range| (range.span, "simple_union"));
         let alias = self.alias.as_ref().map(|(.., span)| (*span, "alias"));
         command
             .into_iter()
@@ -761,10 +781,16 @@ impl ItemAttrs {
             }
             match key.as_str() {
                 "feature" => feature(&mut self.features, item)?,
-                "name" => once(&mut self.name, item, lit_str(item, &key)?.value())?,
-                "condition" => once(&mut self.condition, item, condition(item)?)?,
+                "name" => {
+                    once(&mut self.name, item, lit_str(item, &key)?.value())?
+                }
+                "condition" => {
+                    once(&mut self.condition, item, condition(item)?)?
+                }
                 "flatten" => once_flag(&mut self.flatten, item, &key)?,
-                "discriminator" => self.discriminator.push(flag_range(item, &key)?),
+                "discriminator" => {
+                    self.discriminator.push(flag_range(item, &key)?)
+                }
                 "union" => once_flag(&mut self.union_field, item, &key)?,
                 "required" => once_flag(&mut self.required, item, &key)?,
                 _ => return Err(unknown(item, &key)),
@@ -775,14 +801,19 @@ impl ItemAttrs {
 
     /// Parse and check all `#[qapi(...)]` attributes of a member of the
     /// type `ta`.
-    pub(crate) fn parse(attrs: &[syn::Attribute], ta: &TypeAttrs) -> syn::Result<Self> {
+    pub(crate) fn parse(
+        attrs: &[syn::Attribute],
+        ta: &TypeAttrs,
+    ) -> syn::Result<Self> {
         let mut parsed = Self::default();
         for items in qapi_attr_items(attrs) {
             parsed.parse_list(&items?)?;
         }
-        parsed
-            .spans
-            .check(parsed.since, parsed.until, &mut parsed.deprecated)?;
+        parsed.spans.check(
+            parsed.since,
+            parsed.until,
+            &mut parsed.deprecated,
+        )?;
         parsed.check_within(ta)?;
         Ok(parsed)
     }

@@ -1,5 +1,7 @@
 use super::validate;
-use crate::unified::{NameRule, SchemaError, SchemaErrorKind as Kind, SchemaResult, Version};
+use crate::unified::{
+    NameRule, SchemaError, SchemaErrorKind as Kind, SchemaResult, Version,
+};
 use std::path::{Path, PathBuf};
 
 fn check_files(version: Version, files: &[(&str, &str)]) -> SchemaResult {
@@ -8,7 +10,10 @@ fn check_files(version: Version, files: &[(&str, &str)]) -> SchemaResult {
         .iter()
         .map(|(path, text)| (PathBuf::from(path), text.to_string()))
         .collect();
-    let schemas = crate::builtins::parse_sources(&sources, &crate::builtins::PREDEFINED.into())?;
+    let schemas = crate::builtins::parse_sources(
+        &sources,
+        &crate::builtins::PREDEFINED.into(),
+    )?;
     validate(&schemas, &sources)
 }
 
@@ -32,7 +37,9 @@ fn rules(cases: &[(Version, &str, Option<Kind>)]) {
             (Err(error), Some(kind)) => {
                 assert_eq!(error.kind(), kind, "{version:?} {text}: {error}")
             }
-            (Ok(()), Some(kind)) => panic!("{version:?} accepts {text}, expected {kind:?}"),
+            (Ok(()), Some(kind)) => {
+                panic!("{version:?} accepts {text}, expected {kind:?}")
+            }
             (Err(error), None) => panic!("{version:?} rejects {text}: {error}"),
         }
     }
@@ -43,27 +50,19 @@ fn unknown_key(key: &str) -> Option<Kind> {
 }
 
 fn case(name: &str, rule: NameRule) -> Option<Kind> {
-    Some(Kind::NameCase {
-        name: name.into(),
-        rule,
-    })
+    Some(Kind::NameCase { name: name.into(), rule })
 }
 
 fn clash(name: &str, previous: &str) -> Option<Kind> {
-    Some(Kind::MemberClash {
-        name: name.into(),
-        previous: previous.into(),
-    })
+    Some(Kind::MemberClash { name: name.into(), previous: previous.into() })
 }
 
 fn not_allowed(meta: &'static str, reference: &str) -> Option<Kind> {
-    Some(Kind::TypeNotAllowed {
-        meta,
-        reference: reference.into(),
-    })
+    Some(Kind::TypeNotAllowed { meta, reference: reference.into() })
 }
 
-const FLAT: &str = "{'enum':'Ee','data':['a','b']} {'struct':'Ss','data':{'x':'int'}}
+const FLAT: &str =
+    "{'enum':'Ee','data':['a','b']} {'struct':'Ss','data':{'x':'int'}}
     {'struct':'Bb','data':{'d':'Ee'}}";
 
 #[test]
@@ -77,7 +76,8 @@ fn before_2_4_only_unions_and_event_data_are_checked() {
     let missing = flat("'Bb'", "{'a':'Nope'}");
     let unknown = flat("'Bb'", "{'c':'Bb'}");
     let not_struct = flat("'Ee'", "{}");
-    let string = flat("'Bb'", "{}").replace("'discriminator':'d'", "'discriminator':'s'");
+    let string = flat("'Bb'", "{}")
+        .replace("'discriminator':'d'", "'discriminator':'s'");
     let no_base = "{'enum':'Ee','data':['a']} {'union':'Uu','discriminator':'d','data':{}}";
     let nested = "{'event':'EV','data':{'a':{'b':'int'}}}";
     rules(&[
@@ -106,11 +106,7 @@ fn before_2_4_only_unions_and_event_data_are_checked() {
         ),
         ((2, 0, 0), no_base, Some(Kind::MissingBase)),
         ((2, 1, 0), nested, Some(Kind::NestedEventData)),
-        (
-            (2, 3, 0),
-            "{'struct':'Foo','data':{'a':'Nope','B':'int'}}",
-            None,
-        ),
+        ((2, 3, 0), "{'struct':'Foo','data':{'a':'Nope','B':'int'}}", None),
         (
             (2, 3, 0),
             "{'command':'Foo_Bar','gen':'no'} {'command':'Foo_Bar'}",
@@ -160,11 +156,7 @@ fn keys_are_unknown_before_their_release() {
             "{'struct':'Foo','data':{},'if':'CONFIG_FOO'}",
             unknown_key("if"),
         ),
-        (
-            (3, 0, 0),
-            "{'struct':'Foo','data':{},'if':'CONFIG_FOO'}",
-            None,
-        ),
+        ((3, 0, 0), "{'struct':'Foo','data':{},'if':'CONFIG_FOO'}", None),
         // Before 4.0 a member's dictionary is an anonymous struct.
         (
             (3, 1, 0),
@@ -236,12 +228,7 @@ fn keys_are_unknown_before_their_release() {
         ((5, 2, 0), "{'command':'foo','coroutine':true}", None),
     ]);
     let error = rejected((3, 1, 0), "{'enum':'Foo','data':['a'],'if':''}");
-    assert_eq!(
-        error.kind(),
-        &Kind::EmptyCondition {
-            condition: "''".into()
-        }
-    );
+    assert_eq!(error.kind(), &Kind::EmptyCondition { condition: "''".into() });
 }
 
 #[test]
@@ -249,21 +236,13 @@ fn flags_take_one_value_and_out_of_band_excludes_coroutines() {
     let flag = |flag, value| Some(Kind::FlagValue { flag, value });
     rules(&[
         ((2, 3, 0), "{'command':'foo','gen':'yes'}", None),
-        (
-            (2, 4, 0),
-            "{'command':'foo','gen':true}",
-            flag("gen", false),
-        ),
+        ((2, 4, 0), "{'command':'foo','gen':true}", flag("gen", false)),
         (
             (2, 4, 0),
             "{'command':'foo','success-response':true}",
             flag("success-response", false),
         ),
-        (
-            (4, 1, 0),
-            "{'command':'foo','gen':true}",
-            flag("gen", false),
-        ),
+        ((4, 1, 0), "{'command':'foo','gen':true}", flag("gen", false)),
         (
             (2, 7, 0),
             "{'struct':'Foo','data':{}} {'command':'foo','boxed':false,'data':'Foo'}",
@@ -349,17 +328,11 @@ fn names_follow_each_releases_rules() {
 #[test]
 fn reserved_member_names_follow_the_c_name_of_each_release() {
     rules(&[
-        (
-            (2, 4, 0),
-            "{'struct':'Foo','data':{'has-a':'int','u':'int'}}",
-            None,
-        ),
+        ((2, 4, 0), "{'struct':'Foo','data':{'has-a':'int','u':'int'}}", None),
         (
             (2, 5, 0),
             "{'struct':'Foo','data':{'has-a':'int'}}",
-            Some(Kind::ReservedName {
-                name: "has-a".into(),
-            }),
+            Some(Kind::ReservedName { name: "has-a".into() }),
         ),
         (
             (2, 5, 0),
@@ -381,9 +354,7 @@ fn reserved_member_names_follow_the_c_name_of_each_release() {
             &format!(
                 "{FLAT} {{'union':'Uu','base':{{'d':'Ee','*has-x':'int'}},'discriminator':'d','data':{{}}}}"
             ),
-            Some(Kind::ReservedName {
-                name: "*has-x".into(),
-            }),
+            Some(Kind::ReservedName { name: "*has-x".into() }),
         ),
         // Only members written out in place are checked.
         ((11, 1, 3), "{'enum':'Foo','data':['u','has-a']}", None),
@@ -400,16 +371,8 @@ fn case_rules_follow_each_release_and_its_pragmas() {
             "{'struct':'Foo','data':{'Abc':'int'}}",
             case("Abc", NoUppercase),
         ),
-        (
-            (2, 6, 0),
-            "{'struct':'UuidInfo','data':{'Abc':'int'}}",
-            None,
-        ),
-        (
-            (2, 6, 0),
-            "{'enum':'Foo','data':['Abc']}",
-            case("Abc", NoUppercase),
-        ),
+        ((2, 6, 0), "{'struct':'UuidInfo','data':{'Abc':'int'}}", None),
+        ((2, 6, 0), "{'enum':'Foo','data':['Abc']}", case("Abc", NoUppercase)),
         (
             (2, 6, 0),
             "{'command':'foo','data':{'Abc':'int'}}",
@@ -476,22 +439,10 @@ fn case_rules_follow_each_release_and_its_pragmas() {
             "{'struct':'fooBar','data':{}} {'command':'Foo_Bar'} {'event':'foo'}",
             None,
         ),
-        (
-            (6, 0, 0),
-            "{'struct':'fooBar','data':{}}",
-            case("fooBar", CamelCase),
-        ),
-        (
-            (6, 0, 0),
-            "{'struct':'X86CPU','data':{}}",
-            case("X86CPU", CamelCase),
-        ),
+        ((6, 0, 0), "{'struct':'fooBar','data':{}}", case("fooBar", CamelCase)),
+        ((6, 0, 0), "{'struct':'X86CPU','data':{}}", case("X86CPU", CamelCase)),
         ((6, 0, 0), "{'struct':'x-FooBar','data':{}}", None),
-        (
-            (6, 0, 0),
-            "{'command':'foo_bar'}",
-            case("foo_bar", Lowercase),
-        ),
+        ((6, 0, 0), "{'command':'foo_bar'}", case("foo_bar", Lowercase)),
         (
             (6, 0, 0),
             "{'pragma':{'command-name-exceptions':['foo_bar']}} {'command':'foo_bar'}",
@@ -519,11 +470,7 @@ fn case_rules_follow_each_release_and_its_pragmas() {
 #[test]
 fn clashes_follow_the_c_names_of_each_release() {
     rules(&[
-        (
-            (2, 3, 0),
-            "{'enum':'Foo','data':['foo-bar','fooBar']}",
-            None,
-        ),
+        ((2, 3, 0), "{'enum':'Foo','data':['foo-bar','fooBar']}", None),
         (
             (2, 4, 0),
             "{'enum':'Foo','data':['fooBar','foo-bar']}",
@@ -558,10 +505,7 @@ fn clashes_follow_the_c_names_of_each_release() {
         (
             (2, 5, 0),
             "{'struct':'Base','data':{'*a':'int'}} {'struct':'Foo','base':'Base','data':{'a':'int'}}",
-            Some(Kind::BaseClash {
-                name: "a".into(),
-                base: "Base".into(),
-            }),
+            Some(Kind::BaseClash { name: "a".into(), base: "Base".into() }),
         ),
         (
             (2, 5, 0),
@@ -578,10 +522,7 @@ fn clashes_follow_the_c_names_of_each_release() {
             &format!(
                 "{FLAT} {{'struct':'Sx','data':{{'d':'int'}}}} {{'union':'Uu','base':'Bb','discriminator':'d','data':{{'a':'Sx'}}}}"
             ),
-            Some(Kind::BaseClash {
-                name: "d".into(),
-                base: "Bb".into(),
-            }),
+            Some(Kind::BaseClash { name: "d".into(), base: "Bb".into() }),
         ),
         (
             (11, 1, 3),
@@ -614,10 +555,7 @@ fn clashes_follow_the_c_names_of_each_release() {
         (
             (5, 0, 0),
             "{'struct':'Foo','data':{'m':{'type':'int','features':['f','f']}}}",
-            Some(Kind::FeatureClash {
-                name: "f".into(),
-                previous: "f".into(),
-            }),
+            Some(Kind::FeatureClash { name: "f".into(), previous: "f".into() }),
         ),
         (
             (11, 1, 3),
@@ -631,7 +569,9 @@ fn clashes_follow_the_c_names_of_each_release() {
 fn types_may_not_have_special_features_and_schemas_have_at_most_64() {
     let special = |name: &str| Some(Kind::SpecialFeature { name: name.into() });
     let many: String = (0..63)
-        .map(|n| format!("{{'struct':'St{n}','data':{{}},'features':['f{n}']}}"))
+        .map(|n| {
+            format!("{{'struct':'St{n}','data':{{}},'features':['f{n}']}}")
+        })
         .collect();
     rules(&[
         (
@@ -644,16 +584,8 @@ fn types_may_not_have_special_features_and_schemas_have_at_most_64() {
             "{'struct':'Foo','data':{},'features':['deprecated']}",
             special("deprecated"),
         ),
-        (
-            (5, 0, 0),
-            "{'command':'foo','features':['deprecated']}",
-            None,
-        ),
-        (
-            (6, 1, 0),
-            "{'enum':'Foo','data':[],'features':['unstable']}",
-            None,
-        ),
+        ((5, 0, 0), "{'command':'foo','features':['deprecated']}", None),
+        ((6, 1, 0), "{'enum':'Foo','data':[],'features':['unstable']}", None),
         (
             (6, 2, 0),
             "{'enum':'Foo','data':[],'features':['unstable']}",
@@ -672,21 +604,9 @@ fn types_may_not_have_special_features_and_schemas_have_at_most_64() {
 fn type_references_follow_each_release() {
     let unknown = |name: &str| Some(Kind::UnknownType { name: name.into() });
     rules(&[
-        (
-            (2, 3, 0),
-            "{'struct':'Foo','data':{'a':'Nope'},'base':'Nope'}",
-            None,
-        ),
-        (
-            (2, 4, 0),
-            "{'struct':'Foo','data':{'a':'Nope'}}",
-            unknown("Nope"),
-        ),
-        (
-            (4, 2, 0),
-            "{'struct':'Foo','data':{'a':['Nope']}}",
-            unknown("Nope"),
-        ),
+        ((2, 3, 0), "{'struct':'Foo','data':{'a':'Nope'},'base':'Nope'}", None),
+        ((2, 4, 0), "{'struct':'Foo','data':{'a':'Nope'}}", unknown("Nope")),
+        ((4, 2, 0), "{'struct':'Foo','data':{'a':['Nope']}}", unknown("Nope")),
         (
             (2, 4, 0),
             "{'command':'foo'} {'struct':'Foo','data':{'a':'foo'}}",
@@ -789,26 +709,10 @@ fn arguments_follow_each_release() {
             &with("{'command':'foo','data':'Uu'}"),
             not_allowed("union", "'Uu'"),
         ),
-        (
-            (2, 7, 0),
-            &with("{'command':'foo','data':'Uu','boxed':true}"),
-            None,
-        ),
-        (
-            (4, 2, 0),
-            &with("{'command':'foo','data':'Uu'}"),
-            unboxed.clone(),
-        ),
-        (
-            (11, 1, 3),
-            &with("{'command':'foo','data':'Uu'}"),
-            unboxed.clone(),
-        ),
-        (
-            (4, 1, 0),
-            &with("{'command':'foo','data':'Al','boxed':true}"),
-            None,
-        ),
+        ((2, 7, 0), &with("{'command':'foo','data':'Uu','boxed':true}"), None),
+        ((4, 2, 0), &with("{'command':'foo','data':'Uu'}"), unboxed.clone()),
+        ((11, 1, 3), &with("{'command':'foo','data':'Uu'}"), unboxed.clone()),
+        ((4, 1, 0), &with("{'command':'foo','data':'Al','boxed':true}"), None),
         (
             (4, 2, 0),
             &with("{'command':'foo','data':'Al','boxed':true}"),
@@ -817,15 +721,9 @@ fn arguments_follow_each_release() {
         (
             (2, 7, 0),
             &with("{'event':'FOO','data':'Empty','boxed':true}"),
-            Some(Kind::BoxedEmpty {
-                name: "Empty".into(),
-            }),
+            Some(Kind::BoxedEmpty { name: "Empty".into() }),
         ),
-        (
-            (4, 2, 0),
-            &with("{'event':'FOO','data':'Empty','boxed':true}"),
-            None,
-        ),
+        ((4, 2, 0), &with("{'event':'FOO','data':'Empty','boxed':true}"), None),
         (
             (2, 7, 0),
             &with("{'command':'foo','boxed':true}"),
@@ -925,11 +823,7 @@ fn alternates_follow_each_release() {
             "{'alternate':'Al','data':{'i':'int','q':'QType'}}",
             ambiguous("q", "i"),
         ),
-        (
-            (4, 2, 0),
-            "{'alternate':'Al','data':{'i':'int','q':'QType'}}",
-            None,
-        ),
+        ((4, 2, 0), "{'alternate':'Al','data':{'i':'int','q':'QType'}}", None),
         (
             (2, 4, 0),
             "{'alternate':'Al','data':{'i':'int','a':'any'}}",
@@ -939,7 +833,9 @@ fn alternates_follow_each_release() {
             (2, 5, 0),
             "{'alternate':'Al','data':{'i':'int','a':'any'}}",
             Some(Kind::Crash {
-                crash: crate::unified::Crash::AlternateAny { branch: "a".into() },
+                crash: crate::unified::Crash::AlternateAny {
+                    branch: "a".into(),
+                },
             }),
         ),
         (
@@ -950,25 +846,15 @@ fn alternates_follow_each_release() {
         (
             (2, 9, 0),
             "{'alternate':'Al','data':{'i':'int','n':'null'}}",
-            Some(Kind::UnknownType {
-                name: "null".into(),
-            }),
+            Some(Kind::UnknownType { name: "null".into() }),
         ),
-        (
-            (2, 10, 0),
-            "{'alternate':'Al','data':{'i':'int','n':'null'}}",
-            None,
-        ),
+        ((2, 10, 0), "{'alternate':'Al','data':{'i':'int','n':'null'}}", None),
         (
             (7, 0, 0),
             "{'alternate':'Al','data':{'i':'int','l':['int']}}",
             Some(Kind::ArrayNotAllowed),
         ),
-        (
-            (7, 1, 0),
-            "{'alternate':'Al','data':{'i':'int','l':['int']}}",
-            None,
-        ),
+        ((7, 1, 0), "{'alternate':'Al','data':{'i':'int','l':['int']}}", None),
         (
             (7, 1, 0),
             "{'alternate':'Al','data':{'l':['str'],'m':['int']}}",
@@ -990,7 +876,9 @@ fn alternates_follow_each_release() {
 #[test]
 fn unions_follow_each_release() {
     let union = |base: &str, data: &str| {
-        format!("{FLAT} {{'union':'Uu','base':{base},'discriminator':'d','data':{data}}}")
+        format!(
+            "{FLAT} {{'union':'Uu','base':{base},'discriminator':'d','data':{data}}}"
+        )
     };
     let empty = Some(Kind::NoBranches);
     rules(&[
@@ -1078,12 +966,14 @@ fn unions_follow_each_release() {
         ((3, 0, 0), &union("'Bb'", "{'a':'Ss'}"), None),
         (
             (2, 4, 0),
-            &union("'Bb'", "{'a':'Ss','b':'Ss'}").replace("['a','b']", "['a','b','d']"),
+            &union("'Bb'", "{'a':'Ss','b':'Ss'}")
+                .replace("['a','b']", "['a','b','d']"),
             None,
         ),
         (
             (2, 5, 0),
-            &union("'Bb'", "{'a':'Ss','b':'Ss'}").replace("['a','b']", "['a','b','d']"),
+            &union("'Bb'", "{'a':'Ss','b':'Ss'}")
+                .replace("['a','b']", "['a','b','d']"),
             Some(Kind::DiscriminatorClash {
                 discriminator: "d".into(),
                 enumeration: "Ee".into(),
@@ -1091,7 +981,8 @@ fn unions_follow_each_release() {
         ),
         (
             (2, 6, 0),
-            &union("'Bb'", "{'a':'Ss','b':'Ss'}").replace("['a','b']", "['a','b','d']"),
+            &union("'Bb'", "{'a':'Ss','b':'Ss'}")
+                .replace("['a','b']", "['a','b','d']"),
             None,
         ),
         (
@@ -1113,25 +1004,19 @@ fn unions_follow_each_release() {
         (
             (4, 0, 0),
             "{'enum':'Ee','data':['a']} {'struct':'Ss','data':{}} {'struct':'Bb','data':{'d':{'type':'Ee','if':'CONFIG_D'}}} {'union':'Uu','base':'Bb','discriminator':'d','data':{'a':'Ss'}}",
-            Some(Kind::ConditionalDiscriminator {
-                discriminator: "d".into(),
-            }),
+            Some(Kind::ConditionalDiscriminator { discriminator: "d".into() }),
         ),
         (
             (11, 1, 3),
             "{'enum':'Ee','data':['a']} {'struct':'Ss','data':{}} {'struct':'Bb','data':{'d':{'type':'Ee','if':'CONFIG_D'}}} {'union':'Uu','base':'Bb','discriminator':'d','data':{'a':'Ss'}}",
-            Some(Kind::ConditionalDiscriminator {
-                discriminator: "d".into(),
-            }),
+            Some(Kind::ConditionalDiscriminator { discriminator: "d".into() }),
         ),
         (
             (4, 1, 0),
             &format!(
                 "{FLAT} {{'struct':'Bc','base':'Bb','data':{{}}}} {{'union':'Uu','base':'Bc','discriminator':'d','data':{{'a':'Ss'}}}}"
             ),
-            Some(Kind::DiscriminatorNotMember {
-                discriminator: "d".into(),
-            }),
+            Some(Kind::DiscriminatorNotMember { discriminator: "d".into() }),
         ),
         (
             (4, 2, 0),
@@ -1143,16 +1028,12 @@ fn unions_follow_each_release() {
         (
             (4, 1, 0),
             &union("{'*d':'Ee'}", "{'a':'Ss','b':'Ss'}"),
-            Some(Kind::DiscriminatorNotMember {
-                discriminator: "d".into(),
-            }),
+            Some(Kind::DiscriminatorNotMember { discriminator: "d".into() }),
         ),
         (
             (4, 2, 0),
             &union("{'*d':'Ee'}", "{'a':'Ss','b':'Ss'}"),
-            Some(Kind::OptionalDiscriminator {
-                discriminator: "d".into(),
-            }),
+            Some(Kind::OptionalDiscriminator { discriminator: "d".into() }),
         ),
         (
             (8, 0, 0),
@@ -1177,7 +1058,9 @@ fn unions_follow_each_release() {
         ),
         (
             (8, 1, 0),
-            &format!("{FLAT} {{'union':'Uu','base':'Bb','discriminator':'d','data':{{'a':'Uu'}}}}"),
+            &format!(
+                "{FLAT} {{'union':'Uu','base':'Bb','discriminator':'d','data':{{'a':'Uu'}}}}"
+            ),
             Some(Kind::InheritanceCycle { name: "Uu".into() }),
         ),
     ]);
@@ -1224,9 +1107,7 @@ fn an_object_that_contains_itself_is_refused_where_the_cycle_starts() {
                 },
             }
         } else {
-            Kind::InheritanceCycle {
-                name: "First".into(),
-            }
+            Kind::InheritanceCycle { name: "First".into() }
         };
         assert_eq!(error.kind(), &expected, "{version:?}");
         assert_eq!(
@@ -1258,32 +1139,16 @@ fn from_4_2_every_expression_is_checked_before_duplicates_and_types() {
     assert!(matches!(error.kind(), Kind::Duplicate { .. }), "{error}");
     assert_eq!(error.line(), Some(3));
     let error = rejected((4, 2, 0), duplicate);
-    assert_eq!(
-        error.kind(),
-        &Kind::InvalidName {
-            name: "bad name".into()
-        }
-    );
+    assert_eq!(error.kind(), &Kind::InvalidName { name: "bad name".into() });
     assert_eq!(error.line(), Some(1));
-    let types =
-        "{'struct':'First','data':{'m':'Nope'}}\n{'struct':'Second','data':{'bad name':'int'}}";
+    let types = "{'struct':'First','data':{'m':'Nope'}}\n{'struct':'Second','data':{'bad name':'int'}}";
     assert_eq!(
         error_line((4, 1, 0), types),
-        (
-            Kind::UnknownType {
-                name: "Nope".into()
-            },
-            1
-        )
+        (Kind::UnknownType { name: "Nope".into() }, 1)
     );
     assert_eq!(
         error_line((4, 2, 0), types),
-        (
-            Kind::InvalidName {
-                name: "bad name".into()
-            },
-            2
-        )
+        (Kind::InvalidName { name: "bad name".into() }, 2)
     );
 }
 
@@ -1305,10 +1170,7 @@ fn definitions_share_one_namespace_from_2_4() {
     assert_eq!(error.definition(), Some("command 'Foo'"));
     assert_eq!(
         error.kind(),
-        &Kind::Duplicate {
-            name: "Foo".into(),
-            previous: "a.json".into(),
-        }
+        &Kind::Duplicate { name: "Foo".into(), previous: "a.json".into() }
     );
     let error = rejected(
         (11, 1, 3),
@@ -1332,7 +1194,10 @@ fn each_era_reserves_its_own_builtin_names() {
         let result = check(version, &format!("{{'enum':'{name}','data':[]}}"));
         if reserved {
             let error = result.unwrap_err();
-            assert_eq!(error.definition(), Some(format!("enum '{name}'").as_str()));
+            assert_eq!(
+                error.definition(),
+                Some(format!("enum '{name}'").as_str())
+            );
             assert_eq!(
                 error.kind(),
                 &Kind::Predefined { name: name.into() },
@@ -1344,11 +1209,7 @@ fn each_era_reserves_its_own_builtin_names() {
     }
     // From 2.4 commands share the namespace; before, QEMU checks no names.
     rules(&[
-        (
-            (2, 3, 0),
-            "{'type':'dict','data':{}} {'command':'int'}",
-            None,
-        ),
+        ((2, 3, 0), "{'type':'dict','data':{}} {'command':'int'}", None),
         (
             (2, 4, 0),
             "{'command':'int'}",
@@ -1358,9 +1219,7 @@ fn each_era_reserves_its_own_builtin_names() {
     // The name rules come first.
     assert_eq!(
         rejected((2, 6, 0), "{'struct':'q_empty','data':{}}").kind(),
-        &Kind::InvalidName {
-            name: "q_empty".into()
-        }
+        &Kind::InvalidName { name: "q_empty".into() }
     );
 }
 
@@ -1406,12 +1265,7 @@ fn fixture_outcome(path: &Path) -> (String, At) {
             parse_kind_name(&source.kind),
             at(&path, source.line, source.column),
         ),
-        Err(crate::ReadError::Include {
-            from,
-            line,
-            column,
-            kind,
-        }) => (
+        Err(crate::ReadError::Include { from, line, column, kind }) => (
             format!("Include:{}", kind_name(format!("{kind:?}"))),
             at(&from, line, column),
         ),
@@ -1643,7 +1497,8 @@ pub(crate) const FIXTURES: &[(&str, &str)] = &[
 const SKIPPED: &[(&str, &str)] = &[];
 
 fn qemu_fixtures() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../vendor/qemu/tests/qapi-schema")
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../vendor/qemu/tests/qapi-schema")
 }
 
 /// QEMU's test schemas whose `.err` file is empty (`false`) or not.
@@ -1655,7 +1510,8 @@ fn fixture_names(negative: bool) -> Vec<String> {
             let stem = path.file_stem()?.to_string_lossy().into_owned();
             (path.extension()? == "err"
                 && path.with_extension("json").exists()
-                && std::fs::read_to_string(&path).unwrap().trim().is_empty() != negative)
+                && std::fs::read_to_string(&path).unwrap().trim().is_empty()
+                    != negative)
                 .then_some(stem)
         })
         .collect();
@@ -1679,23 +1535,26 @@ fn qemu_negative_fixtures_fail_with_their_kind_where_qemu_reports_them() {
     );
     let mut failures = Vec::new();
     for (name, expected) in FIXTURES {
-        let err = std::fs::read_to_string(root.join(format!("{name}.err"))).unwrap();
+        let err =
+            std::fs::read_to_string(root.join(format!("{name}.err"))).unwrap();
         let report = err
             .lines()
-            .find(|line| !line.contains(": In ") && !line.starts_with("In file"))
+            .find(|line| {
+                !line.contains(": In ") && !line.starts_with("In file")
+            })
             .unwrap();
         let mut parts = report.split(':');
-        let file = parts
-            .next()
-            .and_then(|file| Path::new(file).file_name()?.to_str());
+        let file =
+            parts.next().and_then(|file| Path::new(file).file_name()?.to_str());
         let mut position = parts.map_while(|part| part.parse::<usize>().ok());
         let (line, column) = (position.next(), position.next());
         let (kind, at) = fixture_outcome(&root.join(format!("{name}.json")));
-        let located = at.as_ref().is_some_and(|(at_file, at_line, at_column)| {
-            Some(at_file.as_str()) == file
-                && Some(*at_line) == line
-                && column.is_none_or(|column| column == *at_column)
-        });
+        let located =
+            at.as_ref().is_some_and(|(at_file, at_line, at_column)| {
+                Some(at_file.as_str()) == file
+                    && Some(*at_line) == line
+                    && column.is_none_or(|column| column == *at_column)
+            });
         if kind != *expected || !located {
             failures.push(format!("{name}: {kind} at {at:?}, QEMU: {report}"));
         }
@@ -1711,7 +1570,8 @@ fn qemu_positive_fixtures_lower() {
     let failures: Vec<_> = names
         .iter()
         .filter_map(|name| {
-            let (kind, at) = fixture_outcome(&root.join(format!("{name}.json")));
+            let (kind, at) =
+                fixture_outcome(&root.join(format!("{name}.json")));
             (kind != "accepted").then(|| format!("{name}: {kind} at {at:?}"))
         })
         .collect();
@@ -1721,8 +1581,7 @@ fn qemu_positive_fixtures_lower() {
 #[test]
 fn dictionaries_in_place_of_types_are_anonymous_structs_until_4_0() {
     let member = "{'struct':'Foo','data':{'a':{'type':'int'}}}";
-    let branch =
-        "{'struct':'Ss','data':{}} {'alternate':'Aa','data':{'i':{'type':'int'},'s':'Ss'}}";
+    let branch = "{'struct':'Ss','data':{}} {'alternate':'Aa','data':{'i':{'type':'int'},'s':'Ss'}}";
     let returns = "{'command':'c','returns':{'a':'int'}}";
     rules(&[
         ((2, 3, 0), member, None),
@@ -1741,23 +1600,25 @@ fn dictionaries_in_place_of_types_are_anonymous_structs_until_4_0() {
             Some(Kind::InvalidName { name: "a b".into() }),
         ),
     ]);
-    assert_eq!(
-        rejected((3, 1, 0), member).context(),
-        ["'data'", "member 'a'"]
-    );
+    assert_eq!(rejected((3, 1, 0), member).context(), ["'data'", "member 'a'"]);
 }
 
 #[test]
 fn empty_conditions_are_refused_where_each_release_checks_them() {
     let empty = |condition: &str| {
-        Some(Kind::EmptyCondition {
-            condition: condition.into(),
-        })
+        Some(Kind::EmptyCondition { condition: condition.into() })
     };
-    let top = |cond: &str| format!("{{'struct':'Foo','data':{{'a':'int'}},'if':{cond}}}");
-    let member =
-        |cond: &str| format!("{{'struct':'Foo','data':{{'a':{{'type':'int','if':{cond}}}}}}}");
-    let value = |cond: &str| format!("{{'enum':'Foo','data':[{{'name':'a','if':{cond}}}]}}");
+    let top = |cond: &str| {
+        format!("{{'struct':'Foo','data':{{'a':'int'}},'if':{cond}}}")
+    };
+    let member = |cond: &str| {
+        format!(
+            "{{'struct':'Foo','data':{{'a':{{'type':'int','if':{cond}}}}}}}"
+        )
+    };
+    let value = |cond: &str| {
+        format!("{{'enum':'Foo','data':[{{'name':'a','if':{cond}}}]}}")
+    };
     rules(&[
         ((3, 0, 0), &top("' '"), None),
         ((3, 0, 0), &top("''"), empty("''")),
@@ -1855,17 +1716,14 @@ fn a_chain_of_5000_bases_needs_no_deeper_stack() {
         ));
     }
     let chain = format!("{text}{{'struct':'Sx0','data':{{'m0':'int'}}}}\n");
-    let cycle = format!("{text}{{'struct':'Sx0','base':'Sx4999','data':{{'m0':'int'}}}}\n");
+    let cycle = format!(
+        "{text}{{'struct':'Sx0','base':'Sx4999','data':{{'m0':'int'}}}}\n"
+    );
     check((4, 1, 0), &chain).unwrap();
     check((11, 1, 3), &chain).unwrap();
     assert_eq!(
         error_line((11, 1, 3), &cycle),
-        (
-            Kind::InheritanceCycle {
-                name: "Sx4999".into()
-            },
-            1
-        )
+        (Kind::InheritanceCycle { name: "Sx4999".into() }, 1)
     );
 }
 
@@ -1874,7 +1732,8 @@ fn before_2_4_bases_and_event_data_are_looked_up_as_qemu_does() {
     let empty =
         "{'enum':'Ee','data':['a']} {'type':'Bb','data':{}} {'type':'Ss','data':{'x':'int'}}
         {'union':'Uu','base':'Bb','discriminator':'d','data':{'a':'Ss'}}";
-    let nested = "{'type':'Str','data':{'a':{'b':'int'}}} {'event':'EVT','data':'Str'}";
+    let nested =
+        "{'type':'Str','data':{'a':{'b':'int'}}} {'event':'EVT','data':'Str'}";
     rules(&[
         // An empty base is none valid; an empty discriminator is none.
         ((1, 7, 0), empty, None),
@@ -1929,9 +1788,8 @@ fn flat_union_bases_need_members_until_2_8() {
              {{'union':'Uu','base':{base},'discriminator':'d','data':{{'a':'Ss'}}}}"
         )
     };
-    let not_member = Some(Kind::DiscriminatorNotMember {
-        discriminator: "d".into(),
-    });
+    let not_member =
+        Some(Kind::DiscriminatorNotMember { discriminator: "d".into() });
     rules(&[
         (
             (2, 4, 0),
@@ -1975,9 +1833,7 @@ fn discriminators_are_refused_in_qemus_words() {
         (
             (11, 1, 3),
             &union("{'*d':'Ee'}", "{'a':'Ss'}"),
-            Some(Kind::OptionalDiscriminator {
-                discriminator: "d".into(),
-            }),
+            Some(Kind::OptionalDiscriminator { discriminator: "d".into() }),
         ),
         // Until 4.1 QType is a builtin type, no enum.
         ((2, 6, 0), &qtype, not_enum("QType")),
@@ -2006,11 +1862,11 @@ fn alternate_branches_are_checked_in_the_order_of_each_release() {
     };
     let invalid = "{'alternate':'Alt','data':{'a':'int','b':'int','c!':'str'}}";
     let unknown = "{'alternate':'Alt','data':{'a':'int','b':'int','c':'Nope'}}";
-    let clash = "{'alternate':'Alt','data':{'a-b':'int','a_b':'str','c':'Nope'}}";
-    let late_clash = "{'alternate':'Alt','data':{'a-x':'int','b':'int','a_x':'str'}}";
-    let nope = Some(Kind::UnknownType {
-        name: "Nope".into(),
-    });
+    let clash =
+        "{'alternate':'Alt','data':{'a-b':'int','a_b':'str','c':'Nope'}}";
+    let late_clash =
+        "{'alternate':'Alt','data':{'a-x':'int','b':'int','a_x':'str'}}";
+    let nope = Some(Kind::UnknownType { name: "Nope".into() });
     rules(&[
         // Until 4.1 each branch in turn: name, constant, type, JSON type.
         ((2, 4, 0), invalid, ambiguous("b", "a")),
@@ -2020,11 +1876,7 @@ fn alternate_branches_are_checked_in_the_order_of_each_release() {
         ((2, 6, 0), clash, nope.clone()),
         // From 4.2 the expressions first, then every branch's type, then
         // each branch's name and JSON type.
-        (
-            (4, 2, 0),
-            invalid,
-            Some(Kind::InvalidName { name: "c!".into() }),
-        ),
+        ((4, 2, 0), invalid, Some(Kind::InvalidName { name: "c!".into() })),
         ((4, 2, 0), unknown, nope.clone()),
         ((5, 2, 0), clash, nope),
         ((4, 2, 0), late_clash, ambiguous("b", "a-x")),
@@ -2041,25 +1893,15 @@ fn enum_values_are_checked_one_by_one_in_2_4_and_2_5() {
     rules(&[
         ((2, 4, 0), value, clash("a_b", "a-b")),
         ((2, 5, 0), value, clash("a_b", "a-b")),
-        (
-            (2, 6, 0),
-            value,
-            Some(Kind::InvalidName {
-                name: "Bad!".into(),
-            }),
-        ),
+        ((2, 6, 0), value, Some(Kind::InvalidName { name: "Bad!".into() })),
     ]);
 }
 
 #[test]
 fn from_4_2_the_types_made_for_a_definition_are_checked_before_it() {
-    let nope = Some(Kind::UnknownType {
-        name: "Nope".into(),
-    });
-    let feature_clash = Some(Kind::FeatureClash {
-        name: "f_x".into(),
-        previous: "f-x".into(),
-    });
+    let nope = Some(Kind::UnknownType { name: "Nope".into() });
+    let feature_clash =
+        Some(Kind::FeatureClash { name: "f_x".into(), previous: "f-x".into() });
     let union_base = "{'enum':'Enm','data':['a']} {'struct':'Str','data':{'x':'int'}}
         {'union':'Uni','base':{'kind':'Enm','y':'Nope'},'discriminator':'kind','data':{'a':'Str'},'features':['FEATURE']}";
     rules(&[
@@ -2081,16 +1923,8 @@ fn from_4_2_the_types_made_for_a_definition_are_checked_before_it() {
             nope.clone(),
         ),
         // A union's base written out in place before the union's features.
-        (
-            (5, 0, 0),
-            &union_base.replace("FEATURE", "f-x','f_x"),
-            nope.clone(),
-        ),
-        (
-            (5, 0, 0),
-            &union_base.replace("FEATURE", "deprecated"),
-            nope.clone(),
-        ),
+        ((5, 0, 0), &union_base.replace("FEATURE", "f-x','f_x"), nope.clone()),
+        ((5, 0, 0), &union_base.replace("FEATURE", "deprecated"), nope.clone()),
         // An array type before the definition that first uses it.
         (
             (4, 2, 0),
@@ -2167,7 +2001,8 @@ fn commands_check_their_argument_type_until_4_1_and_from_8_1() {
 
 #[test]
 fn boxed_arguments_without_a_type_name_are_refused_where_qemu_does() {
-    let late = "{'command':'cmd','boxed':true}\n{'struct':'Xx','data':{'a b':'int'}}";
+    let late =
+        "{'command':'cmd','boxed':true}\n{'struct':'Xx','data':{'a b':'int'}}";
     // Until 4.1 with the schema's types, so after every expression.
     assert_eq!(
         error_line((2, 7, 0), late),
@@ -2184,10 +2019,7 @@ fn boxed_arguments_without_a_type_name_are_refused_where_qemu_does() {
 #[test]
 fn a_definition_name_is_checked_before_its_suffix() {
     let suffix = |name: &str, suffix: &'static str| {
-        Some(Kind::ReservedSuffix {
-            name: name.into(),
-            suffix,
-        })
+        Some(Kind::ReservedSuffix { name: name.into(), suffix })
     };
     rules(&[
         (
@@ -2232,31 +2064,22 @@ fn a_definition_name_is_checked_before_its_suffix() {
         ),
     ]);
     // Until 4.1 a name that is defined again is refused before its suffix.
-    let twice = "{'struct':'FooKind','data':{}}\n{'struct':'FooKind','data':{}}";
+    let twice =
+        "{'struct':'FooKind','data':{}}\n{'struct':'FooKind','data':{}}";
     assert!(matches!(
         error_line((2, 4, 0), &twice.replace("Kind", "List")).0,
         Kind::Duplicate { .. }
     ));
     assert_eq!(
         error_line((2, 5, 0), &twice.replace("Kind", "List")),
-        (
-            Kind::ReservedSuffix {
-                name: "FooList".into(),
-                suffix: "List"
-            },
-            1
-        )
+        (Kind::ReservedSuffix { name: "FooList".into(), suffix: "List" }, 1)
     );
 }
 
 #[test]
 fn from_5_0_a_definitions_condition_comes_before_its_features() {
-    let condition = Some(Kind::EmptyCondition {
-        condition: "''".into(),
-    });
-    let invalid = Some(Kind::InvalidName {
-        name: "bad name".into(),
-    });
+    let condition = Some(Kind::EmptyCondition { condition: "''".into() });
+    let invalid = Some(Kind::InvalidName { name: "bad name".into() });
     for text in [
         "{'struct':'Str','data':{},'if':'','features':['bad name']}",
         "{'struct':'Str','data':{},'features':['bad name'],'if':''}",
@@ -2273,7 +2096,8 @@ fn from_5_0_a_definitions_condition_comes_before_its_features() {
 #[test]
 fn four_one_checks_a_structs_features_after_its_members() {
     let member_clash = "{'struct':'Str','data':{'a-b':'int','a_b':'int'},'features':['f-x','f_x']}";
-    let uppercase = "{'struct':'Str','data':{'aB':'int'},'features':['f-x','f_x']}";
+    let uppercase =
+        "{'struct':'Str','data':{'aB':'int'},'features':['f-x','f_x']}";
     rules(&[
         ((4, 1, 0), member_clash, clash("a_b", "a-b")),
         (
@@ -2302,11 +2126,7 @@ fn each_rule_ends_where_its_release_drops_it() {
         ((4, 1, 0), inline_base, case("aB", NameRule::NoUppercase)),
         ((4, 2, 0), inline_base, None),
         ((5, 2, 0), inline_base, None),
-        (
-            (4, 1, 0),
-            one_branch,
-            Some(Kind::AlternateBranches { minimum: 2 }),
-        ),
+        ((4, 1, 0), one_branch, Some(Kind::AlternateBranches { minimum: 2 })),
         ((4, 2, 0), one_branch, None),
         ((4, 1, 0), empty_simple, Some(Kind::NoBranches)),
         ((4, 2, 0), empty_simple, Some(Kind::NoBranches)),
@@ -2314,9 +2134,7 @@ fn each_rule_ends_where_its_release_drops_it() {
         (
             (4, 1, 0),
             empty_base,
-            Some(Kind::UnknownType {
-                name: "q_empty".into(),
-            }),
+            Some(Kind::UnknownType { name: "q_empty".into() }),
         ),
         ((4, 2, 0), empty_base, None),
     ]);
@@ -2336,18 +2154,13 @@ fn two_four_takes_untyped_members_only_by_name() {
             "{'command':'cmd','gen':false,'data':{'a':['**']}}",
             untyped.clone(),
         ),
-        (
-            (2, 4, 0),
-            "{'command':'cmd','gen':false,'returns':['**']}",
-            untyped,
-        ),
+        ((2, 4, 0), "{'command':'cmd','gen':false,'returns':['**']}", untyped),
     ]);
 }
 
 #[test]
 fn the_tag_enum_of_an_alternate_is_a_type_in_2_4_and_2_5() {
-    let text =
-        "{'alternate':'Alt','data':{'a':'int','b':'str'}} {'struct':'Str','data':{'k':'AltKind'}}";
+    let text = "{'alternate':'Alt','data':{'a':'int','b':'str'}} {'struct':'Str','data':{'k':'AltKind'}}";
     rules(&[((2, 4, 0), text, None), ((2, 5, 0), text, None)]);
 }
 
@@ -2365,9 +2178,7 @@ fn names_may_end_in_a_newline_until_4_1() {
     rules(&[(
         (4, 1, 0),
         "{'enum':'Enm','data':['a\\n\\n']}",
-        Some(Kind::InvalidName {
-            name: "a\n\n".into(),
-        }),
+        Some(Kind::InvalidName { name: "a\n\n".into() }),
     )]);
 }
 
@@ -2378,11 +2189,7 @@ fn keys_are_checked_in_the_order_of_each_release() {
     let invalid = |name: &str| Some(Kind::InvalidName { name: name.into() });
     rules(&[
         // Keys that no release knows are the validation's.
-        (
-            (2, 4, 0),
-            "{'command':'cc','bogus':'x'}",
-            unknown_key("bogus"),
-        ),
+        ((2, 4, 0), "{'command':'cc','bogus':'x'}", unknown_key("bogus")),
         (
             (11, 1, 3),
             "{'event':'EV','bogus':{'x':['y',{}]}}",
@@ -2394,11 +2201,7 @@ fn keys_are_checked_in_the_order_of_each_release() {
             "{'command':'cc','gen':true,'bogus':'x'}",
             flag("gen", false),
         ),
-        (
-            (3, 1, 0),
-            "{'union':'Uu','bogus':'x'}",
-            unknown_key("bogus"),
-        ),
+        ((3, 1, 0), "{'union':'Uu','bogus':'x'}", unknown_key("bogus")),
         (
             (2, 7, 0),
             "{'command':'cc','boxed':false,'if':''}",
@@ -2412,9 +2215,7 @@ fn keys_are_checked_in_the_order_of_each_release() {
         (
             (3, 0, 0),
             "{'command':'cc','if':'','boxed':false}",
-            Some(Kind::EmptyCondition {
-                condition: "''".into(),
-            }),
+            Some(Kind::EmptyCondition { condition: "''".into() }),
         ),
         ((2, 4, 0), "{'enum':'Ee'}", missing("data")),
         // From 4.0 the missing keys, then the unknown ones, sorted.
@@ -2424,11 +2225,7 @@ fn keys_are_checked_in_the_order_of_each_release() {
             unknown_key("bogus"),
         ),
         ((4, 0, 0), "{'union':'Uu','bogus':'x'}", missing("data")),
-        (
-            (4, 0, 0),
-            "{'command':'cc','zz':'x','aa':'y'}",
-            unknown_key("aa"),
-        ),
+        ((4, 0, 0), "{'command':'cc','zz':'x','aa':'y'}", unknown_key("aa")),
         ((6, 2, 0), "{'union':'Uu','data':{}}", missing("base")),
         // A second kind's key is unknown, from 6.2 a fault of its own.
         (
@@ -2510,7 +2307,8 @@ fn schemas_that_qemu_fails_on_are_refused_with_a_crash_where_it_fails() {
     let any = "{'alternate':'Alt','data':{'a':'int','b':'any'}}";
     let tag = "{'struct':'Ss','data':{}} {'alternate':'Alt','data':{'a':'int','b':'Ss'}}
         {'struct':'Str','data':{'k':'AltKind'}}";
-    let tag_after_case = tag.replace("'k':'AltKind'", "'A':'int','k':'AltKind'");
+    let tag_after_case =
+        tag.replace("'k':'AltKind'", "'A':'int','k':'AltKind'");
     let tag_branch = "{'struct':'Ss','data':{}} {'alternate':'Alt','data':{'a':'int','b':'Ss'}}
         {'alternate':'Two','data':{'a':'AltKind','b':'Ss'}}";
     let array = "{'enum':'E','data':['a']} {'struct':'B','data':{'kind':['E']}}
@@ -2536,48 +2334,20 @@ fn schemas_that_qemu_fails_on_are_refused_with_a_crash_where_it_fails() {
                 previous: "a".into(),
             }),
         ),
-        (
-            (2, 4, 0),
-            any,
-            Some(Kind::UnknownType { name: "any".into() }),
-        ),
-        (
-            (2, 5, 0),
-            any,
-            crash(Crash::AlternateAny { branch: "b".into() }),
-        ),
+        ((2, 4, 0), any, Some(Kind::UnknownType { name: "any".into() })),
+        ((2, 5, 0), any, crash(Crash::AlternateAny { branch: "b".into() })),
         ((2, 6, 0), any, not_allowed("built-in", "'any'")),
         ((2, 5, 0), tag, None),
-        (
-            (2, 6, 0),
-            tag,
-            crash(Crash::AlternateTag {
-                name: "AltKind".into(),
-            }),
-        ),
-        (
-            (4, 1, 0),
-            tag,
-            crash(Crash::AlternateTag {
-                name: "AltKind".into(),
-            }),
-        ),
-        (
-            (4, 2, 0),
-            tag,
-            Some(Kind::UnknownType {
-                name: "AltKind".into(),
-            }),
-        ),
+        ((2, 6, 0), tag, crash(Crash::AlternateTag { name: "AltKind".into() })),
+        ((4, 1, 0), tag, crash(Crash::AlternateTag { name: "AltKind".into() })),
+        ((4, 2, 0), tag, Some(Kind::UnknownType { name: "AltKind".into() })),
         // The members in turn, each with its clashes.
         ((2, 6, 0), &tag_after_case, case("A", NameRule::NoUppercase)),
         // From 2.10 the alternate looks for the tag enum's values first.
         (
             (2, 10, 0),
             tag_branch,
-            crash(Crash::AlternateTag {
-                name: "AltKind".into(),
-            }),
+            crash(Crash::AlternateTag { name: "AltKind".into() }),
         ),
         (
             (2, 7, 0),
@@ -2625,7 +2395,8 @@ fn values_of_other_shapes_are_refused_as_each_release_checks_them() {
             construct: crate::unified::Construct::Value { key: key.into() },
         })
     };
-    let unchecked = |key: &str| crash(Crash::UncheckedValue { key: key.into() });
+    let unchecked =
+        |key: &str| crash(Crash::UncheckedValue { key: key.into() });
     rules(&[
         (
             (2, 4, 0),
@@ -2668,21 +2439,9 @@ fn values_of_other_shapes_are_refused_as_each_release_checks_them() {
             "{'enum':'Ee','data':[],'prefix':[]}",
             shape(Shape::String),
         ),
-        (
-            (11, 1, 3),
-            "{'enum':'Ee','data':[true]}",
-            Some(Kind::NameNotString),
-        ),
-        (
-            (2, 4, 0),
-            "{'struct':true,'data':{}}",
-            Some(Kind::NameNotString),
-        ),
-        (
-            (11, 1, 3),
-            "{'struct':true,'data':{}}",
-            Some(Kind::NameNotString),
-        ),
+        ((11, 1, 3), "{'enum':'Ee','data':[true]}", Some(Kind::NameNotString)),
+        ((2, 4, 0), "{'struct':true,'data':{}}", Some(Kind::NameNotString)),
+        ((11, 1, 3), "{'struct':true,'data':{}}", Some(Kind::NameNotString)),
         (
             (11, 1, 3),
             "{'struct':'Ss','data':{},'features':'f'}",
@@ -2696,30 +2455,15 @@ fn values_of_other_shapes_are_refused_as_each_release_checks_them() {
         (
             (11, 1, 3),
             "{'command':'c','gen':'no'}",
-            Some(Kind::FlagValue {
-                flag: "gen",
-                value: false,
-            }),
+            Some(Kind::FlagValue { flag: "gen", value: false }),
         ),
         // `null` is no value from 4.2, and until 4.1 an absent one where
         // QEMU looks a key up with `get`.
-        (
-            (4, 1, 0),
-            "{'command':'c','data':null,'returns':null}",
-            None,
-        ),
-        (
-            (4, 1, 0),
-            "{'struct':'Ss','data':{},'base':null,'if':null}",
-            None,
-        ),
+        ((4, 1, 0), "{'command':'c','data':null,'returns':null}", None),
+        ((4, 1, 0), "{'struct':'Ss','data':{},'base':null,'if':null}", None),
         ((2, 4, 0), "{'struct':'Ss','data':null}", value("data")),
         ((2, 5, 0), "{'struct':'Ss','data':null}", unchecked("data")),
-        (
-            (4, 1, 0),
-            "{'struct':'Ss','data':{'a':null}}",
-            unchecked("type"),
-        ),
+        ((4, 1, 0), "{'struct':'Ss','data':{'a':null}}", unchecked("type")),
         // 4.0 and 4.1 do not check a member's condition.
         (
             (4, 1, 0),
@@ -2745,9 +2489,7 @@ fn values_of_other_shapes_are_refused_as_each_release_checks_them() {
         (
             (6, 2, 0),
             "{'struct':'Ss','data':{},'if':''}",
-            Some(Kind::InvalidCondition {
-                condition: "''".into(),
-            }),
+            Some(Kind::InvalidCondition { condition: "''".into() }),
         ),
         (
             (6, 2, 0),
@@ -2760,31 +2502,19 @@ fn values_of_other_shapes_are_refused_as_each_release_checks_them() {
             shape(Shape::Array),
         ),
         // The branches of a union or alternate.
-        (
-            (2, 5, 0),
-            "{'alternate':'Al','data':['a','b']}",
-            unchecked("data"),
-        ),
+        ((2, 5, 0), "{'alternate':'Al','data':['a','b']}", unchecked("data")),
         (
             (2, 6, 0),
             "{'alternate':'Al','data':['a']}",
             Some(Kind::AlternateBranches { minimum: 2 }),
         ),
-        (
-            (4, 2, 0),
-            "{'alternate':'Al','data':['a']}",
-            unchecked("data"),
-        ),
+        ((4, 2, 0), "{'alternate':'Al','data':['a']}", unchecked("data")),
         (
             (6, 1, 0),
             "{'alternate':'Al','data':[]}",
             Some(Kind::AlternateBranches { minimum: 1 }),
         ),
-        (
-            (6, 1, 0),
-            "{'alternate':'Al','data':'x'}",
-            shape(Shape::Object),
-        ),
+        ((6, 1, 0), "{'alternate':'Al','data':'x'}", shape(Shape::Object)),
         (
             (2, 6, 0),
             "{'alternate':'Al','data':{'a':null,'b':'int'}}",
@@ -2835,25 +2565,18 @@ fn values_of_other_shapes_keep_qemus_order() {
         );
     }
     // Within a definition, its arguments before its return type.
-    let returns = "{'command':'cmd','data':{'Bad!':'int'},'returns':{'a':'int'}}";
+    let returns =
+        "{'command':'cmd','data':{'Bad!':'int'},'returns':{'a':'int'}}";
     for version in [(4, 0, 0), (11, 1, 3)] {
         assert_eq!(
             error_line(version, returns),
-            (
-                Kind::InvalidName {
-                    name: "Bad!".into()
-                },
-                1
-            ),
+            (Kind::InvalidName { name: "Bad!".into() }, 1),
             "{version:?}"
         );
     }
     // A documented expression without a metatype is refused for that.
     let documented = "##\n# @Target:\n##\n{'type':'Target','data':{}}";
-    assert_eq!(
-        error_line((2, 9, 0), documented),
-        (Kind::MissingMetatype, 4)
-    );
+    assert_eq!(error_line((2, 9, 0), documented), (Kind::MissingMetatype, 4));
     assert_eq!(error_line((6, 2, 0), documented), (Kind::Metatypes, 4));
 }
 
@@ -2865,14 +2588,10 @@ fn release_boundaries_of_the_parser_and_entities_hold() {
     assert_eq!(rejected((2, 7, 0), pragma).kind(), &Kind::MissingMetatype);
     // From 7.1 an alternate's array branch makes an array type, which
     // QEMU checks with the alternate.
-    let array = "{ 'alternate': 'Alt', 'data': { 'a': [ 'Nope' ], 'b': 'str' } }";
+    let array =
+        "{ 'alternate': 'Alt', 'data': { 'a': [ 'Nope' ], 'b': 'str' } }";
     let error = rejected((7, 1, 0), array);
-    assert_eq!(
-        error.kind(),
-        &Kind::UnknownType {
-            name: "Nope".into()
-        }
-    );
+    assert_eq!(error.kind(), &Kind::UnknownType { name: "Nope".into() });
     assert!(error.context().is_empty(), "{error}");
     assert_eq!(rejected((7, 0, 0), array).kind(), &Kind::ArrayNotAllowed);
     // QEMU 2.9 and later read a documentation comment with an empty line,

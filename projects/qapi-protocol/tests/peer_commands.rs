@@ -3,11 +3,13 @@
 //! peer cannot run before anything is sent.
 mod support;
 
-use qapi::commands::{QueryBlock, QueryStatus, QueryYank};
-use qapi::qga::commands::{GuestFsfreezeStatusCommand, GuestGetTime, GuestPing};
+use qapi::{
+    commands::{QueryBlock, QueryStatus, QueryYank},
+    qga::commands::{GuestFsfreezeStatusCommand, GuestGetTime, GuestPing},
+};
 use qapi_protocol::{
-    ClientOptions, Error, MissingCommand, ProtocolViolation, Qmp, QmpEvents, Required,
-    Unavailability,
+    ClientOptions, Error, MissingCommand, ProtocolViolation, Qmp, QmpEvents,
+    Required, Unavailability,
     qga::Qga,
     server::{QgaSession, QmpSession},
 };
@@ -38,13 +40,12 @@ async fn offering(offered: &[&str]) -> (Qmp, QmpEvents, QmpSession) {
     (client, events, peer)
 }
 
-fn unavailable(result: qapi_protocol::Result<impl std::fmt::Debug>) -> (String, Unavailability) {
+fn unavailable(
+    result: qapi_protocol::Result<impl std::fmt::Debug>,
+) -> (String, Unavailability) {
     match result {
         Err(Error::Unavailable {
-            name,
-            version: (11, 1, 3),
-            reason,
-            ..
+            name, version: (11, 1, 3), reason, ..
         }) => (name, reason),
         other => panic!("expected Unavailable, got {other:?}"),
     }
@@ -52,7 +53,8 @@ fn unavailable(result: qapi_protocol::Result<impl std::fmt::Debug>) -> (String, 
 
 #[tokio::test]
 async fn a_qmp_session_asks_for_the_commands_once() {
-    let (client, _events, mut peer) = offering(&["query-status", "query-block"]).await;
+    let (client, _events, mut peer) =
+        offering(&["query-status", "query-block"]).await;
     assert_eq!(peer.probes(), 1);
     let commands = client.commands().expect("the mock listed its commands");
     assert!(commands.offers("query-status") && commands.offers("query-block"));
@@ -88,7 +90,9 @@ async fn a_command_the_peer_does_not_list_fails_before_anything_is_sent() {
         "query-block is not available in QEMU 11.1.3: the peer does not offer it"
     );
     assert_eq!(
-        unavailable(client.execute_raw::<Value>("query-block", json!({})).await),
+        unavailable(
+            client.execute_raw::<Value>("query-block", json!({})).await
+        ),
         ("query-block".to_owned(), Unavailability::NotOffered)
     );
     assert_eq!(
@@ -112,7 +116,8 @@ async fn a_command_the_peer_does_not_list_fails_before_anything_is_sent() {
 async fn the_release_decides_before_the_list() {
     // A peer may list a command that a distribution backported; a typed
     // command that its release lacks stays refused for the release.
-    let (client, _events, _peer) = offering(&["query-status", "x-future"]).await;
+    let (client, _events, _peer) =
+        offering(&["query-status", "x-future"]).await;
     assert_eq!(
         unavailable(client.execute(&FutureCommand {}).await),
         ("x-future".to_owned(), Unavailability::Release)
@@ -138,10 +143,7 @@ async fn require_lists_every_command_the_peer_cannot_run() {
         "QEMU 11.1.3 cannot run query-block (the peer does not offer it), \
          x-future (that release does not have it)"
     );
-    let Error::MissingCommands {
-        version, missing, ..
-    } = error
-    else {
+    let Error::MissingCommands { version, missing, .. } = error else {
         panic!("expected MissingCommands, got {error:?}");
     };
     assert_eq!(version, (11, 1, 3));
@@ -161,7 +163,8 @@ async fn require_lists_every_command_the_peer_cannot_run() {
 #[tokio::test]
 async fn a_refused_query_keeps_only_the_release_checks() {
     // The mock answers query-commands with CommandNotFound by default.
-    let (client, _events, mut peer) = support::qmp(ClientOptions::default()).await;
+    let (client, _events, mut peer) =
+        support::qmp(ClientOptions::default()).await;
     assert_eq!(peer.probes(), 1);
     assert!(client.commands().is_none());
     assert!(client.supports::<QueryBlock>());
@@ -180,10 +183,11 @@ async fn the_query_can_be_turned_off() {
     let (client, server) = UnixStream::pair().unwrap();
     let mut peer = QmpSession::from_stream(server);
     peer.expect_probe(false);
-    let (client, ()) = tokio::join!(Qmp::from_stream_with_options(client, options), async {
-        peer.send_greeting(11, 1, 3).await.unwrap();
-        peer.negotiate().await.unwrap();
-    });
+    let (client, ()) =
+        tokio::join!(Qmp::from_stream_with_options(client, options), async {
+            peer.send_greeting(11, 1, 3).await.unwrap();
+            peer.negotiate().await.unwrap();
+        });
     let (client, _events) = client.unwrap();
     assert_eq!(peer.probes(), 0);
     assert!(client.commands().is_none());
@@ -214,16 +218,9 @@ async fn a_mock_keeps_the_first_command_of_a_client_that_does_not_ask() {
         peer.probes()
     });
     let options = ClientOptions::default().with_probe_commands(false);
-    let (client, _events) = Qmp::from_stream_with_options(client, options)
-        .await
-        .unwrap();
-    assert!(
-        client
-            .execute(&QueryStatus::default())
-            .await
-            .unwrap()
-            .running
-    );
+    let (client, _events) =
+        Qmp::from_stream_with_options(client, options).await.unwrap();
+    assert!(client.execute(&QueryStatus::default()).await.unwrap().running);
     assert_eq!(mock.await.unwrap(), 0);
 }
 
@@ -235,7 +232,8 @@ async fn a_query_reply_with_another_id_breaks_the_handshake() {
     let server = tokio::spawn(async move {
         support::write(&mut write, support::greeting()).await;
         let caps = support::read(&mut read).await;
-        support::write(&mut write, json!({"return": {}, "id": caps["id"]})).await;
+        support::write(&mut write, json!({"return": {}, "id": caps["id"]}))
+            .await;
         let query = support::read(&mut read).await;
         assert_eq!(query["execute"], "query-commands");
         support::write(&mut write, json!({"return": [], "id": 7})).await;
@@ -256,7 +254,8 @@ async fn events_before_the_query_reply_are_kept() {
     let server = tokio::spawn(async move {
         support::write(&mut write, support::greeting()).await;
         let caps = support::read(&mut read).await;
-        support::write(&mut write, json!({"return": {}, "id": caps["id"]})).await;
+        support::write(&mut write, json!({"return": {}, "id": caps["id"]}))
+            .await;
         let query = support::read(&mut read).await;
         support::write(
             &mut write,
@@ -277,16 +276,22 @@ async fn events_before_the_query_reply_are_kept() {
 }
 
 /// A guest agent client whose agent lists `commands` in `guest-info`.
-async fn agent_listing(options: ClientOptions, commands: Value) -> (Qga, QgaSession) {
+async fn agent_listing(
+    options: ClientOptions,
+    commands: Value,
+) -> (Qga, QgaSession) {
     let (client, server) = UnixStream::pair().unwrap();
     let mut peer = QgaSession::from_stream(server);
-    let (client, ()) = tokio::join!(Qga::from_stream_with_options(client, options), async {
-        peer.handle_sync().await.unwrap();
-        assert_eq!(peer.recv_command().await.unwrap().0, "guest-info");
-        peer.send_return(json!({"version": "11.1.3", "supported_commands": commands}))
+    let (client, ()) =
+        tokio::join!(Qga::from_stream_with_options(client, options), async {
+            peer.handle_sync().await.unwrap();
+            assert_eq!(peer.recv_command().await.unwrap().0, "guest-info");
+            peer.send_return(
+                json!({"version": "11.1.3", "supported_commands": commands}),
+            )
             .await
             .unwrap();
-    });
+        });
     (client.unwrap(), peer)
 }
 
@@ -300,18 +305,20 @@ fn agent_commands() -> Value {
 
 #[tokio::test]
 async fn a_guest_agent_refuses_what_guest_info_lists_as_disabled_or_omits() {
-    let (mut client, mut peer) = agent_listing(ClientOptions::default(), agent_commands()).await;
+    let (mut client, mut peer) =
+        agent_listing(ClientOptions::default(), agent_commands()).await;
     let commands = client.commands().expect("the agent listed its commands");
     assert!(commands.offers("guest-ping"));
     assert!(commands.is_disabled("guest-fsfreeze-status"));
     assert!(!commands.offers("guest-fsfreeze-status"));
     assert_eq!(
-        unavailable(client.execute(&GuestFsfreezeStatusCommand::default()).await),
+        unavailable(
+            client.execute(&GuestFsfreezeStatusCommand::default()).await
+        ),
         ("guest-fsfreeze-status".to_owned(), Unavailability::Disabled)
     );
-    let disabled = client
-        .execute_raw::<Value>("guest-fsfreeze-status", json!({}))
-        .await;
+    let disabled =
+        client.execute_raw::<Value>("guest-fsfreeze-status", json!({})).await;
     assert_eq!(
         disabled.as_ref().map(drop).unwrap_err().to_string(),
         "guest-fsfreeze-status is not available in QEMU 11.1.3: the guest agent has it disabled"
@@ -333,10 +340,7 @@ async fn a_guest_agent_refuses_what_guest_info_lists_as_disabled_or_omits() {
         panic!("expected MissingCommands");
     };
     assert_eq!(
-        missing
-            .iter()
-            .map(|command| command.reason)
-            .collect::<Vec<_>>(),
+        missing.iter().map(|command| command.reason).collect::<Vec<_>>(),
         [Unavailability::Disabled, Unavailability::NotOffered]
     );
     // The refused calls sent nothing and kept the session aligned.
@@ -355,14 +359,16 @@ async fn a_guest_info_reply_without_guest_info_is_no_command_list() {
         json!([]),
         json!([{"name": "guest-ping", "enabled": true, "success-response": true}]),
     ] {
-        let (client, _peer) = agent_listing(ClientOptions::default(), commands).await;
+        let (client, _peer) =
+            agent_listing(ClientOptions::default(), commands).await;
         assert!(client.commands().is_none());
         assert!(client.supports::<GuestFsfreezeStatusCommand>());
     }
 }
 
 #[tokio::test]
-async fn a_guest_agent_client_that_turns_the_list_off_sends_anything_the_release_has() {
+async fn a_guest_agent_client_that_turns_the_list_off_sends_anything_the_release_has()
+ {
     let options = ClientOptions::default().with_probe_commands(false);
     let (mut client, mut peer) = agent_listing(options, agent_commands()).await;
     assert!(client.commands().is_none());

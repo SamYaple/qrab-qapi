@@ -11,7 +11,9 @@ fn serialization_context_is_nested_and_restored_on_panic() {
         assert_eq!(qemu_version(), (11, 1, 3));
         with_version((10, 2, 3), || assert_eq!(qemu_version(), (10, 2, 3)));
         assert_eq!(qemu_version(), (11, 1, 3));
-        let result = std::panic::catch_unwind(|| with_version((1, 0, 0), || panic!("test unwind")));
+        let result = std::panic::catch_unwind(|| {
+            with_version((1, 0, 0), || panic!("test unwind"))
+        });
         assert!(result.is_err());
         assert_eq!(qemu_version(), (11, 1, 3));
         std::thread::spawn(move || assert_eq!(qemu_version(), original))
@@ -23,8 +25,10 @@ fn serialization_context_is_nested_and_restored_on_panic() {
 
 #[test]
 fn out_of_context_serialization_names_the_fix_and_the_helper_works() {
-    let props: qapi::CpuInstanceProperties =
-        serde_json::from_value(serde_json::json!({"core-id": 2, "thread-id": 0})).unwrap();
+    let props: qapi::CpuInstanceProperties = serde_json::from_value(
+        serde_json::json!({"core-id": 2, "thread-id": 0}),
+    )
+    .unwrap();
     let error = serde_json::to_value(&props).unwrap_err().to_string();
     assert!(error.contains("CpuInstanceProperties"), "{error}");
     assert!(error.contains("qapi::with_version"), "{error}");
@@ -35,9 +39,7 @@ fn out_of_context_serialization_names_the_fix_and_the_helper_works() {
     // Inside a context, a type outside its lifetime names the peer version.
     let removed: qapi::TargetInfo =
         serde_json::from_value(serde_json::json!({"arch": "x86_64"})).unwrap();
-    let error = qapi::to_value((11, 1, 3), &removed)
-        .unwrap_err()
-        .to_string();
+    let error = qapi::to_value((11, 1, 3), &removed).unwrap_err().to_string();
     assert!(error.contains("not available in QEMU 11.1.3"), "{error}");
     assert!(qapi::to_value((10, 0, 0), &removed).is_ok());
 }
@@ -63,7 +65,9 @@ enum VersionedAlternate {
 
 #[test]
 fn enum_serialization_checks_variant_introduction_and_removal_boundaries() {
-    assert!(qapi::to_value((10, 1, 0), &VersionedUnitEnum::Introduced).is_err());
+    assert!(
+        qapi::to_value((10, 1, 0), &VersionedUnitEnum::Introduced).is_err()
+    );
     assert_eq!(
         qapi::to_value((10, 2, 0), &VersionedUnitEnum::Introduced).unwrap(),
         "introduced"
@@ -82,16 +86,22 @@ fn enum_serialization_checks_variant_introduction_and_removal_boundaries() {
 
 #[test]
 fn alternate_serialization_checks_type_and_variant_lifetimes() {
-    assert!(qapi::to_value((10, 1, 0), &VersionedAlternate::Text("value".into())).is_err());
+    assert!(
+        qapi::to_value((10, 1, 0), &VersionedAlternate::Text("value".into()))
+            .is_err()
+    );
     assert_eq!(
-        qapi::to_value((10, 2, 0), &VersionedAlternate::Text("value".into())).unwrap(),
+        qapi::to_value((10, 2, 0), &VersionedAlternate::Text("value".into()))
+            .unwrap(),
         "value"
     );
     assert_eq!(
         qapi::to_value((10, 2, 0), &VersionedAlternate::Number(1)).unwrap(),
         1
     );
-    assert!(qapi::to_value((11, 0, 0), &VersionedAlternate::Number(1)).is_err());
+    assert!(
+        qapi::to_value((11, 0, 0), &VersionedAlternate::Number(1)).is_err()
+    );
     assert!(qapi::to_value((9, 2, 0), &VersionedAlternate::Null).is_err());
     assert!(
         qapi::to_value((10, 0, 0), &VersionedAlternate::Null)
@@ -99,7 +109,10 @@ fn alternate_serialization_checks_type_and_variant_lifetimes() {
             .is_null()
     );
     assert!(qapi::to_value((9, 1, 0), &VersionedAlternate::Number(1)).is_err());
-    assert!(qapi::to_value((12, 0, 0), &VersionedAlternate::Text("value".into())).is_err());
+    assert!(
+        qapi::to_value((12, 0, 0), &VersionedAlternate::Text("value".into()))
+            .is_err()
+    );
     let error = serde_json::to_value(VersionedAlternate::Number(1))
         .unwrap_err()
         .to_string();
@@ -108,11 +121,17 @@ fn alternate_serialization_checks_type_and_variant_lifetimes() {
 
 #[test]
 fn scoped_enum_and_alternate_decoding_enforces_unique_variant_lifetimes() {
-    for (version, wire) in [((10, 1, 0), "introduced"), ((11, 0, 0), "retired")] {
+    for (version, wire) in [((10, 1, 0), "introduced"), ((11, 0, 0), "retired")]
+    {
         with_version(version, || {
-            assert!(serde_json::from_value::<VersionedUnitEnum>(wire.into()).is_err());
+            assert!(
+                serde_json::from_value::<VersionedUnitEnum>(wire.into())
+                    .is_err()
+            );
         });
-        assert!(serde_json::from_value::<VersionedUnitEnum>(wire.into()).is_ok());
+        assert!(
+            serde_json::from_value::<VersionedUnitEnum>(wire.into()).is_ok()
+        );
     }
     for (version, wire) in [
         ((10, 1, 0), serde_json::json!("value")),
@@ -120,19 +139,24 @@ fn scoped_enum_and_alternate_decoding_enforces_unique_variant_lifetimes() {
         ((9, 2, 0), serde_json::Value::Null),
     ] {
         with_version(version, || {
-            assert!(serde_json::from_value::<VersionedAlternate>(wire.clone()).is_err());
+            assert!(
+                serde_json::from_value::<VersionedAlternate>(wire.clone())
+                    .is_err()
+            );
         });
         assert!(serde_json::from_value::<VersionedAlternate>(wire).is_ok());
     }
 }
 
 #[test]
-fn generated_migration_commands_cannot_send_capabilities_outside_their_lifetime() {
-    let command =
-        qapi::commands::MigrateSetCapabilities::new(vec![qapi::MigrationCapabilityStatus::new(
+fn generated_migration_commands_cannot_send_capabilities_outside_their_lifetime()
+ {
+    let command = qapi::commands::MigrateSetCapabilities::new(vec![
+        qapi::MigrationCapabilityStatus::new(
             qapi::MigrationCapability::MappedRam,
             true,
-        )]);
+        ),
+    ]);
     assert!(qapi::to_value((8, 2, 0), &command).is_err());
     assert_eq!(
         qapi::to_value((9, 0, 0), &command).unwrap(),
@@ -141,11 +165,12 @@ fn generated_migration_commands_cannot_send_capabilities_outside_their_lifetime(
         })
     );
     #[allow(deprecated)]
-    let retired =
-        qapi::commands::MigrateSetCapabilities::new(vec![qapi::MigrationCapabilityStatus::new(
+    let retired = qapi::commands::MigrateSetCapabilities::new(vec![
+        qapi::MigrationCapabilityStatus::new(
             qapi::MigrationCapability::ZeroBlocks,
             true,
-        )]);
+        ),
+    ]);
     assert!(qapi::to_value((10, 2, 0), &retired).is_ok());
     assert!(qapi::to_value((11, 0, 0), &retired).is_err());
 }

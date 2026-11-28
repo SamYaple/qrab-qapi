@@ -1,10 +1,14 @@
 //! Lowering and merging releases given as schema text.
-use super::lower::{VersionResult, VersionSources, lower_versions, parse_versions};
-use super::merge::{has_feature, merge_struct};
-use super::registry::merge_releases;
-use super::*;
+use super::{
+    lower::{VersionResult, VersionSources, lower_versions, parse_versions},
+    merge::{has_feature, merge_struct},
+    registry::merge_releases,
+    *,
+};
 
-pub(super) fn lowered(releases: &[(&str, &str)]) -> Result<Vec<VersionResult>, RegistryError> {
+pub(super) fn lowered(
+    releases: &[(&str, &str)],
+) -> Result<Vec<VersionResult>, RegistryError> {
     let tags: Vec<_> = releases.iter().map(|(tag, _)| *tag).collect();
     let sources = releases
         .iter()
@@ -23,16 +27,15 @@ pub(super) fn lowered(releases: &[(&str, &str)]) -> Result<Vec<VersionResult>, R
     lower_versions(&tags, sources)
 }
 
-pub(super) fn registry(releases: &[(&str, &str)]) -> Result<UnifiedRegistry, RegistryError> {
+pub(super) fn registry(
+    releases: &[(&str, &str)],
+) -> Result<UnifiedRegistry, RegistryError> {
     merge_releases("QMP", lowered(releases)?)
 }
 
 fn schema_error(tag: &str, text: &str) -> SchemaError {
     match registry(&[(tag, text)]).unwrap_err() {
-        RegistryError::Schema {
-            tag: failed,
-            source,
-        } => {
+        RegistryError::Schema { tag: failed, source } => {
             assert_eq!(failed, tag);
             source
         }
@@ -41,11 +44,7 @@ fn schema_error(tag: &str, text: &str) -> SchemaError {
 }
 
 fn field_names(value: &Struct) -> Vec<&str> {
-    value
-        .fields
-        .iter()
-        .map(|field| field.name.as_str())
-        .collect()
+    value.fields.iter().map(|field| field.name.as_str()).collect()
 }
 
 #[test]
@@ -86,14 +85,12 @@ fn a_used_predefined_type_spans_every_release_of_its_era() {
     let UnifiedType::Enum(qtype) = &registry.types["QType"] else {
         panic!("QType is an enum")
     };
-    assert_eq!(
-        (qtype.versions.since, qtype.versions.until),
-        ((2, 6, 0), None)
-    );
+    assert_eq!((qtype.versions.since, qtype.versions.until), ((2, 6, 0), None));
     assert_eq!(qtype.variant_versions["qint"].until, Some((2, 10, 0)));
     assert_eq!(qtype.variant_versions["qnum"].since, (2, 10, 0));
     assert!(!registry.types.contains_key("QEmpty"));
-    let unused = self::registry(&[("v2.6.0", "{'struct':'Holder','data':{}}")]).unwrap();
+    let unused =
+        self::registry(&[("v2.6.0", "{'struct':'Holder','data':{}}")]).unwrap();
     assert!(!unused.types.contains_key("QType"));
 }
 
@@ -126,13 +123,17 @@ fn declared_members_keep_their_names_before_virtual_ones() {
         "" => base(members),
         _ => base(members).replace("'struct'", "'type'"),
     };
-    let releases = lowered(&[("v2.3.0", &base(",'U':'str'")), ("v2.4.0", &base(""))]).unwrap();
+    let releases =
+        lowered(&[("v2.3.0", &base(",'U':'str'")), ("v2.4.0", &base(""))])
+            .unwrap();
     for release in &releases {
         let owner = &release.structs["Owner"];
         let virtual_field = owner
             .fields
             .iter()
-            .find(|field| field.meta.attributes.contains(&Attribute::new("flatten")))
+            .find(|field| {
+                field.meta.attributes.contains(&Attribute::new("flatten"))
+            })
             .unwrap();
         assert_eq!(virtual_field.name, "u_alt", "{}", release.tag);
     }
@@ -146,10 +147,7 @@ fn merged_fields_lose_the_blank_lines_around_their_documentation() {
         r#type: "str".into(),
         optional: false,
         array: false,
-        meta: Metadata {
-            schema_doc: Some(doc.into()),
-            ..Default::default()
-        },
+        meta: Metadata { schema_doc: Some(doc.into()), ..Default::default() },
     };
     let record = |fields| Struct {
         name: "Record".into(),
@@ -186,7 +184,8 @@ fn merged_fields_lose_the_blank_lines_around_their_documentation() {
 
 #[test]
 fn a_dropped_deprecation_ends_its_range() {
-    let deprecated = Attribute::List(vec![Attribute::with_value("feature", "deprecated")]);
+    let deprecated =
+        Attribute::List(vec![Attribute::with_value("feature", "deprecated")]);
     let mut registry = UnifiedRegistry::default();
     for (major, present) in [(1, true), (2, false), (3, true)] {
         let mut value = Struct {
@@ -288,10 +287,7 @@ fn pre_2_4_expressions_are_read_as_their_generators_read_them() {
          {'type':'A','data':{'x':'int'}}
          {'union':'U','base':'Payload','discriminator':'kind','data':{'a':'A'}}";
     let tag = |tag: &str| {
-        registry(&[(tag, flat)])
-            .unwrap()
-            .types
-            .contains_key("UKind")
+        registry(&[(tag, flat)]).unwrap().types.contains_key("UKind")
     };
     assert!(tag("v1.5.0"));
     assert!(!tag("v1.6.0"));
@@ -318,9 +314,7 @@ fn pre_2_4_expressions_are_read_as_their_generators_read_them() {
     );
     assert_eq!(
         error.kind(),
-        &SchemaErrorKind::Unsupported {
-            construct: Construct::Expression
-        }
+        &SchemaErrorKind::Unsupported { construct: Construct::Expression }
     );
     assert_eq!((error.line(), error.column()), (Some(2), Some(1)));
     // Expressions without a metatype that 2.3 reads are skipped.
@@ -369,7 +363,9 @@ fn two_members_of_one_name_are_unsupported_where_qemu_accepts_them() {
         SchemaErrorKind::MemberClash { .. }
     ));
     // Before 2.0 a repeated key is one member, of the last value.
-    let lowered = lowered(&[("v1.7.0", "{'type':'T','data':{'a':'int','a':'str'}}")]).unwrap();
+    let lowered =
+        lowered(&[("v1.7.0", "{'type':'T','data':{'a':'int','a':'str'}}")])
+            .unwrap();
     let fields = &lowered[0].structs["T"].fields;
     assert_eq!(
         fields
@@ -400,9 +396,7 @@ fn schemas_on_which_qemu_fails_are_refused_in_those_releases() {
     let alternate = "{'alternate':'Aa','data':{'type':'int','s':'bool'}}";
     assert_eq!(
         schema_error("v2.5.0", alternate).kind(),
-        &SchemaErrorKind::Crash {
-            crash: Crash::AlternateTypeBranch
-        }
+        &SchemaErrorKind::Crash { crash: Crash::AlternateTypeBranch }
     );
     for tag in ["v2.4.0", "v2.6.0"] {
         registry(&[(tag, alternate)]).unwrap();
@@ -413,17 +407,13 @@ fn schemas_on_which_qemu_fails_are_refused_in_those_releases() {
     let legacy = cycle.replace("'struct'", "'type'");
     assert!(matches!(
         schema_error("v2.3.0", &legacy).kind(),
-        SchemaErrorKind::Unsupported {
-            construct: Construct::BaseCycle { .. }
-        }
+        SchemaErrorKind::Unsupported { construct: Construct::BaseCycle { .. } }
     ));
     for tag in ["v2.4.0", "v2.5.0"] {
         assert!(
             matches!(
                 schema_error(tag, cycle).kind(),
-                SchemaErrorKind::Crash {
-                    crash: Crash::BaseCycle { .. }
-                }
+                SchemaErrorKind::Crash { crash: Crash::BaseCycle { .. } }
             ),
             "{tag}"
         );
@@ -436,7 +426,8 @@ fn schemas_on_which_qemu_fails_are_refused_in_those_releases() {
 
 #[test]
 fn constructs_beyond_the_ir_are_unsupported_only_where_qemu_accepts_them() {
-    let construct = |tag: &str, text: &str| match schema_error(tag, text).kind() {
+    let construct = |tag: &str, text: &str| match schema_error(tag, text).kind()
+    {
         SchemaErrorKind::Unsupported { construct } => Some(construct.clone()),
         _ => None,
     };
@@ -451,16 +442,15 @@ fn constructs_beyond_the_ir_are_unsupported_only_where_qemu_accepts_them() {
     assert_eq!(construct("v4.2.0", boxed), None);
     assert_eq!(construct("v2.6.0", boxed), None);
     // QEMU refuses an enum as boxed arguments.
-    let boxed_enum = "{'enum':'E','data':['a']} {'command':'c','data':'E','boxed':true}";
+    let boxed_enum =
+        "{'enum':'E','data':['a']} {'command':'c','data':'E','boxed':true}";
     assert_eq!(construct("v2.7.0", boxed_enum), None);
     // 2.4 takes an anonymous struct as a command's return type, and no
     // other place outside struct members.
     let returns = "{'command':'c','returns':{'a':'int'}}";
     assert_eq!(
         construct("v2.4.0", returns),
-        Some(Construct::AnonymousStruct {
-            member: "returns".into()
-        })
+        Some(Construct::AnonymousStruct { member: "returns".into() })
     );
     assert_eq!(construct("v2.5.0", returns), None);
     assert_eq!(
@@ -478,9 +468,7 @@ fn an_undefined_type_is_unsupported_only_before_2_4() {
     assert_eq!(
         error.kind(),
         &SchemaErrorKind::Unsupported {
-            construct: Construct::UndefinedType {
-                name: "Missing".into()
-            }
+            construct: Construct::UndefinedType { name: "Missing".into() }
         }
     );
     let error = schema_error("v2.4.0", undefined);
@@ -505,7 +493,9 @@ fn commands_and_events_whose_c_names_clash_get_rust_names_of_their_own() {
             .attributes
             .iter()
             .find_map(|attr| match attr {
-                Attribute::Item { name, value } if name == "name" => Some(value.clone()),
+                Attribute::Item { name, value } if name == "name" => {
+                    Some(value.clone())
+                }
                 _ => None,
             })
             .unwrap_or_else(|| value.ir.name.clone()),
@@ -574,12 +564,11 @@ fn a_base_cycle_is_unsupported_before_2_6_where_it_starts() {
     assert_eq!(
         error.kind(),
         &SchemaErrorKind::Unsupported {
-            construct: Construct::BaseCycle {
-                name: "First".into()
-            }
+            construct: Construct::BaseCycle { name: "First".into() }
         }
     );
-    let error = schema_error("v2.3.0", "{'type':'Child','base':'Missing','data':{}}");
+    let error =
+        schema_error("v2.3.0", "{'type':'Child','base':'Missing','data':{}}");
     assert_eq!(
         error.kind(),
         &SchemaErrorKind::Unsupported {
@@ -600,12 +589,7 @@ fn discriminators_must_be_required_scalar_enums_with_known_branches() {
         )
     };
     for (tag, base, branches, kind) in [
-        (
-            "v11.1.3",
-            "{'kind':'Empty'}",
-            "{}",
-            SchemaErrorKind::NoBranches,
-        ),
+        ("v11.1.3", "{'kind':'Empty'}", "{}", SchemaErrorKind::NoBranches),
         (
             "v11.1.3",
             "{'kind':'Choice'}",
@@ -615,12 +599,7 @@ fn discriminators_must_be_required_scalar_enums_with_known_branches() {
                 discriminator_type: "Choice".into(),
             },
         ),
-        (
-            "v2.6.0",
-            "{'kind':'Empty'}",
-            "{}",
-            SchemaErrorKind::NoBranches,
-        ),
+        ("v2.6.0", "{'kind':'Empty'}", "{}", SchemaErrorKind::NoBranches),
         (
             "v2.0.0",
             "{'kind':'Choice'}",
@@ -665,7 +644,8 @@ fn discriminators_must_be_required_scalar_enums_with_known_branches() {
     )])
     .unwrap();
     // Before 2.0, a discriminator of another type is a tolerated quirk.
-    let registry = registry(&[("v1.7.0", &union("{'kind':'str'}", "{}"))]).unwrap();
+    let registry =
+        registry(&[("v1.7.0", &union("{'kind':'str'}", "{}"))]).unwrap();
     assert!(
         registry.warnings.iter().any(|warning| matches!(
             &warning.kind,
@@ -684,16 +664,11 @@ fn a_command_named_like_its_response_gets_a_command_type() {
          {'command':'guest-exec','data':{'path':'str'},'returns':'GuestExec'}",
     )])
     .unwrap();
-    let UnifiedType::Struct(command) = &registry.types["GuestExecCommand"] else {
+    let UnifiedType::Struct(command) = &registry.types["GuestExecCommand"]
+    else {
         panic!("the command is a struct")
     };
-    assert!(
-        command
-            .ir
-            .meta
-            .attributes
-            .contains(&Attribute::new("command"))
-    );
+    assert!(command.ir.meta.attributes.contains(&Attribute::new("command")));
     assert!(
         command
             .ir
@@ -738,9 +713,7 @@ fn an_anonymous_return_type_of_2_4_is_unsupported() {
     assert_eq!(
         error.kind(),
         &SchemaErrorKind::Unsupported {
-            construct: Construct::AnonymousStruct {
-                member: "returns".into()
-            }
+            construct: Construct::AnonymousStruct { member: "returns".into() }
         }
     );
     assert_eq!((error.line(), error.column()), (Some(1), Some(1)));
@@ -765,7 +738,9 @@ fn renamed_types_take_the_newest_spelling() {
             UnifiedType::Enum(value) => (&value.ir.name, &value.ir.meta),
         };
         let wire = meta.attributes.iter().find_map(|attr| match attr {
-            Attribute::Item { name, value } if name == "name" => Some(value.as_str()),
+            Attribute::Item { name, value } if name == "name" => {
+                Some(value.as_str())
+            }
             _ => None,
         });
         (ir_name.as_str(), wire)
@@ -783,17 +758,19 @@ fn renamed_types_take_the_newest_spelling() {
 
 #[test]
 fn definitions_are_checked_where_their_files_are_included() {
-    let dir = std::env::temp_dir().join(format!("qapi-include-order-{}", std::process::id()));
+    let dir = std::env::temp_dir()
+        .join(format!("qapi-include-order-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let unknown = |files: &[(&str, &str)]| {
         for (name, text) in files {
             std::fs::write(dir.join(name), text).unwrap();
         }
-        let sources =
-            crate::read_schema_with_version(&dir.join(files[0].0), Some((11, 1, 3))).unwrap();
-        match super::lower::process_version_schema(&sources)
-            .unwrap_err()
-            .kind()
+        let sources = crate::read_schema_with_version(
+            &dir.join(files[0].0),
+            Some((11, 1, 3)),
+        )
+        .unwrap();
+        match super::lower::process_version_schema(&sources).unwrap_err().kind()
         {
             SchemaErrorKind::UnknownKey { key } => key.clone(),
             other => panic!("{other:?}"),
@@ -857,9 +834,7 @@ fn early_union_bases_and_discriminators_follow_each_release() {
     registry(&[("v2.0.0", &legacy("S"))]).unwrap();
     assert_eq!(
         schema_error("v2.0.0", &legacy("Nope")).kind(),
-        &SchemaErrorKind::UnknownType {
-            name: "Nope".into()
-        }
+        &SchemaErrorKind::UnknownType { name: "Nope".into() }
     );
     // A union's base that is a union, which QEMU resolves from 2.0.
     let union_base = "{'type':'S','data':{'x':'int'}} {'union':'V','data':{'a':'S'}} {'union':'U','base':'V','data':{'a':'S'}}";
@@ -926,7 +901,8 @@ fn the_lowering_meets_none_of_what_the_validation_refuses() {
 
 #[test]
 fn undefined_types_are_unsupported_where_qemu_accepts_them() {
-    let undefined = |tag: &str, text: &str| match schema_error(tag, text).kind() {
+    let undefined = |tag: &str, text: &str| match schema_error(tag, text).kind()
+    {
         SchemaErrorKind::Unsupported {
             construct: Construct::UndefinedType { name },
         } => Some(name.clone()),
@@ -941,7 +917,11 @@ fn undefined_types_are_unsupported_where_qemu_accepts_them() {
         ("{'union':'Uu','data':{'a':'Nope'}}", "Nope"),
     ] {
         for tag in ["v1.0", "v2.3.0"] {
-            assert_eq!(undefined(tag, text).as_deref(), Some(name), "{tag} {text}");
+            assert_eq!(
+                undefined(tag, text).as_deref(),
+                Some(name),
+                "{tag} {text}"
+            );
         }
         let defined = format!("{text} {{'enum':'Nope','data':[]}}");
         registry(&[("v2.3.0", &defined)]).unwrap();
@@ -953,9 +933,7 @@ fn undefined_types_are_unsupported_where_qemu_accepts_them() {
     let command = "{'command':'c','returns':'Nope'}";
     assert_eq!(
         schema_error("v2.4.0", command).kind(),
-        &SchemaErrorKind::UnknownType {
-            name: "Nope".into()
-        }
+        &SchemaErrorKind::UnknownType { name: "Nope".into() }
     );
 }
 
@@ -968,7 +946,9 @@ fn a_declared_member_does_not_take_a_same_named_catch_all() {
                     {'command':'c','data':{'driver':'str','arguments':'str'}}";
     let both = "##\n# @c:\n#\n# @driver: the driver\n#\n# @arguments: declared\n##\n\
                 {'command':'c','data':{'driver':'str','arguments':'str'},'gen':false}";
-    let range = |since: u32, until: Option<u32>| ((9, since, 0), until.map(|until| (9, until, 0)));
+    let range = |since: u32, until: Option<u32>| {
+        ((9, since, 0), until.map(|until| (9, until, 0)))
+    };
     for (releases, expected) in [
         (
             [("v9.0.0", both), ("v9.1.0", both), ("v9.2.0", both)],
@@ -987,11 +967,7 @@ fn a_declared_member_does_not_take_a_same_named_catch_all() {
             ],
         ),
         (
-            [
-                ("v9.0.0", declared),
-                ("v9.1.0", catch_all),
-                ("v9.2.0", declared),
-            ],
+            [("v9.0.0", declared), ("v9.1.0", catch_all), ("v9.2.0", declared)],
             vec![
                 (false, range(2, None)),
                 (false, range(0, Some(1))),
@@ -1022,10 +998,15 @@ fn a_declared_member_does_not_take_a_same_named_catch_all() {
         assert_eq!(found, expected, "{releases:?}");
         for field in arguments {
             if field.meta.attributes.contains(&Attribute::new("flatten")) {
-                assert_eq!(field.r#type, "serde_json::Map<String, serde_json::Value>");
+                assert_eq!(
+                    field.r#type,
+                    "serde_json::Map<String, serde_json::Value>"
+                );
                 assert_eq!(
                     field.meta.doc.as_deref(),
-                    Some("Additional command arguments not modeled by this schema.")
+                    Some(
+                        "Additional command arguments not modeled by this schema."
+                    )
                 );
                 assert_eq!(field.meta.schema_doc, None);
             } else {

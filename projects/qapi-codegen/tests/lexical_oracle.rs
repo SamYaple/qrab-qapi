@@ -1,9 +1,13 @@
 //! Compare which of a fixed set of lexical edge cases the parser accepts with
 //! the parser shipped in the pinned QEMU tree.
-use qapi_codegen::parse_schema_with_version;
-use qapi_codegen::versions::{PINNED_VERSIONS, parse_pinned_versions, parse_version_tag};
-use std::path::{Path, PathBuf};
-use std::process::Command;
+use qapi_codegen::{
+    parse_schema_with_version,
+    versions::{PINNED_VERSIONS, parse_pinned_versions, parse_version_tag},
+};
+use std::{
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 /// The grammar of the newest pin, which vendor/qemu must be checked out at:
 /// the QEMU parser and fixtures used here come from its working tree.
@@ -35,7 +39,8 @@ fn qemu_root() -> PathBuf {
 fn lexical_acceptance_matches_qemu() {
     let version = baseline();
     let tokens = [
-        "{", "'enum'", ":", "'E'", ",", "'data'", ":", "[", "'one'", ",", "'two'", "]", "}",
+        "{", "'enum'", ":", "'E'", ",", "'data'", ":", "[", "'one'", ",",
+        "'two'", "]", "}",
     ];
     let mut cases = Vec::new();
     for whitespace in [
@@ -106,8 +111,7 @@ fn lexical_acceptance_matches_qemu() {
         cases.push(format!("{{'command':'test','gen':{boolean}}}"));
     }
     let valid = tokens.concat();
-    let documented =
-        "##\n# @E:\n# Summary.\n#\n# @one: First.\n# @two: Second.\n#\n# Since: 1.0\n##\n";
+    let documented = "##\n# @E:\n# Summary.\n#\n# @one: First.\n# @two: Second.\n#\n# Since: 1.0\n##\n";
     let doc_blocks = [
         documented.to_string(),
         format!("##\n# = Section\n# Body.\n##\n{documented}"),
@@ -126,7 +130,9 @@ fn lexical_acceptance_matches_qemu() {
                     block
                         .lines()
                         .enumerate()
-                        .find_map(|(index, line)| (index > 0 && line == "##").then_some(index))
+                        .find_map(|(index, line)| {
+                            (index > 0 && line == "##").then_some(index)
+                        })
                         .unwrap(),
                 ] {
                     let doc = block
@@ -153,7 +159,8 @@ fn lexical_acceptance_matches_qemu() {
         cases.push(format!("{}{valid}", documented.replace('\n', ending)));
         cases.push(format!(
             "{}{valid}",
-            format!("##\n# = Section\n#\n# Body.\n##\n{documented}").replace('\n', ending)
+            format!("##\n# = Section\n#\n# Body.\n##\n{documented}")
+                .replace('\n', ending)
         ));
     }
     cases.extend([
@@ -168,7 +175,8 @@ fn lexical_acceptance_matches_qemu() {
     ]);
     let temp = tempfile::tempdir().unwrap();
     for (index, input) in cases.iter().enumerate() {
-        std::fs::write(temp.path().join(format!("{index}.json")), input).unwrap();
+        std::fs::write(temp.path().join(format!("{index}.json")), input)
+            .unwrap();
     }
     let repo = qemu_root();
     let output = Command::new("python3")

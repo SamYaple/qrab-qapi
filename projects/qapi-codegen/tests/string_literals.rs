@@ -1,7 +1,9 @@
 //! Historical literal decoding, include paths and canonical reference identity.
 mod common;
 use common::{generate, git, run_fixture, write_module};
-use qapi_codegen::{ParseErrorKind, parsers::common::qstring, set_parser_version};
+use qapi_codegen::{
+    ParseErrorKind, parsers::common::qstring, set_parser_version,
+};
 use std::{path::Path, process::Command};
 
 #[test]
@@ -151,13 +153,15 @@ fn include_paths_are_decoded_exactly_once() {
         ("leaf-\n.json", r"leaf-\n.json", (4, 1, 0)),
     ] {
         let temp = tempfile::tempdir().unwrap();
-        std::fs::write(temp.path().join(filename), "{'struct':'Leaf','data':{}}").unwrap();
+        std::fs::write(
+            temp.path().join(filename),
+            "{'struct':'Leaf','data':{}}",
+        )
+        .unwrap();
         let root = temp.path().join("root.json");
         std::fs::write(&root, format!("{{'include':'{literal}'}}")).unwrap();
         assert_eq!(
-            read_schema_with_version(&root, Some(version))
-                .unwrap()
-                .len(),
+            read_schema_with_version(&root, Some(version)).unwrap().len(),
             2
         );
     }
@@ -233,7 +237,8 @@ fn escaped_keywords_names_and_cache_epochs_compile_and_round_trip() {
         ],
     );
     git(&repo, &["tag", "v11.1.3"]);
-    let output = generate(&repo, &["v2.3.0", "v2.4.0", "v4.1.0", "v11.1.3"]).unwrap();
+    let output =
+        generate(&repo, &["v2.3.0", "v2.4.0", "v4.1.0", "v11.1.3"]).unwrap();
     let fixture = temp.path().join("fixture");
     write_module(&fixture.join("src/generated"), output);
     run_fixture(
@@ -264,7 +269,9 @@ fn main() {
 #[test]
 fn decoded_duplicate_keys_are_detected_before_overwriting() {
     set_parser_version((4, 1, 0));
-    let error =
-        qapi_codegen::parse_schema(r"{'\u0073truct':'Foo','struct':'Bar','data':{}}").unwrap_err();
+    let error = qapi_codegen::parse_schema(
+        r"{'\u0073truct':'Foo','struct':'Bar','data':{}}",
+    )
+    .unwrap_err();
     assert_eq!(error.kind, ParseErrorKind::DuplicateKey, "{error}");
 }

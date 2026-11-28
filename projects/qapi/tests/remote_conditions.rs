@@ -26,16 +26,15 @@ struct RemoteFields {
 
 #[test]
 fn remote_platform_types_variants_and_fields_exist_on_every_client_host() {
-    let windows: RemoteWindows = serde_json::from_value(json!({"value":"windows"})).unwrap();
-    let posix: RemotePosix = serde_json::from_value(json!({"value":"posix"})).unwrap();
+    let windows: RemoteWindows =
+        serde_json::from_value(json!({"value":"windows"})).unwrap();
+    let posix: RemotePosix =
+        serde_json::from_value(json!({"value":"posix"})).unwrap();
     assert_eq!(
         serde_json::to_value(windows).unwrap(),
         json!({"value":"windows"})
     );
-    assert_eq!(
-        serde_json::to_value(posix).unwrap(),
-        json!({"value":"posix"})
-    );
+    assert_eq!(serde_json::to_value(posix).unwrap(), json!({"value":"posix"}));
     for kind in ["windows", "posix"] {
         let parsed: RemoteKind = serde_json::from_value(json!(kind)).unwrap();
         assert_eq!(serde_json::to_value(parsed).unwrap(), json!(kind));

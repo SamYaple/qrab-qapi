@@ -14,13 +14,21 @@ struct Restored {}
 
 #[test]
 fn repeated_flag_ranges_combine_independently_of_attribute_order() {
-    for (version, enabled) in [((6, 0, 0), true), ((8, 0, 0), false), ((11, 0, 0), true)] {
+    for (version, enabled) in
+        [((6, 0, 0), true), ((8, 0, 0), false), ((11, 0, 0), true)]
+    {
         assert_eq!(Restored::allows_oob(version), enabled);
         assert_eq!(Restored::allows_preconfig(version), enabled);
         assert_eq!(Restored::sends_success_response(version), !enabled);
     }
     assert_eq!(Restored::PRECONFIG_SINCE, Some((6, 0, 0)));
-    const { assert!(Restored::ALLOW_OOB && Restored::ALLOW_PRECONFIG && !Restored::SUCCESS_RESPONSE) };
+    const {
+        assert!(
+            Restored::ALLOW_OOB
+                && Restored::ALLOW_PRECONFIG
+                && !Restored::SUCCESS_RESPONSE
+        )
+    };
 }
 
 #[qapi::qapi(command, returns = "()")]

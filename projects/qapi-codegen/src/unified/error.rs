@@ -1,11 +1,14 @@
 //! Errors of checking release schemas and building registries from them.
 //! [`GenerateError`] says why generating code from a registry failed.
 
-use crate::qapi_ir::LowerError;
-use crate::versions::TreeError;
-use crate::{ParseError, QapiSchemaToken, ReadError};
-use std::fmt;
-use std::path::{Path, PathBuf};
+use crate::{
+    ParseError, QapiSchemaToken, ReadError, qapi_ir::LowerError,
+    versions::TreeError,
+};
+use std::{
+    fmt,
+    path::{Path, PathBuf},
+};
 
 /// A release schema that QEMU's own QAPI generator rejects, or that cannot be
 /// lowered to the IR.
@@ -70,7 +73,11 @@ impl SchemaError {
     }
 
     /// Name the definition and file, unless inner ones are named already.
-    pub(crate) fn located(mut self, definition: Option<String>, file: Option<&Path>) -> Self {
+    pub(crate) fn located(
+        mut self,
+        definition: Option<String>,
+        file: Option<&Path>,
+    ) -> Self {
         if self.0.definition.is_none() {
             self.0.definition = definition;
         }
@@ -101,15 +108,21 @@ impl fmt::Display for SchemaError {
                 "Invalid QAPI {definition} in {}{position}: ",
                 file.display()
             )?,
-            (Some(definition), None) => write!(f, "Invalid QAPI {definition}: ")?,
-            (None, Some(file)) => write!(f, "Invalid QAPI schema {}{position}: ", file.display())?,
+            (Some(definition), None) => {
+                write!(f, "Invalid QAPI {definition}: ")?
+            }
+            (None, Some(file)) => {
+                write!(f, "Invalid QAPI schema {}{position}: ", file.display())?
+            }
             (None, None) => {}
         }
         for part in self.context() {
             write!(f, "{part}: ")?;
         }
         match (self.kind(), self.0.position) {
-            (SchemaErrorKind::Parse(error), Some(_)) => write!(f, "{}", error.fault()),
+            (SchemaErrorKind::Parse(error), Some(_)) => {
+                write!(f, "{}", error.fault())
+            }
             (kind, _) => write!(f, "{kind}"),
         }
     }
@@ -135,13 +148,17 @@ impl From<LowerError> for SchemaError {
     fn from(error: LowerError) -> Self {
         let version = crate::parser_version();
         let construct = match error {
-            LowerError::AnonymousStruct { member, .. } if version < (2, 4, 0) => {
+            LowerError::AnonymousStruct { member, .. }
+                if version < (2, 4, 0) =>
+            {
                 Construct::AnonymousStruct { member }
             }
             LowerError::UnknownType { name, .. } if version < (2, 4, 0) => {
                 Construct::UndefinedType { name }
             }
-            LowerError::MissingDiscriminator { discriminator, .. } if version < (2, 0, 0) => {
+            LowerError::MissingDiscriminator { discriminator, .. }
+                if version < (2, 0, 0) =>
+            {
                 Construct::UndefinedDiscriminator { discriminator }
             }
             error => return SchemaErrorKind::Lower(error).into(),
@@ -226,7 +243,9 @@ pub enum SchemaErrorKind {
     NoBranches,
     /// A union branch that is not a value of the discriminator enum, from
     /// QEMU 2.0.
-    #[error("Branch '{branch}' is not a value of discriminator enum {discriminator_type}")]
+    #[error(
+        "Branch '{branch}' is not a value of discriminator enum {discriminator_type}"
+    )]
     UnknownBranch {
         /// The branch.
         branch: String,
@@ -234,7 +253,9 @@ pub enum SchemaErrorKind {
         discriminator_type: String,
     },
     /// A union discriminator whose type is not an enum, from QEMU 2.0.
-    #[error("Discriminator '{discriminator}' has non-enum type {discriminator_type}")]
+    #[error(
+        "Discriminator '{discriminator}' has non-enum type {discriminator_type}"
+    )]
     DiscriminatorNotEnum {
         /// The discriminator member.
         discriminator: String,
@@ -453,7 +474,9 @@ pub enum SchemaErrorKind {
     #[error("Conditional arguments require 'boxed': true")]
     ConditionalArguments,
     /// Two alternate branches that the same JSON value could match.
-    #[error("Alternate branch '{branch}' cannot be distinguished from '{previous}'")]
+    #[error(
+        "Alternate branch '{branch}' cannot be distinguished from '{previous}'"
+    )]
     AmbiguousAlternate {
         /// The later branch.
         branch: String,
@@ -500,7 +523,9 @@ pub enum SchemaErrorKind {
     },
     /// A flat union discriminator that is also a value of its enum, in
     /// QEMU 2.5.
-    #[error("Discriminator '{discriminator}' collides with a value of enum '{enumeration}'")]
+    #[error(
+        "Discriminator '{discriminator}' collides with a value of enum '{enumeration}'"
+    )]
     DiscriminatorClash {
         /// The discriminator.
         discriminator: String,
@@ -637,7 +662,9 @@ pub enum Shape {
     ArrayOfOneTypeName,
     /// A condition: a string or a list of strings from QEMU 3.0 to 6.1, a
     /// string or an object from 6.2.
-    #[error("'if' condition must be a string, until 6.1 a list of strings, from 6.2 an object")]
+    #[error(
+        "'if' condition must be a string, until 6.1 a list of strings, from 6.2 an object"
+    )]
     Condition,
 }
 
@@ -900,12 +927,11 @@ fn arrows(pending: &[(String, String)]) -> String {
 pub(crate) type SchemaResult<T = ()> = Result<T, SchemaError>;
 
 /// Fail with `kind` unless `condition` holds.
-pub(crate) fn require(condition: bool, kind: impl FnOnce() -> SchemaErrorKind) -> SchemaResult {
-    if condition {
-        Ok(())
-    } else {
-        Err(kind().into())
-    }
+pub(crate) fn require(
+    condition: bool,
+    kind: impl FnOnce() -> SchemaErrorKind,
+) -> SchemaResult {
+    if condition { Ok(()) } else { Err(kind().into()) }
 }
 
 /// The kind and name of a definition, as [`SchemaError::definition`] names it.
@@ -927,11 +953,17 @@ pub(crate) trait SchemaContext<T> {
     /// Name the part of the definition that the error occurred in.
     fn within(self, part: impl FnOnce() -> String) -> SchemaResult<T>;
     /// Name the definition, unless an inner one is named already.
-    fn in_definition(self, definition: impl FnOnce() -> Option<String>) -> SchemaResult<T>;
+    fn in_definition(
+        self,
+        definition: impl FnOnce() -> Option<String>,
+    ) -> SchemaResult<T>;
     /// Name the file, unless an inner one is named already.
     fn in_file(self, file: &Path) -> SchemaResult<T>;
     /// Name the line and column, unless inner ones are named already.
-    fn at(self, position: impl FnOnce() -> Option<(usize, usize)>) -> SchemaResult<T>;
+    fn at(
+        self,
+        position: impl FnOnce() -> Option<(usize, usize)>,
+    ) -> SchemaResult<T>;
 }
 
 impl<T, E: Into<SchemaError>> SchemaContext<T> for Result<T, E> {
@@ -943,7 +975,10 @@ impl<T, E: Into<SchemaError>> SchemaContext<T> for Result<T, E> {
         })
     }
 
-    fn in_definition(self, definition: impl FnOnce() -> Option<String>) -> SchemaResult<T> {
+    fn in_definition(
+        self,
+        definition: impl FnOnce() -> Option<String>,
+    ) -> SchemaResult<T> {
         self.map_err(|error| error.into().located(definition(), None))
     }
 
@@ -951,7 +986,10 @@ impl<T, E: Into<SchemaError>> SchemaContext<T> for Result<T, E> {
         self.map_err(|error| error.into().located(None, Some(file)))
     }
 
-    fn at(self, position: impl FnOnce() -> Option<(usize, usize)>) -> SchemaResult<T> {
+    fn at(
+        self,
+        position: impl FnOnce() -> Option<(usize, usize)>,
+    ) -> SchemaResult<T> {
         self.map_err(|error| error.into().at(position()))
     }
 }
@@ -1054,7 +1092,9 @@ pub enum RegistryError {
     },
     /// A type that a later release declares again after its removal, which
     /// the symbol planning failed to give a name of its own.
-    #[error("{protocol} type {name} returns in {tag} after its removal in {removed}")]
+    #[error(
+        "{protocol} type {name} returns in {tag} after its removal in {removed}"
+    )]
     Reappeared {
         /// `QMP` or `QGA`.
         protocol: &'static str,
@@ -1066,7 +1106,9 @@ pub enum RegistryError {
     },
     /// A type that is an enum in one release and a struct in a later one,
     /// which the symbol planning failed to give a name of its own.
-    #[error("{protocol} type {name} changes from {previous} to {kind} in {tag}")]
+    #[error(
+        "{protocol} type {name} changes from {previous} to {kind} in {tag}"
+    )]
     KindChanged {
         /// `QMP` or `QGA`.
         protocol: &'static str,
@@ -1103,7 +1145,9 @@ pub enum RegistryError {
     /// type that the same on the wire would make the successor of two
     /// predecessors, or a predecessor of two types, or one from two
     /// releases.
-    #[error("{protocol} return type {name} would coalesce with both {first} and {second}")]
+    #[error(
+        "{protocol} return type {name} would coalesce with both {first} and {second}"
+    )]
     CoalesceAmbiguous {
         /// `QMP` or `QGA`.
         protocol: &'static str,
@@ -1117,7 +1161,9 @@ pub enum RegistryError {
     /// Two items of one namespace of the generated code that would have
     /// one Rust name, which the generator's escapes do not tell apart: two
     /// types, two members of one type, or a name and a reserved one.
-    #[error("{protocol} {namespace}: {first} and {second} are both named {name}")]
+    #[error(
+        "{protocol} {namespace}: {first} and {second} are both named {name}"
+    )]
     NameCollision {
         /// `QMP` or `QGA`.
         protocol: &'static str,

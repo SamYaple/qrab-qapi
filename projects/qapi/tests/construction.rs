@@ -2,8 +2,10 @@
 //! matches enums with a wildcard arm, so that the fields and variants that a
 //! later QEMU baseline adds break none of it.
 
-use qapi::commands::{MigrateSetCapabilities, QueryStatus};
-use qapi::{MigrationCapability, MigrationCapabilityStatus, RunState, StatusInfo};
+use qapi::{
+    MigrationCapability, MigrationCapabilityStatus, RunState, StatusInfo,
+    commands::{MigrateSetCapabilities, QueryStatus},
+};
 
 fn status(running: bool) -> StatusInfo {
     StatusInfo::new(running, RunState::Running)
@@ -24,15 +26,13 @@ fn constructors_and_wildcard_arms_compile() {
         qapi::to_value((11, 1, 0), &info).unwrap(),
         serde_json::json!({"running": true, "status": "running"})
     );
-    let command = MigrateSetCapabilities::new(vec![MigrationCapabilityStatus::new(
-        MigrationCapability::PostcopyRam,
-        true,
-    )]);
+    let command =
+        MigrateSetCapabilities::new(vec![MigrationCapabilityStatus::new(
+            MigrationCapability::PostcopyRam,
+            true,
+        )]);
     assert_eq!(describe(&command.capabilities[0].capability), "postcopy");
-    assert!(matches!(
-        RunState::Paused,
-        RunState::Paused | RunState::Running
-    ));
+    assert!(matches!(RunState::Paused, RunState::Paused | RunState::Running));
     let query = QueryStatus::default();
     assert_eq!(
         qapi::to_value((11, 1, 0), &query).unwrap(),

@@ -30,7 +30,9 @@ fn upstream_positive_schema_fixtures_generate_compilable_rust() {
             && std::fs::read_to_string(&path).unwrap().trim().is_empty()
             && path.with_extension("json").exists()
         {
-            fixtures.push(path.with_extension("json").file_name().unwrap().to_owned());
+            fixtures.push(
+                path.with_extension("json").file_name().unwrap().to_owned(),
+            );
         }
     }
     fixtures.sort();

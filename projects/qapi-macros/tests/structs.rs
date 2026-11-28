@@ -43,15 +43,20 @@ fn image() -> ImageInfo {
     }
 }
 
-fn encode<T: serde::Serialize>(version: (u32, u32, u32), value: &T) -> Result<Value, String> {
-    with_version(version, || serde_json::to_value(value)).map_err(|error| error.to_string())
+fn encode<T: serde::Serialize>(
+    version: (u32, u32, u32),
+    value: &T,
+) -> Result<Value, String> {
+    with_version(version, || serde_json::to_value(value))
+        .map_err(|error| error.to_string())
 }
 
 fn decode<T: serde::de::DeserializeOwned>(
     version: Option<(u32, u32, u32)>,
     json: Value,
 ) -> Result<T, String> {
-    let decode = || serde_json::from_value(json).map_err(|error| error.to_string());
+    let decode =
+        || serde_json::from_value(json).map_err(|error| error.to_string());
     match version {
         Some(version) => with_version(version, decode),
         None => decode(),
@@ -64,20 +69,22 @@ fn members_serialize_under_their_wire_names() {
         encode((10, 2, 0), &image()).unwrap(),
         json!({"filename": "f", "virtual-size": 1})
     );
-    let recorded = with_version((10, 2, 0), || record::record(&image())).unwrap();
+    let recorded =
+        with_version((10, 2, 0), || record::record(&image())).unwrap();
     assert_eq!(recorded, "struct(image-info, 2) filename virtual-size");
     let mut info = image();
     info.limits = Some(2);
     let recorded = with_version((10, 2, 0), || record::record(&info)).unwrap();
-    assert_eq!(
-        recorded,
-        "struct(image-info, 3) filename virtual-size limits"
-    );
+    assert_eq!(recorded, "struct(image-info, 3) filename virtual-size limits");
     assert_eq!(encode((10, 2, 0), &info).unwrap()["limits"], 2);
 }
 
 /// Serialize `info` for each version, which may or may not have `name`.
-fn check_lifetime(info: &ImageInfo, name: &str, versions: &[((u32, u32, u32), bool)]) {
+fn check_lifetime(
+    info: &ImageInfo,
+    name: &str,
+    versions: &[((u32, u32, u32), bool)],
+) {
     for &(version, available) in versions {
         let result = encode(version, info);
         if available {
@@ -86,7 +93,9 @@ fn check_lifetime(info: &ImageInfo, name: &str, versions: &[((u32, u32, u32), bo
             let (major, minor, patch) = version;
             assert_eq!(
                 result.unwrap_err(),
-                format!("{name} is not available in QEMU {major}.{minor}.{patch}")
+                format!(
+                    "{name} is not available in QEMU {major}.{minor}.{patch}"
+                )
             );
             assert_eq!(take_unavailable(), [name]);
         }
@@ -144,15 +153,13 @@ fn deprecated_members_that_are_set_warn_once_from_their_deprecation() {
         }
         return;
     }
-    let stderr =
-        child::stderr_of("deprecated_members_that_are_set_warn_once_from_their_deprecation");
+    let stderr = child::stderr_of(
+        "deprecated_members_that_are_set_warn_once_from_their_deprecation",
+    );
     let warning = "qapi warning: ImageInfo.dep is deprecated since QEMU 9.2.0";
     assert_eq!(stderr.matches(warning).count(), 1, "{stderr}");
     let (before, after) = stderr.split_once("from the deprecation").unwrap();
-    assert!(
-        !before.contains(warning) && after.contains(warning),
-        "{stderr}"
-    );
+    assert!(!before.contains(warning) && after.contains(warning), "{stderr}");
 }
 
 #[test]
@@ -199,7 +206,9 @@ fn members_that_a_version_requires_are_checked_in_its_scope() {
     assert!(decode::<Required>(Some((1, 9, 9)), json!({})).is_ok());
     // Unscoped decoding stays lenient, whatever the default.
     assert!(decode::<Required>(None, json!({})).is_ok());
-    assert!(with_default((2, 0, 0), || decode::<Required>(None, json!({}))).is_ok());
+    assert!(
+        with_default((2, 0, 0), || decode::<Required>(None, json!({}))).is_ok()
+    );
 }
 
 #[qapi(added = "5.0.0")]
@@ -233,7 +242,8 @@ struct Shared {
 
 #[test]
 fn a_shared_wire_name_decodes_into_the_alternate_of_the_version() {
-    let shared: Shared = decode(Some((1, 0, 0)), json!({"value": 3, "v": 1})).unwrap();
+    let shared: Shared =
+        decode(Some((1, 0, 0)), json!({"value": 3, "v": 1})).unwrap();
     assert_eq!(
         (shared.value, shared.value_legacy, shared.v),
         (None, Some(3), Some(1))
@@ -254,11 +264,7 @@ fn a_shared_wire_name_decodes_into_the_alternate_of_the_version() {
         "Shared.value is not available in QEMU 2.5.0"
     );
     assert!(decode::<Shared>(Some((2, 5, 0)), json!({})).is_ok());
-    let legacy = Shared {
-        value: None,
-        value_legacy: Some(1),
-        v: None,
-    };
+    let legacy = Shared { value: None, value_legacy: Some(1), v: None };
     assert_eq!(encode((1, 0, 0), &legacy).unwrap(), json!({"value": 1}));
     assert_eq!(
         encode((3, 0, 0), &legacy).unwrap_err(),
@@ -315,10 +321,7 @@ struct Options {
 
 fn file_options() -> Options {
     Options {
-        base: Base {
-            id: "a".into(),
-            tag: None,
-        },
+        base: Base { id: "a".into(), tag: None },
         kind: Kind::File,
         u: Some(Branch::File(FileOptions { path: "/p".into() })),
     }
@@ -328,15 +331,15 @@ fn file_options() -> Options {
 fn unions_take_the_layout_of_the_version() {
     let flat = json!({"id": "a", "type": "file", "path": "/p"});
     let nested = json!({"id": "a", "type": "file", "data": {"path": "/p"}});
-    for (version, wire) in [
-        (Some((9, 2, 0)), &flat),
-        (Some((2, 9, 0)), &nested),
-        (None, &flat),
-    ] {
+    for (version, wire) in
+        [(Some((9, 2, 0)), &flat), (Some((2, 9, 0)), &nested), (None, &flat)]
+    {
         let options: Options = decode(version, wire.clone()).unwrap();
         assert_eq!(options.base.id, "a");
         assert!(matches!(options.kind, Kind::File));
-        assert!(matches!(options.u, Some(Branch::File(ref file)) if file.path == "/p"));
+        assert!(
+            matches!(options.u, Some(Branch::File(ref file)) if file.path == "/p")
+        );
         if let Some(version) = version {
             assert_eq!(&encode(version, &options).unwrap(), wire);
         }
@@ -368,11 +371,9 @@ fn unions_take_the_layout_of_the_version() {
         encode((9, 2, 0), &unset).unwrap(),
         json!({"id": "a", "type": "file"})
     );
-    let old: Options = decode(
-        Some((1, 0, 0)),
-        json!({"id": "a", "type": "old", "data": {}}),
-    )
-    .unwrap();
+    let old: Options =
+        decode(Some((1, 0, 0)), json!({"id": "a", "type": "old", "data": {}}))
+            .unwrap();
     assert!(matches!(old.u, Some(Branch::Old)));
 }
 
@@ -393,15 +394,21 @@ fn flattened_decoding_keeps_the_context_of_its_errors() {
         "Options: expected an object, found 3"
     );
     assert_eq!(
-        decode::<Options>(Some((9, 2, 0)), json!({"id": "a", "type": 5})).unwrap_err(),
+        decode::<Options>(Some((9, 2, 0)), json!({"id": "a", "type": 5}))
+            .unwrap_err(),
         "Options.type: invalid type: integer `5`, expected a string"
     );
     assert_eq!(
-        decode::<Options>(Some((9, 2, 0)), json!({"id": "a", "type": "old"})).unwrap_err(),
+        decode::<Options>(Some((9, 2, 0)), json!({"id": "a", "type": "old"}))
+            .unwrap_err(),
         "Options.type: Kind::Old is not available in QEMU 9.2.0"
     );
     assert_eq!(
-        decode::<Options>(Some((9, 2, 0)), json!({"type": "file", "path": "/p"})).unwrap_err(),
+        decode::<Options>(
+            Some((9, 2, 0)),
+            json!({"type": "file", "path": "/p"})
+        )
+        .unwrap_err(),
         "Options: Base: missing field `id`"
     );
     assert_eq!(
@@ -458,7 +465,9 @@ fn each_release_has_the_discriminator_of_its_range() {
             json!({"arch": "x86", "target": "s390x", "host": "h"}),
         )
         .unwrap();
-        assert!(matches!(cpu.u, Some(CpuBranch::S390x(ref nbd)) if nbd.host == "h"));
+        assert!(
+            matches!(cpu.u, Some(CpuBranch::S390x(ref nbd)) if nbd.host == "h")
+        );
         assert!(matches!(cpu.arch, Some(Arch::X86)));
         assert_eq!(
             encode((5, 2, 0), &cpu).unwrap(),
@@ -581,7 +590,8 @@ struct Catchall {
 
 #[test]
 fn a_flattened_map_takes_the_unclaimed_members_and_claims_none_twice() {
-    let catchall: Catchall = decode(None, json!({"id": "a", "size": 2, "x": 1})).unwrap();
+    let catchall: Catchall =
+        decode(None, json!({"id": "a", "size": 2, "x": 1})).unwrap();
     assert_eq!(catchall.size, Some(2));
     assert_eq!(
         catchall.arguments.unwrap(),
@@ -668,14 +678,17 @@ struct OptionalDiscriminator {
 #[test]
 fn union_branches_follow_an_alternate_or_optional_discriminator() {
     let wire = json!({"type": "a", "path": "/p"});
-    let old: AlternateDiscriminator = decode(Some((1, 0, 0)), wire.clone()).unwrap();
+    let old: AlternateDiscriminator =
+        decode(Some((1, 0, 0)), wire.clone()).unwrap();
     assert!(old.kind.is_none() && old.kind_legacy.is_some() && old.u.is_some());
-    let new: AlternateDiscriminator = decode(Some((2, 0, 0)), wire.clone()).unwrap();
+    let new: AlternateDiscriminator =
+        decode(Some((2, 0, 0)), wire.clone()).unwrap();
     assert!(new.kind.is_some() && new.kind_legacy.is_none() && new.u.is_some());
     assert_eq!(encode((1, 0, 0), &old).unwrap(), wire);
     let absent: OptionalDiscriminator = decode(None, json!({})).unwrap();
     assert!(absent.u.is_none());
-    let present: OptionalDiscriminator = decode(None, json!({"kind": "a", "path": "/p"})).unwrap();
+    let present: OptionalDiscriminator =
+        decode(None, json!({"kind": "a", "path": "/p"})).unwrap();
     assert!(matches!(present.u, Some(AltBranch::A(_))));
 }
 
@@ -713,10 +726,7 @@ struct r#match {
 
 #[test]
 fn raw_identifiers_are_unraw_in_names_and_errors() {
-    let value = r#match {
-        r#type: "t".into(),
-        r#loop: Some(1),
-    };
+    let value = r#match { r#type: "t".into(), r#loop: Some(1) };
     assert_eq!(value.to_string(), r#"match(type="t", loop=1)"#);
     assert_eq!(
         encode((1, 0, 0), &value).unwrap_err(),
@@ -786,21 +796,19 @@ mod shadowed {
         #[qapi(flatten, union)]
         pub u: ::core::option::Option<Branch>,
         #[qapi(flatten)]
-        pub rest: ::core::option::Option<::serde_json::Map<::std::string::String, super::Value>>,
+        pub rest: ::core::option::Option<
+            ::serde_json::Map<::std::string::String, super::Value>,
+        >,
     }
 }
 
 #[test]
 fn the_expansion_does_not_depend_on_names_in_scope() {
     let wire = json!({"v": 1, "map": 2, "serializer": 3, "value": "x"});
-    let fields: shadowed::Fields = decode(Some((2, 0, 0)), wire.clone()).unwrap();
+    let fields: shadowed::Fields =
+        decode(Some((2, 0, 0)), wire.clone()).unwrap();
     assert_eq!(
-        (
-            fields.v,
-            fields.map,
-            fields.serializer,
-            fields.value_new.as_deref()
-        ),
+        (fields.v, fields.map, fields.serializer, fields.value_new.as_deref()),
         (Some(1), Some(2), Some(3), Some("x"))
     );
     assert_eq!(encode((2, 0, 0), &fields).unwrap(), wire);
@@ -808,7 +816,8 @@ fn the_expansion_does_not_depend_on_names_in_scope() {
         ((1, 0, 0), json!({"type": "file", "data": {"text": "t"}})),
         ((2, 0, 0), json!({"type": "file", "text": "t"})),
     ] {
-        let union: shadowed::Union = decode(Some(version), wire.clone()).unwrap();
+        let union: shadowed::Union =
+            decode(Some(version), wire.clone()).unwrap();
         assert!(matches!(union.u, Some(shadowed::Branch::File(_))));
         let mut union = union;
         union.rest = None;

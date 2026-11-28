@@ -24,7 +24,11 @@ pub trait Socket: sealed::Sealed + Send + Unpin + 'static {
 
     /// Read into `buf`; zero at the end of the input.
     #[doc(hidden)]
-    fn poll_read(&mut self, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>>;
+    fn poll_read(
+        &mut self,
+        cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<io::Result<usize>>;
 
     /// Write a prefix of `buf`, with `fds` as SCM_RIGHTS in the same
     /// `sendmsg` when there are any.
@@ -52,7 +56,11 @@ impl sealed::Sealed for tokio::net::UnixStream {}
 impl Socket for tokio::net::UnixStream {
     type Sleep = tokio::time::Sleep;
 
-    fn poll_read(&mut self, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+    fn poll_read(
+        &mut self,
+        cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<io::Result<usize>> {
         let mut buf = tokio::io::ReadBuf::new(buf);
         std::task::ready!(tokio::io::AsyncRead::poll_read(
             std::pin::Pin::new(self),
@@ -69,7 +77,11 @@ impl Socket for tokio::net::UnixStream {
         fds: &[OwnedFd],
     ) -> Poll<io::Result<usize>> {
         if fds.is_empty() {
-            return tokio::io::AsyncWrite::poll_write(std::pin::Pin::new(self), cx, buf);
+            return tokio::io::AsyncWrite::poll_write(
+                std::pin::Pin::new(self),
+                cx,
+                buf,
+            );
         }
         loop {
             std::task::ready!(self.poll_write_ready(cx))?;
@@ -94,11 +106,19 @@ impl Socket for tokio::net::UnixStream {
 /// One `sendmsg` carrying `fds` as SCM_RIGHTS with a prefix of `bytes`.
 /// Like `write()`, it sends nothing unless it succeeds.
 #[cfg(feature = "tokio")]
-fn send_with_fds(socket: impl AsFd, bytes: &[u8], fds: &[OwnedFd]) -> io::Result<usize> {
-    use rustix::net::{SendAncillaryBuffer, SendAncillaryMessage, SendFlags, sendmsg};
+fn send_with_fds(
+    socket: impl AsFd,
+    bytes: &[u8],
+    fds: &[OwnedFd],
+) -> io::Result<usize> {
+    use rustix::net::{
+        SendAncillaryBuffer, SendAncillaryMessage, SendFlags, sendmsg,
+    };
     let borrowed: Vec<_> = fds.iter().map(AsFd::as_fd).collect();
-    let mut space =
-        vec![std::mem::MaybeUninit::uninit(); rustix::cmsg_space!(ScmRights(borrowed.len()))];
+    let mut space = vec![
+        std::mem::MaybeUninit::uninit();
+        rustix::cmsg_space!(ScmRights(borrowed.len()))
+    ];
     let mut control = SendAncillaryBuffer::new(&mut space);
     if !control.push(SendAncillaryMessage::ScmRights(&borrowed)) {
         return Err(io::Error::other(

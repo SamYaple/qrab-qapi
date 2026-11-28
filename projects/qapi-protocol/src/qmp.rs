@@ -1,6 +1,6 @@
 use crate::{
-    ClientOptions, Error, Greeting, InvalidRequestKind, PeerCommands, QmpEvent, Required, Result,
-    Socket, TimeoutPhase,
+    ClientOptions, Error, Greeting, InvalidRequestKind, PeerCommands, QmpEvent,
+    Required, Result, Socket, TimeoutPhase,
     engine::{
         Inbound,
         connection::{self, Output, QmpConnection, Request},
@@ -108,10 +108,8 @@ struct Closing {
 impl Drop for Closing {
     fn drop(&mut self) {
         self.shared.depth.store(0, Ordering::Relaxed);
-        let reason = self
-            .reason
-            .take()
-            .unwrap_or_else(|| Arc::new(Error::Closed));
+        let reason =
+            self.reason.take().unwrap_or_else(|| Arc::new(Error::Closed));
         self.closed.send_replace(Some(reason));
     }
 }
@@ -162,11 +160,12 @@ impl Qmp {
         options: ClientOptions,
     ) -> Result<(Self, QmpEvents)> {
         options.validate()?;
-        let stream = timeout(options.connect_timeout, UnixStream::connect(path))
-            .await
-            .map_err(|_| Error::Timeout {
-                phase: TimeoutPhase::Connect,
-            })??;
+        let stream =
+            timeout(options.connect_timeout, UnixStream::connect(path))
+                .await
+                .map_err(|_| Error::Timeout {
+                    phase: TimeoutPhase::Connect,
+                })??;
         Self::from_stream_with_options(stream, options).await
     }
 
@@ -208,12 +207,11 @@ impl Qmp {
     ) -> Result<(Self, QmpEvents, QmpDriver)> {
         options.validate()?;
         let limit = options.max_message_bytes;
-        let deadline =
-            S::now()
-                .checked_add(options.handshake_timeout)
-                .ok_or(Error::InvalidRequest(InvalidRequestKind::Options {
-                    option: "handshake_timeout",
-                }))?;
+        let deadline = S::now().checked_add(options.handshake_timeout).ok_or(
+            Error::InvalidRequest(InvalidRequestKind::Options {
+                option: "handshake_timeout",
+            }),
+        )?;
         let mut inbound = Inbound::new();
         let steps = async {
             let mut handshake = QmpHandshake::new(&options);
@@ -224,37 +222,27 @@ impl Qmp {
                 if handshake.is_done() {
                     break;
                 }
-                handshake.handle_frame(&read_frame(&mut socket, &mut inbound, limit).await?)?;
+                handshake.handle_frame(
+                    &read_frame(&mut socket, &mut inbound, limit).await?,
+                )?;
             }
             Ok::<_, Error>(handshake.finish())
         };
-        let Established {
-            greeting,
-            oob,
-            commands,
-            events: early,
-        } = within::<S, _>(deadline, steps)
-            .await
-            .ok_or(Error::Timeout {
-                phase: TimeoutPhase::Handshake,
-            })??;
+        let Established { greeting, oob, commands, events: early } =
+            within::<S, _>(deadline, steps)
+                .await
+                .ok_or(Error::Timeout { phase: TimeoutPhase::Handshake })??;
         let shared = Arc::new(Shared::default());
         let (event_tx, event_rx) = mpsc::channel(options.event_capacity);
-        let events = Events {
-            tx: event_tx,
-            shared: shared.clone(),
-        };
+        let events = Events { tx: event_tx, shared: shared.clone() };
         // The events of the handshake are queued before the client is returned.
         for event in early {
             events.deliver(event);
         }
         let (requests, request_rx) = mpsc::unbounded_channel();
         let (closed_tx, closed) = watch::channel(None);
-        let closing = Closing {
-            closed: closed_tx,
-            shared: shared.clone(),
-            reason: None,
-        };
+        let closing =
+            Closing { closed: closed_tx, shared: shared.clone(), reason: None };
         let connection = QmpConnection::new(&options, oob, Vec::new());
         let driver = drive(
             socket, inbound, connection, request_rx, events, closing, limit,
@@ -292,9 +280,7 @@ impl Qmp {
     /// the peer listed its commands, the list names it. The arguments of a
     /// call can still use an item the release lacks.
     pub fn supports<C: QapiCommand>(&self) -> bool {
-        Required::of::<C>()
-            .refusal(self.version(), self.commands())
-            .is_none()
+        Required::of::<C>().refusal(self.version(), self.commands()).is_none()
     }
 
     /// Check that the peer can run every command in `required`, as
@@ -352,8 +338,7 @@ impl Qmp {
     }
 
     pub async fn execute<C: QapiCommand>(&self, cmd: &C) -> Result<C::Returns> {
-        self.execute_with_timeout(cmd, self.options.command_timeout)
-            .await
+        self.execute_with_timeout(cmd, self.options.command_timeout).await
     }
 
     pub async fn execute_with_timeout<C: QapiCommand>(
@@ -364,14 +349,17 @@ impl Qmp {
         if !C::sends_success_response(self.version()) {
             return Err(no_success_response::<C>());
         }
-        let request = wire::command(cmd, self.version(), self.commands(), false)?;
+        let request =
+            wire::command(cmd, self.version(), self.commands(), false)?;
         let reply = self.dispatch(request, Vec::new(), false, duration).await?;
         qapi_core::with_version(self.version(), || wire::decode(&reply))
     }
 
-    pub async fn execute_oob<C: QapiCommand>(&self, cmd: &C) -> Result<C::Returns> {
-        self.execute_oob_with_timeout(cmd, self.options.command_timeout)
-            .await
+    pub async fn execute_oob<C: QapiCommand>(
+        &self,
+        cmd: &C,
+    ) -> Result<C::Returns> {
+        self.execute_oob_with_timeout(cmd, self.options.command_timeout).await
     }
 
     pub async fn execute_oob_with_timeout<C: QapiCommand>(
@@ -380,14 +368,15 @@ impl Qmp {
         duration: Duration,
     ) -> Result<C::Returns> {
         if !C::allows_oob(self.version()) {
-            return Err(Error::InvalidRequest(InvalidRequestKind::OobNotAllowed {
-                command: C::NAME.into(),
-            }));
+            return Err(Error::InvalidRequest(
+                InvalidRequestKind::OobNotAllowed { command: C::NAME.into() },
+            ));
         }
         if !C::sends_success_response(self.version()) {
             return Err(no_success_response::<C>());
         }
-        let request = wire::command(cmd, self.version(), self.commands(), true)?;
+        let request =
+            wire::command(cmd, self.version(), self.commands(), true)?;
         let reply = self.dispatch(request, Vec::new(), true, duration).await?;
         qapi_core::with_version(self.version(), || wire::decode(&reply))
     }
@@ -419,8 +408,12 @@ impl Qmp {
         name: &str,
         args: Value,
     ) -> Result<T> {
-        self.execute_raw_oob_with_timeout(name, args, self.options.command_timeout)
-            .await
+        self.execute_raw_oob_with_timeout(
+            name,
+            args,
+            self.options.command_timeout,
+        )
+        .await
     }
     pub async fn execute_raw_oob_with_timeout<T: DeserializeOwned + 'static>(
         &self,
@@ -441,10 +434,17 @@ impl Qmp {
         args: Value,
         fds: Vec<OwnedFd>,
     ) -> Result<T> {
-        self.execute_raw_with_fds_and_timeout(name, args, fds, self.options.command_timeout)
-            .await
+        self.execute_raw_with_fds_and_timeout(
+            name,
+            args,
+            fds,
+            self.options.command_timeout,
+        )
+        .await
     }
-    pub async fn execute_raw_with_fds_and_timeout<T: DeserializeOwned + 'static>(
+    pub async fn execute_raw_with_fds_and_timeout<
+        T: DeserializeOwned + 'static,
+    >(
         &self,
         name: &str,
         args: Value,
@@ -505,23 +505,14 @@ impl Qmp {
         if let Some(reason) = self.close_reason() {
             return Err(Error::Disconnected(reason));
         }
-        let deadline = (self.clock)()
-            .checked_add(duration)
-            .ok_or(Error::InvalidRequest(InvalidRequestKind::TimeoutTooLarge {
+        let deadline = (self.clock)().checked_add(duration).ok_or(
+            Error::InvalidRequest(InvalidRequestKind::TimeoutTooLarge {
                 timeout: duration,
-            }))?;
+            }),
+        )?;
         let (waiter, reply) = oneshot::channel();
-        let request = Request {
-            json: request,
-            fds,
-            oob,
-            deadline,
-        };
-        if self
-            .requests
-            .send(Command::Request(request, waiter))
-            .is_err()
-        {
+        let request = Request { json: request, fds, oob, deadline };
+        if self.requests.send(Command::Request(request, waiter)).is_err() {
             return Err(self.lost().await);
         }
         match reply.await {
@@ -560,7 +551,10 @@ impl std::fmt::Debug for QmpDriver {
 }
 
 /// `future`, unless the socket's timer reaches `deadline` first.
-async fn within<S: Socket, F: Future>(deadline: Instant, future: F) -> Option<F::Output> {
+async fn within<S: Socket, F: Future>(
+    deadline: Instant,
+    future: F,
+) -> Option<F::Output> {
     let mut future = pin!(future);
     let mut sleep = pin!(S::sleep_until(deadline));
     poll_fn(|cx| {
@@ -625,9 +619,7 @@ async fn drive<S: Socket>(
             // A deadline that passed expires first, so that its call reports
             // its own timeout, not the closure that the expiry causes.
             let now = S::now();
-            if connection
-                .poll_timeout()
-                .is_some_and(|deadline| deadline <= now)
+            if connection.poll_timeout().is_some_and(|deadline| deadline <= now)
             {
                 connection.handle_timeout(now);
                 progress = true;
@@ -636,7 +628,9 @@ async fn drive<S: Socket>(
                 match requests.poll_recv(cx) {
                     Poll::Ready(Some(Command::Request(request, waiter))) => {
                         progress = true;
-                        if let Err((waiter, error)) = connection.submit(request, waiter) {
+                        if let Err((waiter, error)) =
+                            connection.submit(request, waiter)
+                        {
                             let _ = waiter.send(Err(error));
                         }
                     }
@@ -661,12 +655,15 @@ async fn drive<S: Socket>(
                     }
                 }
             }
-            if let Some(transmit) = connection.poll_transmit(S::now(), |waiter| !waiter.is_closed())
+            if let Some(transmit) =
+                connection.poll_transmit(S::now(), |waiter| !waiter.is_closed())
             {
                 match socket.poll_write(cx, transmit.bytes, transmit.fds) {
                     Poll::Ready(Ok(0)) => {
                         progress = true;
-                        connection.close(io::Error::from(io::ErrorKind::WriteZero).into());
+                        connection.close(
+                            io::Error::from(io::ErrorKind::WriteZero).into(),
+                        );
                     }
                     Poll::Ready(Ok(n)) => {
                         progress = true;
@@ -718,9 +715,13 @@ async fn drive<S: Socket>(
             match connection.poll_timeout() {
                 Some(deadline) => {
                     if sleep.as_ref().is_none_or(|(at, _)| *at != deadline) {
-                        sleep = Some((deadline, Box::pin(S::sleep_until(deadline))));
+                        sleep = Some((
+                            deadline,
+                            Box::pin(S::sleep_until(deadline)),
+                        ));
                     }
-                    let (_, timer) = sleep.as_mut().expect("the timer is armed");
+                    let (_, timer) =
+                        sleep.as_mut().expect("the timer is armed");
                     if timer.as_mut().poll(cx).is_ready() {
                         sleep = None;
                         connection.handle_timeout(S::now().max(deadline));

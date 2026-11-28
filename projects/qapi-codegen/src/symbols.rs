@@ -1,7 +1,10 @@
 //! Plan generated symbols against declarations from every selected release.
 use crate::{
     QapiSchema, QapiSchemaToken,
-    qapi_ir::{Attribute, Enum, EnumVariantKind, Metadata, Struct, rustify_name, rustify_type},
+    qapi_ir::{
+        Attribute, Enum, EnumVariantKind, Metadata, Struct, rustify_name,
+        rustify_type,
+    },
     unified::Version,
 };
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
@@ -20,7 +23,9 @@ fn kind(token: &QapiSchemaToken<'_>) -> Option<Kind> {
         QapiSchemaToken::Enum(_) => Kind::Enum,
         QapiSchemaToken::Struct(_) => Kind::Object,
         QapiSchemaToken::Alternate(_) => Kind::Alternate,
-        QapiSchemaToken::Union(value) if value.legacy_alternate => Kind::Alternate,
+        QapiSchemaToken::Union(value) if value.legacy_alternate => {
+            Kind::Alternate
+        }
         QapiSchemaToken::Union(_) => Kind::Object,
         _ => return None,
     })
@@ -80,11 +85,7 @@ enum RoleClaim<'a> {
     /// A union's branch enum or a command's request type.
     Helper,
     /// The `run`th run of an event that has `runs` of them.
-    Event {
-        raw: &'a String,
-        run: usize,
-        runs: usize,
-    },
+    Event { raw: &'a String, run: usize, runs: usize },
 }
 
 /// The Rust symbols of every selected release.
@@ -235,16 +236,17 @@ impl SchemaNames {
     /// A later run never takes the plain name, which its first run holds. A
     /// claim is `(preferred, owner, later)`.
     fn take_all(&mut self, claims: &[(String, Owner, bool)]) -> Vec<String> {
-        let plain: Vec<_> = claims
-            .iter()
-            .map(|(preferred, owner, later)| {
-                if *later {
-                    None
-                } else {
-                    self.take_plain(preferred, *owner)
-                }
-            })
-            .collect();
+        let plain: Vec<_> =
+            claims
+                .iter()
+                .map(|(preferred, owner, later)| {
+                    if *later {
+                        None
+                    } else {
+                        self.take_plain(preferred, *owner)
+                    }
+                })
+                .collect();
         plain
             .into_iter()
             .zip(claims)
@@ -260,17 +262,24 @@ impl SchemaNames {
         for raw in self.declarations.keys() {
             groups.entry(rustify_name(raw)).or_default().push(raw);
         }
-        let mut identities: Vec<(String, Vec<String>, BTreeMap<Version, Kind>)> = Vec::new();
+        let mut identities: Vec<(
+            String,
+            Vec<String>,
+            BTreeMap<Version, Kind>,
+        )> = Vec::new();
         for (root, mut raws) in groups {
             raws.sort_by_key(|raw| {
                 let since = self.declarations[*raw].keys().next().copied();
                 (since, **raw != root, (*raw).clone())
             });
-            let mut slots: Vec<(Vec<String>, BTreeMap<Version, Kind>)> = Vec::new();
+            let mut slots: Vec<(Vec<String>, BTreeMap<Version, Kind>)> =
+                Vec::new();
             for raw in raws {
                 let versions = &self.declarations[raw];
                 let slot = slots.iter_mut().find(|(_, history)| {
-                    !versions.keys().any(|version| history.contains_key(version))
+                    !versions
+                        .keys()
+                        .any(|version| history.contains_key(version))
                 });
                 match slot {
                     Some((members, history)) => {
@@ -288,7 +297,9 @@ impl SchemaNames {
         }
         let type_starts: Vec<_> = identities
             .iter()
-            .map(|(_, _, history)| run_starts(&self.versions, |version| history.get(version)))
+            .map(|(_, _, history)| {
+                run_starts(&self.versions, |version| history.get(version))
+            })
             .collect();
         let presence = |present: &BTreeSet<Version>| {
             run_starts(&self.versions, |version| {
@@ -312,12 +323,20 @@ impl SchemaNames {
             let mut claims = Vec::new();
             let mut runs = Vec::new();
             for (index, starts) in type_starts.iter().enumerate() {
-                if let Some(run) = starts.iter().position(|since| *since == version) {
-                    claims.push((identities[index].0.clone(), Owner::Type, run > 0));
+                if let Some(run) =
+                    starts.iter().position(|since| *since == version)
+                {
+                    claims.push((
+                        identities[index].0.clone(),
+                        Owner::Type,
+                        run > 0,
+                    ));
                     runs.push((index, run));
                 }
             }
-            for ((index, run), name) in runs.into_iter().zip(self.take_all(&claims)) {
+            for ((index, run), name) in
+                runs.into_iter().zip(self.take_all(&claims))
+            {
                 if run == 0 {
                     for raw in &identities[index].1 {
                         if rustify_name(raw) != name {
@@ -338,12 +357,16 @@ impl SchemaNames {
             let mut claims = Vec::new();
             let mut runs = Vec::new();
             for (raw, starts) in &command_starts {
-                if let Some(run) = starts.iter().position(|since| *since == version) {
+                if let Some(run) =
+                    starts.iter().position(|since| *since == version)
+                {
                     claims.push((rustify_name(raw), Owner::Command, run > 0));
                     runs.push((raw, run, starts.len()));
                 }
             }
-            for ((raw, run, count), name) in runs.into_iter().zip(self.take_all(&claims)) {
+            for ((raw, run, count), name) in
+                runs.into_iter().zip(self.take_all(&claims))
+            {
                 if run == 0 && name != rustify_name(raw) {
                     self.command_aliases.insert(raw.clone(), name.clone());
                 }
@@ -368,7 +391,8 @@ impl SchemaNames {
             }
             for (raw, starts) in &command_starts {
                 if starts.first() == Some(&version) {
-                    helpers.insert(format!("{}Command", self.command_root(raw)));
+                    helpers
+                        .insert(format!("{}Command", self.command_root(raw)));
                 }
             }
             helpers.retain(|preferred| !self.roles.contains_key(preferred));
@@ -378,10 +402,13 @@ impl SchemaNames {
                     .map(|preferred| (preferred, RoleClaim::Helper)),
             );
             for (raw, starts) in &event_starts {
-                if let Some(run) = starts.iter().position(|since| *since == version) {
+                if let Some(run) =
+                    starts.iter().position(|since| *since == version)
+                {
                     let preferred = rustify_name(&format!("{raw}Event"));
                     let runs = starts.len();
-                    claims.push((preferred, RoleClaim::Event { raw, run, runs }));
+                    claims
+                        .push((preferred, RoleClaim::Event { raw, run, runs }));
                 }
             }
             claims.sort_by(|(left, _), (right, _)| left.cmp(right));
@@ -436,13 +463,14 @@ impl SchemaNames {
                 self.separate_requests.insert(raw.clone());
             }
         }
-        self.separate_requests
-            .extend(self.command_runs.keys().cloned());
+        self.separate_requests.extend(self.command_runs.keys().cloned());
         for (root, data, _) in &self.shared_requests {
             for (command, present) in &self.commands {
                 if rustify_name(command) == *root
                     && self.declarations.get(data).is_some_and(|versions| {
-                        versions.keys().any(|version| !present.contains(version))
+                        versions
+                            .keys()
+                            .any(|version| !present.contains(version))
                     })
                 {
                     self.separate_requests.insert(command.clone());
@@ -473,10 +501,9 @@ impl SchemaNames {
     }
 
     fn event_root(&self, name: &str) -> String {
-        self.event_aliases
-            .get(name)
-            .cloned()
-            .unwrap_or_else(|| self.role(&rustify_name(&format!("{name}Event"))))
+        self.event_aliases.get(name).cloned().unwrap_or_else(|| {
+            self.role(&rustify_name(&format!("{name}Event")))
+        })
     }
 
     pub fn historical_command(&self, name: &str) -> Option<String> {
@@ -501,10 +528,7 @@ impl SchemaNames {
     }
 
     pub fn alias_name(&self, name: &str) -> String {
-        self.aliases
-            .get(name)
-            .cloned()
-            .unwrap_or_else(|| rustify_name(name))
+        self.aliases.get(name).cloned().unwrap_or_else(|| rustify_name(name))
     }
 
     pub fn data_symbols(&self) -> HashSet<String> {
@@ -512,9 +536,7 @@ impl SchemaNames {
             .keys()
             .map(|name| self.alias_name(name))
             .chain(
-                self.type_runs
-                    .values()
-                    .flat_map(|runs| runs.values().cloned()),
+                self.type_runs.values().flat_map(|runs| runs.values().cloned()),
             )
             .filter(|name| !self.shared_roots.contains(name))
             .collect()
@@ -585,7 +607,9 @@ impl SchemaNames {
         }
     }
 
-    pub fn declared_names<'a>(schemas: &[(&std::path::Path, QapiSchema<'a>)]) -> HashSet<String> {
+    pub fn declared_names<'a>(
+        schemas: &[(&std::path::Path, QapiSchema<'a>)],
+    ) -> HashSet<String> {
         schemas
             .iter()
             .flat_map(|(_, schema)| &schema.0)
@@ -628,7 +652,10 @@ mod tests {
                             .historical_command(name)
                             .unwrap_or_else(|| plan.command_root(name));
                         symbols.insert(key("request"), request);
-                        let role = plan.role(&format!("{}Command", plan.command_root(name)));
+                        let role = plan.role(&format!(
+                            "{}Command",
+                            plan.command_root(name)
+                        ));
                         symbols.insert(key("command"), role);
                     }
                     QapiSchemaToken::Event(_) => {
@@ -640,9 +667,15 @@ mod tests {
                 }
                 if let QapiSchemaToken::Union(value) = &token {
                     let root = plan.type_name(name);
-                    symbols.insert(key("branch"), plan.role(&format!("{root}Branch")));
+                    symbols.insert(
+                        key("branch"),
+                        plan.role(&format!("{root}Branch")),
+                    );
                     if value.discriminator.is_none() {
-                        symbols.insert(key("tag"), plan.type_name(&implicit_tag(name)));
+                        symbols.insert(
+                            key("tag"),
+                            plan.type_name(&implicit_tag(name)),
+                        );
                     }
                 }
             }
@@ -795,13 +828,15 @@ mod tests {
     }
 
     #[test]
-    fn renamed_types_keep_their_schema_name_and_synthesized_names_are_unmarked() {
+    fn renamed_types_keep_their_schema_name_and_synthesized_names_are_unmarked()
+    {
         let plan = planned(&[(
             (5, 0, 0),
             "{'struct':'FooBAR','data':{}} {'enum':'FooBar','data':[]}",
         )]);
         crate::set_parser_version((5, 0, 0));
-        let declared: HashSet<_> = ["FooBAR".to_owned(), "FooBar".to_owned()].into();
+        let declared: HashSet<_> =
+            ["FooBAR".to_owned(), "FooBar".to_owned()].into();
         let record = |name: &str, field_type: &str| Struct {
             name: name.into(),
             fields: vec![StructField {
@@ -814,10 +849,7 @@ mod tests {
             meta: Metadata::default(),
         };
         let mut wired = record("FooBAR", "FooBar");
-        wired
-            .meta
-            .attributes
-            .push(Attribute::with_value("name", "wire"));
+        wired.meta.attributes.push(Attribute::with_value("name", "wire"));
         let mut structs = HashMap::from([
             ("FooBAR".to_owned(), record("FooBAR", "FooBAR")),
             ("wired".to_owned(), wired),

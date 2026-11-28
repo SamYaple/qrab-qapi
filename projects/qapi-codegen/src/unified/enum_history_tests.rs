@@ -1,7 +1,10 @@
-use super::merge::{
-    has_feature, materialize_field_history, materialize_variant_history, merge_enum, merge_struct,
+use super::{
+    merge::{
+        has_feature, materialize_field_history, materialize_variant_history,
+        merge_enum, merge_struct,
+    },
+    *,
 };
-use super::*;
 
 fn enumeration(wire: &str, payload: EnumVariantKind, array: bool) -> Enum {
     Enum {
@@ -25,15 +28,15 @@ fn enum_and_variant_instability_retains_stabilization_gaps() {
     for (major, unstable) in [(6, true), (8, false), (11, true), (12, false)] {
         let mut value = enumeration("value", EnumVariantKind::Unit, false);
         if unstable {
-            let feature = Attribute::List(vec![Attribute::with_value("feature", "unstable")]);
+            let feature = Attribute::List(vec![Attribute::with_value(
+                "feature", "unstable",
+            )]);
             value.meta.attributes.push(feature.clone());
             value.variants[0].meta.attributes.push(feature);
         }
         merge_enum(&mut registry, "Example", &value, (major, 0, 0));
     }
-    let UnifiedType::Enum(value) = &registry.types["Example"] else {
-        panic!()
-    };
+    let UnifiedType::Enum(value) = &registry.types["Example"] else { panic!() };
     assert!(!has_feature(&value.ir.meta, "unstable"));
     assert!(!has_feature(&value.ir.variants[0].meta, "unstable"));
     for (version, expected) in [
@@ -54,24 +57,20 @@ fn enum_and_variant_instability_retains_stabilization_gaps() {
 fn latest_type_and_variant_conditions_replace_or_clear_old_conditions() {
     let mut registry = UnifiedRegistry::default();
     let mut value = enumeration("value", EnumVariantKind::Unit, false);
-    value
-        .meta
-        .attributes
-        .push(Attribute::with_value("condition", "CONFIG_A"));
+    value.meta.attributes.push(Attribute::with_value("condition", "CONFIG_A"));
     value.variants[0]
         .meta
         .attributes
         .push(Attribute::with_value("condition", "CONFIG_A"));
     merge_enum(&mut registry, "Example", &value, (1, 0, 0));
-    value.meta.attributes = vec![Attribute::with_value("condition", "CONFIG_B")];
+    value.meta.attributes =
+        vec![Attribute::with_value("condition", "CONFIG_B")];
     value.variants[0]
         .meta
         .attributes
         .retain(|attr| !matches!(attr, Attribute::Item {name,..} if name == "condition"));
     merge_enum(&mut registry, "Example", &value, (2, 0, 0));
-    let UnifiedType::Enum(value) = &registry.types["Example"] else {
-        panic!()
-    };
+    let UnifiedType::Enum(value) = &registry.types["Example"] else { panic!() };
     assert_eq!(condition(&value.ir.meta), Some("CONFIG_B"));
     assert_eq!(condition(&value.ir.variants[0].meta), None);
     let mut value = Struct {
@@ -79,10 +78,7 @@ fn latest_type_and_variant_conditions_replace_or_clear_old_conditions() {
         fields: vec![],
         meta: Metadata::default(),
     };
-    value
-        .meta
-        .attributes
-        .push(Attribute::with_value("condition", "CONFIG_A"));
+    value.meta.attributes.push(Attribute::with_value("condition", "CONFIG_A"));
     merge_struct(&mut registry, "Record", &value, (1, 0, 0));
     value.meta.attributes.clear();
     merge_struct(&mut registry, "Record", &value, (2, 0, 0));
@@ -102,9 +98,7 @@ fn reintroduced_variants_keep_the_gap_between_lifetimes() {
         merge_enum(&mut registry, "Example", value, (major, 0, 0));
     }
     materialize_variant_history(&mut registry, "QMP").unwrap();
-    let UnifiedType::Enum(value) = &registry.types["Example"] else {
-        panic!()
-    };
+    let UnifiedType::Enum(value) = &registry.types["Example"] else { panic!() };
     assert_eq!(value.variant_versions["returning"].since, (3, 0, 0));
     assert_eq!(value.variant_history.len(), 1);
     assert_eq!(value.variant_history[0].1.until, Some((2, 0, 0)));
@@ -119,7 +113,8 @@ fn payload_history_keeps_each_shape_and_avoids_real_variant_name_collisions() {
         (3, "int", true),
         (4, "int64", true),
     ] {
-        let mut input = enumeration("value", EnumVariantKind::Tuple(payload.into()), array);
+        let mut input =
+            enumeration("value", EnumVariantKind::Tuple(payload.into()), array);
         input.variants.push(EnumVariant {
             name: "value-legacy".into(),
             kind: EnumVariantKind::Unit,
@@ -133,9 +128,7 @@ fn payload_history_keeps_each_shape_and_avoids_real_variant_name_collisions() {
     }
     materialize_variant_history(&mut registry, "QMP").unwrap();
     materialize_field_history(&mut registry, "QMP").unwrap();
-    let UnifiedType::Enum(value) = &registry.types["Example"] else {
-        panic!()
-    };
+    let UnifiedType::Enum(value) = &registry.types["Example"] else { panic!() };
     assert_eq!(
         value.variant_history.len(),
         2,
@@ -181,14 +174,9 @@ fn wire_renames_with_the_same_rust_name_keep_both_spellings() {
     );
     materialize_variant_history(&mut registry, "QMP").unwrap();
     materialize_field_history(&mut registry, "QMP").unwrap();
-    let UnifiedType::Enum(value) = &registry.types["Example"] else {
-        panic!()
-    };
+    let UnifiedType::Enum(value) = &registry.types["Example"] else { panic!() };
     assert_eq!(value.variant_versions["foo_bar"].since, (2, 0, 0));
-    assert_eq!(
-        value.variant_versions["FooBarLegacy"].until,
-        Some((2, 0, 0))
-    );
+    assert_eq!(value.variant_versions["FooBarLegacy"].until, Some((2, 0, 0)));
     let old = value
         .ir
         .variants
@@ -196,8 +184,6 @@ fn wire_renames_with_the_same_rust_name_keep_both_spellings() {
         .find(|variant| variant.name == "FooBarLegacy")
         .unwrap();
     assert!(
-        old.meta
-            .attributes
-            .contains(&Attribute::with_value("name", "foo-bar"))
+        old.meta.attributes.contains(&Attribute::with_value("name", "foo-bar"))
     );
 }

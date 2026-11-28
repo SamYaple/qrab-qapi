@@ -1,16 +1,20 @@
-use super::common::QapiString;
-use super::common::{Malformed, keep, malformed_key};
-use super::common::{expression_text, other_key, qstring, read_since, take_keyed_dict, take_kv};
-use super::parser_version;
-use super::qapi_cond::{QapiCond, take_cond};
-use super::qapi_documentation::QapiDocumentation;
-use super::qapi_features::{QapiFeatures, take_features};
-use super::qapi_members::{QapiMembers, take_members};
-use nom::IResult;
-use nom::Parser;
-use nom::branch::alt;
-use nom::combinator::opt;
-use nom::error::{Error, ErrorKind};
+use super::{
+    common::{
+        Malformed, QapiString, expression_text, keep, malformed_key, other_key,
+        qstring, read_since, take_keyed_dict, take_kv,
+    },
+    parser_version,
+    qapi_cond::{QapiCond, take_cond},
+    qapi_documentation::QapiDocumentation,
+    qapi_features::{QapiFeatures, take_features},
+    qapi_members::{QapiMembers, take_members},
+};
+use nom::{
+    IResult, Parser,
+    branch::alt,
+    combinator::opt,
+    error::{Error, ErrorKind},
+};
 
 /// The keys whose `null` QEMU 2.4 to 4.1 take for an absent key.
 const ABSENT: &[&str] = &["base", "if"];
@@ -51,16 +55,14 @@ impl<'i> QapiStruct<'i> {
     /// not read: `'base'` before 1.7.
     pub(crate) fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
         let (input, doc) = opt(QapiDocumentation::parse).parse(input)?;
-        let mut s = Self {
-            doc,
-            ..Default::default()
-        };
+        let mut s = Self { doc, ..Default::default() };
         let start = input;
         let mut has_data = false;
         let take_name = take_kv("type", qstring);
         let (input, (_, keys)) = take_keyed_dict(alt((
             take_name.map(|v| s.name = v),
-            read_since((1, 7, 0), take_kv("base", qstring)).map(|v| s.base = Some(v)),
+            read_since((1, 7, 0), take_kv("base", qstring))
+                .map(|v| s.base = Some(v)),
             read_since((2, 4, 0), take_cond).map(|v| s.r#if = Some(v)),
             read_since((2, 4, 0), take_features).map(|v| s.features = Some(v)),
             take_kv("data", take_members).map(|v| {
@@ -68,7 +70,8 @@ impl<'i> QapiStruct<'i> {
                 s.data = v;
             }),
             other_key(READ),
-            malformed_key(READ).map(|entry| keep(&mut s.malformed, ABSENT, entry)),
+            malformed_key(READ)
+                .map(|entry| keep(&mut s.malformed, ABSENT, entry)),
         )))
         .parse(input)?;
         if !super::common::named(&keys, "type", &s.name) || !has_data {
@@ -82,10 +85,7 @@ impl<'i> QapiStruct<'i> {
     /// v2 (QEMU v2.4.0+): only `'struct'` keyword.
     pub(crate) fn parse_v2(input: &'i str) -> IResult<&'i str, Self> {
         let (input, doc) = opt(QapiDocumentation::parse).parse(input)?;
-        let mut s = Self {
-            doc,
-            ..Default::default()
-        };
+        let mut s = Self { doc, ..Default::default() };
         let start = input;
         let mut has_data = false;
         let (input, (_, keys)) = take_keyed_dict(alt((
@@ -98,7 +98,8 @@ impl<'i> QapiStruct<'i> {
                 s.data = v;
             }),
             other_key(READ),
-            malformed_key(READ).map(|entry| keep(&mut s.malformed, ABSENT, entry)),
+            malformed_key(READ)
+                .map(|entry| keep(&mut s.malformed, ABSENT, entry)),
         )))
         .parse(input)?;
         if !super::common::named(&keys, "struct", &s.name) {
@@ -126,18 +127,19 @@ mod tests {
     fn data_is_required_even_when_empty() {
         for version in [(1, 0, 0), (11, 1, 3)] {
             set_parser_version(version);
-            let keyword = if version < (2, 4, 0) {
-                "type"
-            } else {
-                "struct"
-            };
+            let keyword = if version < (2, 4, 0) { "type" } else { "struct" };
             // From 2.4 the validation refuses a missing 'data'.
             let missing = format!("{{ '{keyword}': 'MissingData' }}");
-            assert_eq!(QapiStruct::parse(&missing).is_err(), version < (2, 4, 0));
             assert_eq!(
-                QapiStruct::parse(&format!("{{ '{keyword}': 'Empty', 'data': {{}} }}"))
-                    .unwrap()
-                    .0,
+                QapiStruct::parse(&missing).is_err(),
+                version < (2, 4, 0)
+            );
+            assert_eq!(
+                QapiStruct::parse(&format!(
+                    "{{ '{keyword}': 'Empty', 'data': {{}} }}"
+                ))
+                .unwrap()
+                .0,
                 ""
             );
         }

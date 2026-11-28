@@ -2,8 +2,10 @@
 //! release pins it reads, what it writes and how its errors name their
 //! inputs.
 
-use std::path::Path;
-use std::process::{Command, Output};
+use std::{
+    path::Path,
+    process::{Command, Output},
+};
 
 /// Run git in `dir`, whatever repository the environment names.
 fn git(dir: &Path, args: &[&str]) -> String {
@@ -13,12 +15,7 @@ fn git(dir: &Path, args: &[&str]) -> String {
         .env_remove("GIT_INDEX_FILE")
         .env_remove("GIT_OBJECT_DIRECTORY")
         .env_remove("GIT_COMMON_DIR")
-        .args([
-            "-c",
-            "user.name=Test",
-            "-c",
-            "user.email=test@example.invalid",
-        ])
+        .args(["-c", "user.name=Test", "-c", "user.email=test@example.invalid"])
         .args(["-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false"])
         .args(["-c", "core.hooksPath=/dev/null"])
         .arg("-C")
@@ -36,7 +33,9 @@ fn git(dir: &Path, args: &[&str]) -> String {
 
 /// A directory with a QEMU tree `qemu` that has a tagged commit for each
 /// release, with its QMP and QGA schemas, and the pin of each release.
-fn workspace(releases: &[(&str, &str, &str)]) -> (tempfile::TempDir, Vec<String>) {
+fn workspace(
+    releases: &[(&str, &str, &str)],
+) -> (tempfile::TempDir, Vec<String>) {
     let dir = tempfile::tempdir().unwrap();
     let repo = dir.path().join("qemu");
     std::fs::create_dir_all(repo.join("qapi")).unwrap();
@@ -68,7 +67,8 @@ fn stderr(output: &Output) -> String {
     String::from_utf8(output.stderr.clone()).unwrap()
 }
 
-const MODULES: [&str; 4] = ["commands.rs", "events.rs", "metadata.rs", "mod.rs"];
+const MODULES: [&str; 4] =
+    ["commands.rs", "events.rs", "metadata.rs", "mod.rs"];
 
 /// The names of the files in `dir`, sorted.
 fn files(dir: &Path) -> Vec<String> {
@@ -93,17 +93,16 @@ fn help_and_usage_errors_have_their_own_exit_status() {
     assert!(help.stderr.is_empty());
     for (args, message) in [
         (&[][..], "--output-dir is required"),
-        (
-            &["--output-dir", "out", "--bogus"],
-            "Unknown option --bogus",
-        ),
+        (&["--output-dir", "out", "--bogus"], "Unknown option --bogus"),
     ] {
         let output = codegen(dir.path(), &[], args);
         assert_eq!(output.status.code(), Some(2), "{args:?}");
         assert!(output.stdout.is_empty());
         let stderr = stderr(&output);
         assert!(
-            stderr.starts_with(&format!("error: {message}\n\nUsage: qapi-codegen ")),
+            stderr.starts_with(&format!(
+                "error: {message}\n\nUsage: qapi-codegen "
+            )),
             "{stderr}"
         );
     }
@@ -115,59 +114,41 @@ fn the_versions_file_selects_the_releases_to_generate() {
     let mislabeled = "##\n# @Wrong:\n#\n# Since: 2.8\n##\n{ 'struct': 'Right', 'data': {} }\n";
     let (dir, pins) = workspace(&[
         ("v2.8.0", mislabeled, "{ 'command': 'guest-old' }"),
-        (
-            "v9.0.0",
-            "{ 'command': 'x-ping' }",
-            "{ 'command': 'guest-ping' }",
-        ),
+        ("v9.0.0", "{ 'command': 'x-ping' }", "{ 'command': 'guest-ping' }"),
     ]);
     let pins: Vec<_> = pins.iter().map(String::as_str).collect();
     let output = codegen(
         dir.path(),
         &pins,
-        &[
-            "--versions-file",
-            "pins.lock",
-            "--output-dir",
-            "out",
-            "qemu",
-        ],
+        &["--versions-file", "pins.lock", "--output-dir", "out", "qemu"],
     );
     assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
     let stderr = stderr(&output);
     let mut lines = stderr.lines();
-    assert!(
-        lines.next().unwrap().starts_with("warning: v2.8.0: "),
-        "{stderr}"
-    );
-    assert!(
-        lines.next().unwrap().starts_with("Generated out in "),
-        "{stderr}"
-    );
+    assert!(lines.next().unwrap().starts_with("warning: v2.8.0: "), "{stderr}");
+    assert!(lines.next().unwrap().starts_with("Generated out in "), "{stderr}");
     assert_eq!(lines.next(), None);
     assert_eq!(files(&dir.path().join("out")), MODULES);
-    let commands = std::fs::read_to_string(dir.path().join("out/commands.rs")).unwrap();
+    let commands =
+        std::fs::read_to_string(dir.path().join("out/commands.rs")).unwrap();
     assert!(commands.contains("pub struct XPing"), "{commands}");
 
     // Only the pinned releases are read: v2.8.0 is not, here.
     let output = codegen(
         dir.path(),
         &pins[1..],
-        &[
-            "--qga",
-            "--versions-file=pins.lock",
-            "--output-dir=qga",
-            "qemu",
-        ],
+        &["--qga", "--versions-file=pins.lock", "--output-dir=qga", "qemu"],
     );
     assert_eq!(output.status.code(), Some(0), "{}", self::stderr(&output));
     assert!(self::stderr(&output).starts_with("Generated qga in "));
-    let commands = std::fs::read_to_string(dir.path().join("qga/commands.rs")).unwrap();
+    let commands =
+        std::fs::read_to_string(dir.path().join("qga/commands.rs")).unwrap();
     assert!(commands.contains("pub struct GuestPing"), "{commands}");
     assert!(!commands.contains("GuestOld"), "{commands}");
 
     // Without the file, the embedded pins apply, which this tree lacks.
-    let output = codegen(dir.path(), &[], &["--output-dir", "embedded", "qemu"]);
+    let output =
+        codegen(dir.path(), &[], &["--output-dir", "embedded", "qemu"]);
     assert_eq!(output.status.code(), Some(1));
     let stderr = self::stderr(&output);
     assert!(
@@ -182,11 +163,7 @@ fn the_versions_file_selects_the_releases_to_generate() {
 #[test]
 fn a_failure_names_its_input_and_writes_nothing() {
     let (dir, pins) = workspace(&[
-        (
-            "v9.0.0",
-            "{ 'command': 'ping' }",
-            "{ 'command': 'guest-ping' }",
-        ),
+        ("v9.0.0", "{ 'command': 'ping' }", "{ 'command': 'guest-ping' }"),
         (
             "v9.1.0",
             "{ 'command': 'ping' }\n{ 'command': 'ping' }",
@@ -247,7 +224,8 @@ fn a_failure_names_its_input_and_writes_nothing() {
 
 #[test]
 fn empty_guest_agent_modules_are_refused_too() {
-    let (dir, pins) = workspace(&[("v0.15.0", "", "{ 'command': 'guest-ping' }")]);
+    let (dir, pins) =
+        workspace(&[("v0.15.0", "", "{ 'command': 'guest-ping' }")]);
     let output = codegen(
         dir.path(),
         &["v0.14.0 0000000000000000000000000000000000000000"],
@@ -288,13 +266,7 @@ fn a_write_failure_names_the_output() {
     let output = codegen(
         dir.path(),
         &[&pins[0]],
-        &[
-            "qemu",
-            "--output-dir",
-            "out",
-            "--versions-file",
-            "pins.lock",
-        ],
+        &["qemu", "--output-dir", "out", "--versions-file", "pins.lock"],
     );
     assert_eq!(output.status.code(), Some(1));
     let stderr = stderr(&output);
@@ -310,13 +282,16 @@ fn schema_docs_include_the_schema_documentation() {
     let (dir, pins) = workspace(&[("v9.0.0", schema, "")]);
     let pins: Vec<_> = pins.iter().map(String::as_str).collect();
     for (out, documented) in [("docs", true), ("reference", false)] {
-        let mut args = vec!["--versions-file", "pins.lock", "--output-dir", out, "qemu"];
+        let mut args =
+            vec!["--versions-file", "pins.lock", "--output-dir", out, "qemu"];
         if documented {
             args.push("--schema-docs");
         }
         let output = codegen(dir.path(), &pins, &args);
         assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
-        let commands = std::fs::read_to_string(dir.path().join(out).join("commands.rs")).unwrap();
+        let commands =
+            std::fs::read_to_string(dir.path().join(out).join("commands.rs"))
+                .unwrap();
         assert_eq!(
             commands.contains("Checks that the monitor answers."),
             documented,

@@ -59,12 +59,7 @@ pub(crate) fn rustify_type(qapi_type: &str) -> String {
 }
 
 fn fix_leading_digit(input: &str) -> String {
-    if input
-        .chars()
-        .next()
-        .map(|c| c.is_ascii_digit())
-        .unwrap_or(false)
-    {
+    if input.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false) {
         format!("_{}", input)
     } else {
         input.to_string()
@@ -94,11 +89,7 @@ fn pascal_identifier(input: &str) -> String {
     let name = ascii_identifier(input).to_pascal_case();
     // Escapes can introduce an acronym boundary (E + U301); settle its case
     // before the resulting symbol is used again as a generated type reference.
-    let name = if input.is_ascii() {
-        name
-    } else {
-        name.to_pascal_case()
-    };
+    let name = if input.is_ascii() { name } else { name.to_pascal_case() };
     fix_leading_digit(&name)
 }
 
@@ -117,11 +108,7 @@ fn pascal_identifier(input: &str) -> String {
 /// ```
 pub fn rustify_name(input: &str) -> String {
     let name = pascal_identifier(input);
-    if name.is_empty() {
-        "QapiUnnamed".into()
-    } else {
-        escape_reserved(name)
-    }
+    if name.is_empty() { "QapiUnnamed".into() } else { escape_reserved(name) }
 }
 
 /// The types and traits at the root of `qrab-qapi`, its own and those it
@@ -165,11 +152,7 @@ pub(crate) fn escape_reserved(name: String) -> String {
             | "Ok"
             | "Err"
     ) || RUNTIME_ITEMS.contains(&name.as_str());
-    if reserved {
-        format!("Qapi{name}")
-    } else {
-        name
-    }
+    if reserved { format!("Qapi{name}") } else { name }
 }
 
 /// The Rust variant name of a QAPI name. Variants have a namespace of their
@@ -203,11 +186,12 @@ pub(crate) fn rustify_field(input: &str) -> String {
     /// can spell and that can be raw: `self`, `super` and `crate` cannot, and
     /// [`rustify_field_name`] renames them, as it does an empty name.
     const KEYWORDS: &[&str] = &[
-        "abstract", "as", "async", "await", "become", "box", "break", "const", "continue", "do",
-        "dyn", "else", "enum", "extern", "false", "final", "fn", "for", "gen", "if", "impl", "in",
-        "let", "loop", "macro", "match", "mod", "move", "mut", "override", "priv", "pub", "ref",
-        "return", "static", "struct", "trait", "true", "try", "type", "typeof", "unsafe",
-        "unsized", "use", "virtual", "where", "while", "yield",
+        "abstract", "as", "async", "await", "become", "box", "break", "const",
+        "continue", "do", "dyn", "else", "enum", "extern", "false", "final",
+        "fn", "for", "gen", "if", "impl", "in", "let", "loop", "macro",
+        "match", "mod", "move", "mut", "override", "priv", "pub", "ref",
+        "return", "static", "struct", "trait", "true", "try", "type", "typeof",
+        "unsafe", "unsized", "use", "virtual", "where", "while", "yield",
     ];
     let snake = rustify_field_name(input);
     if KEYWORDS.contains(&snake.as_str()) {
@@ -238,24 +222,23 @@ impl Attribute {
     }
 
     /// A key with a value.
-    pub(crate) fn with_value<N: ToString, V: ToString>(name: N, value: V) -> Self {
-        Self::Item {
-            name: name.to_string(),
-            value: value.to_string(),
-        }
+    pub(crate) fn with_value<N: ToString, V: ToString>(
+        name: N,
+        value: V,
+    ) -> Self {
+        Self::Item { name: name.to_string(), value: value.to_string() }
     }
 
     /// Keys that belong together, each with its value if it has one.
-    pub(crate) fn with_values<N: ToString, V: ToString>(values: Vec<(N, Option<V>)>) -> Self {
+    pub(crate) fn with_values<N: ToString, V: ToString>(
+        values: Vec<(N, Option<V>)>,
+    ) -> Self {
         let attrs = values
             .iter()
             .map(|i| {
                 let name = i.0.to_string();
                 if let Some(value) = &i.1 {
-                    Self::Item {
-                        name,
-                        value: value.to_string(),
-                    }
+                    Self::Item { name, value: value.to_string() }
                 } else {
                     Self::Unit(name)
                 }
@@ -266,10 +249,7 @@ impl Attribute {
 
     /// A key with nested attributes, such as `name(added = "1.0.0", removed = "2.0.0")`.
     pub(crate) fn nested<N: ToString>(name: N, inner: Vec<Attribute>) -> Self {
-        Self::Nested {
-            name: name.to_string(),
-            inner,
-        }
+        Self::Nested { name: name.to_string(), inner }
     }
 }
 
@@ -342,7 +322,8 @@ mod tests {
             name.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
                 && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
         };
-        for raw in ["١Thing", "²", "É", "E\u{301}", "𐀀", "Ⅸ", "汉字", "Καλημέρα"]
+        for raw in
+            ["١Thing", "²", "É", "E\u{301}", "𐀀", "Ⅸ", "汉字", "Καλημέρα"]
         {
             let name = rustify_name(raw);
             assert!(identifier(&name), "{raw}: {name}");
@@ -407,19 +388,20 @@ mod tests {
                 .collect()
         }
         let read = |path: &str| std::fs::read_to_string(path).unwrap();
-        let qapi = read(concat!(env!("CARGO_MANIFEST_DIR"), "/../qapi/src/lib.rs"));
+        let qapi =
+            read(concat!(env!("CARGO_MANIFEST_DIR"), "/../qapi/src/lib.rs"));
         let core = read(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/../qapi-core/src/lib.rs"
         ));
         // The names in qrab-qapi's `pub use qapi_core::{...};` at its root,
         // which starts a line, unlike the one inside `__private`.
-        let start = qapi
-            .find("\npub use qapi_core::{")
-            .expect("the runtime re-export")
-            + 21;
+        let start =
+            qapi.find("\npub use qapi_core::{").expect("the runtime re-export")
+                + 21;
         let end = start + qapi[start..].find("};").unwrap();
-        let reexported: Vec<&str> = qapi[start..end].split(',').map(str::trim).collect();
+        let reexported: Vec<&str> =
+            qapi[start..end].split(',').map(str::trim).collect();
         let mut root = declared(&qapi);
         root.extend(
             declared(&core)

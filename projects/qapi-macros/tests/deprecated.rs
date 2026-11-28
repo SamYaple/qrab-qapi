@@ -6,9 +6,8 @@
 // The stand-in runtime, which the expansion names `::qapi`.
 extern crate self as qapi;
 mod runtime;
-use runtime::*;
-
 use qapi_macros::qapi;
+use runtime::*;
 use serde_json::json;
 
 #[qapi(feature = "deprecated")]
@@ -53,7 +52,8 @@ struct Holder {
 #[test]
 #[allow(deprecated, reason = "naming the deprecated types warns")]
 fn a_struct_and_a_union_branch_hold_a_deprecated_type() {
-    let holder: Holder = serde_json::from_value(json!({"type": "a", "a": 1})).unwrap();
+    let holder: Holder =
+        serde_json::from_value(json!({"type": "a", "a": 1})).unwrap();
     assert!(holder.old.is_none());
     assert!(matches!(holder.kind, OldKind::A));
     assert!(matches!(holder.u, Some(Branch::A(Old { a: 1 }))));

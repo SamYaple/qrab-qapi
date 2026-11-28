@@ -17,10 +17,14 @@
 //! - `COMMANDS`: the commands sorted by wire name, each pointing to the
 //!   `StructMeta` of its arguments.
 
-use crate::qapi_ir::{Attribute, EnumVariantKind, StructField, rustify_field, rustify_name};
-use crate::unified::{
-    TypeCategory, UnifiedEnum, UnifiedRegistry, UnifiedStruct, UnifiedType, Version, VersionRange,
-    classify_type,
+use crate::{
+    qapi_ir::{
+        Attribute, EnumVariantKind, StructField, rustify_field, rustify_name,
+    },
+    unified::{
+        TypeCategory, UnifiedEnum, UnifiedRegistry, UnifiedStruct, UnifiedType,
+        Version, VersionRange, classify_type,
+    },
 };
 use std::collections::BTreeMap;
 
@@ -52,11 +56,11 @@ fn until(range: &VersionRange, item: &VersionRange) -> Option<Version> {
 
 /// A `&[Releases]` slice of the runs of `ranges` within `item`, in release
 /// order.
-fn releases<'a>(ranges: impl IntoIterator<Item = &'a VersionRange>, item: &VersionRange) -> String {
-    runs(
-        ranges.into_iter().map(|range| (range.since, range.until)),
-        item.until,
-    )
+fn releases<'a>(
+    ranges: impl IntoIterator<Item = &'a VersionRange>,
+    item: &VersionRange,
+) -> String {
+    runs(ranges.into_iter().map(|range| (range.since, range.until)), item.until)
 }
 
 /// A `&[Releases]` slice of `runs`, in release order, those left open ending
@@ -65,10 +69,8 @@ fn runs(
     runs: impl IntoIterator<Item = (Version, Option<Version>)>,
     end: Option<Version>,
 ) -> String {
-    let mut ranges: Vec<_> = runs
-        .into_iter()
-        .map(|(since, until)| (since, until.or(end)))
-        .collect();
+    let mut ranges: Vec<_> =
+        runs.into_iter().map(|(since, until)| (since, until.or(end))).collect();
     ranges.sort();
     let entries: Vec<_> = ranges
         .into_iter()
@@ -85,7 +87,10 @@ fn runs(
 
 /// The runs of a type's or command's `deprecated` or `unstable` feature,
 /// ending with it at the latest.
-fn feature_runs(ranges: &[(Version, Option<Version>)], item: &VersionRange) -> String {
+fn feature_runs(
+    ranges: &[(Version, Option<Version>)],
+    item: &VersionRange,
+) -> String {
     runs(ranges.iter().copied(), item.until)
 }
 
@@ -117,7 +122,10 @@ fn complement(
 }
 
 /// The runs of a command's flag: its newest run and the earlier ones.
-fn flag_runs(value: &UnifiedStruct, name: &str) -> Vec<(Version, Option<Version>)> {
+fn flag_runs(
+    value: &UnifiedStruct,
+    name: &str,
+) -> Vec<(Version, Option<Version>)> {
     value
         .attr_versions
         .get(name)
@@ -152,9 +160,7 @@ fn rs_str(s: &str) -> String {
 }
 
 fn has_unit_attr(attrs: &[Attribute], name: &str) -> bool {
-    attrs
-        .iter()
-        .any(|a| matches!(a, Attribute::Unit(n) if n == name))
+    attrs.iter().any(|a| matches!(a, Attribute::Unit(n) if n == name))
 }
 
 /// The value of an `Item` attribute.
@@ -175,10 +181,7 @@ fn wire_name<'a>(name: &'a str, attrs: &'a [Attribute]) -> &'a str {
 /// The element type of a command's `returns`, a Rust type that the lowering
 /// writes as `()`, `T` or `Vec<T>`, and whether it is an array.
 pub(crate) fn returns_element(rust: &str) -> (&str, bool) {
-    match rust
-        .strip_prefix("Vec<")
-        .and_then(|inner| inner.strip_suffix('>'))
-    {
+    match rust.strip_prefix("Vec<").and_then(|inner| inner.strip_suffix('>')) {
         Some(inner) => (inner, true),
         None => (rust, false),
     }
@@ -208,13 +211,16 @@ fn qapi_prim_for_type(t: &str) -> Option<&'static str> {
 /// it does not define: the QAPI name and where it is, such as `Foo.bar`.
 /// The lowering refuses undefined types in every release, and the merge
 /// keeps every type of every release, so any is a generator bug.
-pub(crate) fn undefined_reference(registry: &UnifiedRegistry) -> Option<(String, String)> {
+pub(crate) fn undefined_reference(
+    registry: &UnifiedRegistry,
+) -> Option<(String, String)> {
     let defined = |qapi_type: &str| {
         let element = qapi_type
             .strip_prefix('[')
             .and_then(|inner| inner.strip_suffix(']'))
             .unwrap_or(qapi_type);
-        qapi_prim_for_type(element).is_some() || registry.types.contains_key(&rustify_name(element))
+        qapi_prim_for_type(element).is_some()
+            || registry.types.contains_key(&rustify_name(element))
     };
     registry.types.iter().find_map(|(name, value)| {
         let mut references: Vec<(&str, String)> = Vec::new();
@@ -225,8 +231,15 @@ pub(crate) fn undefined_reference(registry: &UnifiedRegistry) -> Option<(String,
                         .ir
                         .fields
                         .iter()
-                        .filter(|field| !has_unit_attr(&field.meta.attributes, "flatten"))
-                        .map(|field| (field.r#type.as_str(), format!("{name}.{}", field.name))),
+                        .filter(|field| {
+                            !has_unit_attr(&field.meta.attributes, "flatten")
+                        })
+                        .map(|field| {
+                            (
+                                field.r#type.as_str(),
+                                format!("{name}.{}", field.name),
+                            )
+                        }),
                 );
                 references.extend(
                     value
@@ -240,9 +253,10 @@ pub(crate) fn undefined_reference(registry: &UnifiedRegistry) -> Option<(String,
             UnifiedType::Enum(value) => {
                 references.extend(value.ir.variants.iter().filter_map(
                     |variant| match &variant.kind {
-                        EnumVariantKind::Tuple(ty) => {
-                            Some((ty.as_str(), format!("{name}::{}", variant.name)))
-                        }
+                        EnumVariantKind::Tuple(ty) => Some((
+                            ty.as_str(),
+                            format!("{name}::{}", variant.name),
+                        )),
                         EnumVariantKind::Unit => None,
                     },
                 ));
@@ -278,18 +292,15 @@ struct TypePool<'a> {
 
 impl<'a> TypePool<'a> {
     fn new(registry: &'a UnifiedRegistry) -> Self {
-        Self {
-            registry,
-            entries: Vec::new(),
-            index: BTreeMap::new(),
-        }
+        Self { registry, entries: Vec::new(), index: BTreeMap::new() }
     }
 
     fn intern(&mut self, key: TypeKey) -> u32 {
         if let Some(&index) = self.index.get(&key) {
             return index;
         }
-        let index = u32::try_from(self.entries.len()).expect("fewer than 2^32 types");
+        let index =
+            u32::try_from(self.entries.len()).expect("fewer than 2^32 types");
         self.entries.push(key.clone());
         self.index.insert(key, index);
         index
@@ -326,14 +337,11 @@ impl<'a> TypePool<'a> {
         let kind = match self.registry.types.get(&name) {
             Some(UnifiedType::Enum(_)) => "Enum",
             Some(UnifiedType::Struct(_)) => "Struct",
-            None => panic!("the lowering left the type '{qapi_type}' unresolved"),
+            None => {
+                panic!("the lowering left the type '{qapi_type}' unresolved")
+            }
         };
-        self.intern(TypeKey {
-            kind,
-            name,
-            prim: None,
-            inner: None,
-        })
+        self.intern(TypeKey { kind, name, prim: None, inner: None })
     }
 
     /// The index of a command's newest return type, which the lowering
@@ -396,10 +404,9 @@ fn free_form(value: &UnifiedStruct) -> String {
 fn simple_union(value: &UnifiedStruct) -> String {
     releases(
         value.attr_versions.get("simple_union").into_iter().chain(
-            value
-                .attr_history
-                .iter()
-                .filter_map(|(name, range)| (name == "simple_union").then_some(range)),
+            value.attr_history.iter().filter_map(|(name, range)| {
+                (name == "simple_union").then_some(range)
+            }),
         ),
         &value.versions,
     )
@@ -416,32 +423,34 @@ fn detect_union(value: &UnifiedStruct) -> Option<(String, String)> {
             .filter(|field| predicate(field))
             .max_by_key(|field| field_range(value, field).since)
     };
-    let discriminator = newest(|field| has_unit_attr(&field.meta.attributes, "discriminator"))?;
+    let discriminator =
+        newest(|field| has_unit_attr(&field.meta.attributes, "discriminator"))?;
     let branch = newest(|field| {
         has_unit_attr(&field.meta.attributes, "union")
             && has_unit_attr(&field.meta.attributes, "flatten")
     })?;
-    Some((
-        rustify_field(&discriminator.name),
-        rustify_name(&branch.r#type),
-    ))
+    Some((rustify_field(&discriminator.name), rustify_name(&branch.r#type)))
 }
 
-fn field_range<'a>(value: &'a UnifiedStruct, field: &StructField) -> &'a VersionRange {
-    value
-        .field_versions
-        .get(&field.name)
-        .unwrap_or(&value.versions)
+fn field_range<'a>(
+    value: &'a UnifiedStruct,
+    field: &StructField,
+) -> &'a VersionRange {
+    value.field_versions.get(&field.name).unwrap_or(&value.versions)
 }
 
-fn variant_range<'a>(value: &'a UnifiedEnum, variant: &str) -> &'a VersionRange {
-    value
-        .variant_versions
-        .get(variant)
-        .unwrap_or(&value.versions)
+fn variant_range<'a>(
+    value: &'a UnifiedEnum,
+    variant: &str,
+) -> &'a VersionRange {
+    value.variant_versions.get(variant).unwrap_or(&value.versions)
 }
 
-fn emit_fields(value: &UnifiedStruct, rust_name: &str, pool: &mut TypePool<'_>) -> String {
+fn emit_fields(
+    value: &UnifiedStruct,
+    rust_name: &str,
+    pool: &mut TypePool<'_>,
+) -> String {
     let mut s = format!("static FIELDS_{rust_name}: &[FieldMeta] = &[\n");
     for f in &value.ir.fields {
         // Flatten receivers are virtual Rust fields without their own wire key.
@@ -500,8 +509,13 @@ fn emit_struct(value: &UnifiedStruct, rust_name: &str) -> String {
 }
 
 /// Intern payloads with the same scalar/list rules as struct fields.
-fn emit_variants(value: &UnifiedEnum, rust_name: &str, pool: &mut TypePool<'_>) -> String {
-    let mut s = format!("static VARIANTS_{rust_name}: &[EnumVariantMeta] = &[\n");
+fn emit_variants(
+    value: &UnifiedEnum,
+    rust_name: &str,
+    pool: &mut TypePool<'_>,
+) -> String {
+    let mut s =
+        format!("static VARIANTS_{rust_name}: &[EnumVariantMeta] = &[\n");
     for v in &value.ir.variants {
         let payload_type = match &v.kind {
             EnumVariantKind::Tuple(ty) => Some(pool.intern_type(ty, v.array)),
@@ -670,7 +684,10 @@ pub(crate) fn emit(registry: &UnifiedRegistry) -> String {
             "/// {doc}, by Rust name.\npub static {table}: Table<{meta}> = Table {{\n    entries: &[\n"
         ));
         for name in names {
-            out.push_str(&format!("        ({}, &{prefix}_{name}),\n", rs_str(name)));
+            out.push_str(&format!(
+                "        ({}, &{prefix}_{name}),\n",
+                rs_str(name)
+            ));
         }
         out.push_str("    ],\n};\n");
         if table == "STRUCTS" {

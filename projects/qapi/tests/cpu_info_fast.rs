@@ -5,7 +5,9 @@ use serde_json::json;
 #[test]
 fn current_cpu_info_fast_accepts_known_targets_with_implicit_empty_branches() {
     qapi::with_version((11, 1, 3), || {
-        for target in ["x86_64", "i386", "aarch64", "riscv64", "ppc64", "mips64"] {
+        for target in
+            ["x86_64", "i386", "aarch64", "riscv64", "ppc64", "mips64"]
+        {
             let value = json!({"cpu-index":0,"qom-path":"/machine/unattached/device[0]","qom-type":"max-x86_64-cpu",
                 "thread-id":29781,"target":target,"props":{"socket-id":0,"core-id":0,"thread-id":0}});
             let cpu: CpuInfoFast = serde_json::from_value(value.clone())

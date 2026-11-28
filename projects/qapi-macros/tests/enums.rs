@@ -49,10 +49,7 @@ fn a_member_may_have_an_empty_wire_name() {
     assert_eq!(LegacyNames::Empty.to_string(), "");
     assert_eq!(encode((1, 0, 0), &LegacyNames::Empty).unwrap(), r#""""#);
     assert!(matches!(decode(None, json!("")), Ok(LegacyNames::Empty)));
-    assert!(matches!(
-        decode(None, json!("1-foo")),
-        Ok(LegacyNames::OneFoo)
-    ));
+    assert!(matches!(decode(None, json!("1-foo")), Ok(LegacyNames::OneFoo)));
 }
 
 /// One wire name with a representation per lifetime.
@@ -64,15 +61,20 @@ enum Mode {
     Fast,
 }
 
-fn encode<T: serde::Serialize>(version: (u32, u32, u32), value: &T) -> Result<String, String> {
-    with_version(version, || serde_json::to_string(value)).map_err(|error| error.to_string())
+fn encode<T: serde::Serialize>(
+    version: (u32, u32, u32),
+    value: &T,
+) -> Result<String, String> {
+    with_version(version, || serde_json::to_string(value))
+        .map_err(|error| error.to_string())
 }
 
 fn decode<T: serde::de::DeserializeOwned>(
     version: Option<(u32, u32, u32)>,
     json: serde_json::Value,
 ) -> Result<T, String> {
-    let decode = || serde_json::from_value(json).map_err(|error| error.to_string());
+    let decode =
+        || serde_json::from_value(json).map_err(|error| error.to_string());
     match version {
         Some(version) => with_version(version, decode),
         None => decode(),
@@ -93,7 +95,8 @@ fn string_enums_write_and_read_their_wire_names() {
         record::record(&AcpiSlotType::Cpu).unwrap(),
         "unit_variant(ACPISlotType, 1, CPU)"
     );
-    let recorded = with_version((9, 2, 0), || record::record(&Driver::Dep)).unwrap();
+    let recorded =
+        with_version((9, 2, 0), || record::record(&Driver::Dep)).unwrap();
     assert_eq!(recorded, "unit_variant(Driver, 2, dep)");
 }
 
@@ -111,7 +114,9 @@ fn variants_and_types_serialize_only_within_their_lifetime() {
             let (major, minor, patch) = version;
             assert_eq!(
                 result.unwrap_err(),
-                format!("Driver::Archipelago is not available in QEMU {major}.{minor}.{patch}")
+                format!(
+                    "Driver::Archipelago is not available in QEMU {major}.{minor}.{patch}"
+                )
             );
             assert_eq!(take_unavailable(), ["Driver::Archipelago"]);
         }
@@ -123,7 +128,10 @@ fn variants_and_types_serialize_only_within_their_lifetime() {
     assert_eq!(take_unavailable(), ["Driver"]);
     assert!(encode((2, 0, 0), &Driver::Qcow2).is_ok());
     // Outside any scope the default version applies.
-    assert!(with_default((2, 5, 0), || serde_json::to_string(&Driver::Archipelago)).is_ok());
+    assert!(
+        with_default((2, 5, 0), || serde_json::to_string(&Driver::Archipelago))
+            .is_ok()
+    );
 }
 
 #[test]
@@ -168,10 +176,7 @@ fn a_wire_name_decodes_into_the_variant_of_the_version() {
         decode(Some((2, 12, 0)), json!("fast")),
         Ok(Mode::FastOld)
     ));
-    assert!(matches!(
-        decode(Some((3, 0, 0)), json!("fast")),
-        Ok(Mode::Fast)
-    ));
+    assert!(matches!(decode(Some((3, 0, 0)), json!("fast")), Ok(Mode::Fast)));
     assert!(matches!(decode(None, json!("fast")), Ok(Mode::Fast)));
     assert!(matches!(
         with_default((2, 0, 0), || decode(None, json!("fast"))),
@@ -194,14 +199,13 @@ fn deprecated_variants_warn_once_from_their_deprecation() {
         }
         return;
     }
-    let stderr = child::stderr_of("deprecated_variants_warn_once_from_their_deprecation");
+    let stderr = child::stderr_of(
+        "deprecated_variants_warn_once_from_their_deprecation",
+    );
     let warning = "qapi warning: Driver::Dep is deprecated since QEMU 9.2.0";
     assert_eq!(stderr.matches(warning).count(), 1, "{stderr}");
     let (before, after) = stderr.split_once("from the deprecation").unwrap();
-    assert!(
-        !before.contains(warning) && after.contains(warning),
-        "{stderr}"
-    );
+    assert!(!before.contains(warning) && after.contains(warning), "{stderr}");
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
@@ -315,7 +319,9 @@ fn an_integer_goes_to_a_float_only_without_an_integer_variant() {
     ));
     let error = decode::<Numeric>(Some((2, 9, 0)), json!(128)).unwrap_err();
     assert!(
-        error.starts_with("no variant of Numeric accepts 128 in QEMU 2.9.0 (Integer: "),
+        error.starts_with(
+            "no variant of Numeric accepts 128 in QEMU 2.9.0 (Integer: "
+        ),
         "{error}"
     );
     assert!(matches!(
@@ -390,7 +396,10 @@ fn branch<T: QapiFlatUnion>(
     tag: &str,
     payload: serde_json::Value,
 ) -> Result<T, String> {
-    let decode = || T::deserialize_variant_value(tag, payload).map_err(|error| error.to_string());
+    let decode = || {
+        T::deserialize_variant_value(tag, payload)
+            .map_err(|error| error.to_string())
+    };
     match version {
         Some(version) => with_version(version, decode),
         None => decode(),
@@ -400,10 +409,7 @@ fn branch<T: QapiFlatUnion>(
 #[test]
 fn union_branches_dispatch_by_tag_and_version() {
     let text = json!({"text": "t"});
-    assert_eq!(
-        Branch::A(Payload { text: "t".into() }).wire_tag(),
-        Some("a")
-    );
+    assert_eq!(Branch::A(Payload { text: "t".into() }).wire_tag(), Some("a"));
     assert_eq!(Branch::U.wire_tag(), Some("u"));
     assert_eq!(Branch::COld(Old { old: 1 }).wire_tag(), Some("c"));
     assert!(matches!(
@@ -422,14 +428,8 @@ fn union_branches_dispatch_by_tag_and_version() {
         branch(Some((3, 0, 0)), "c", json!({"new": 2})),
         Ok(Branch::C(New { new: 2 }))
     ));
-    assert!(matches!(
-        branch(None, "c", json!({"new": 2})),
-        Ok(Branch::C(_))
-    ));
-    assert!(matches!(
-        branch(Some((9, 2, 0)), "u", json!({})),
-        Ok(Branch::U)
-    ));
+    assert!(matches!(branch(None, "c", json!({"new": 2})), Ok(Branch::C(_))));
+    assert!(matches!(branch(Some((9, 2, 0)), "u", json!({})), Ok(Branch::U)));
     assert_eq!(
         branch::<Branch>(Some((4, 2, 0)), "bogus", json!({})).unwrap_err(),
         "unknown Branch discriminator `bogus`, expected one of `a`, `c`, `u`"
@@ -552,7 +552,8 @@ fn the_expansion_does_not_depend_on_names_in_scope() {
         "unknown variant `three`, expected `one` or `two`"
     );
     for wire in [json!(3), json!("text"), json!({"text": "record"})] {
-        let value: shadowed::Alternate = decode(Some((1, 0, 0)), wire.clone()).unwrap();
+        let value: shadowed::Alternate =
+            decode(Some((1, 0, 0)), wire.clone()).unwrap();
         assert_eq!(encode((1, 0, 0), &value).unwrap(), wire.to_string());
     }
     assert!(matches!(

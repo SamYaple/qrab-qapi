@@ -1,5 +1,7 @@
 mod support;
-use qapi_protocol::{ClientOptions, Error, InvalidRequestKind, ProtocolViolation, Qmp};
+use qapi_protocol::{
+    ClientOptions, Error, InvalidRequestKind, ProtocolViolation, Qmp,
+};
 use serde_json::{Value, json};
 use std::{sync::Arc, time::Duration};
 use tokio::{io::AsyncWriteExt, net::UnixStream};
@@ -10,7 +12,9 @@ async fn oversized_unterminated_frame_fails_without_waiting_for_newline() {
     let (client, _, mut reader, mut writer) = support::raw_qmp(options).await;
     let client = Arc::new(client);
     let other = client.clone();
-    let call = tokio::spawn(async move { other.execute_raw::<Value>("ping", json!({})).await });
+    let call = tokio::spawn(async move {
+        other.execute_raw::<Value>("ping", json!({})).await
+    });
     support::read(&mut reader).await;
     writer.write_all(&vec![b'a'; 1024]).await.unwrap();
     assert!(
@@ -28,12 +32,11 @@ async fn oversized_unterminated_frame_fails_without_waiting_for_newline() {
 
 #[tokio::test]
 async fn default_limit_accepts_realistic_large_responses() {
-    let (client, _, mut reader, mut writer) = support::raw_qmp(ClientOptions::default()).await;
+    let (client, _, mut reader, mut writer) =
+        support::raw_qmp(ClientOptions::default()).await;
     let call = tokio::spawn(async move {
-        let result = client
-            .execute_raw::<Value>("large", json!({}))
-            .await
-            .unwrap();
+        let result =
+            client.execute_raw::<Value>("large", json!({})).await.unwrap();
         assert_eq!(result.as_str().unwrap().len(), 2 * 1024 * 1024);
         client.shutdown().await;
     });
@@ -54,11 +57,13 @@ async fn malformed_envelopes_fail_the_connection_instead_of_becoming_success() {
         json!({"id": 1, "error": {"desc":"missing class"}}),
         json!([1]),
     ] {
-        let (client, _, mut reader, mut writer) = support::raw_qmp(ClientOptions::default()).await;
+        let (client, _, mut reader, mut writer) =
+            support::raw_qmp(ClientOptions::default()).await;
         let client = Arc::new(client);
         let other = client.clone();
-        let call =
-            tokio::spawn(async move { other.execute(&qapi::commands::Quit::default()).await });
+        let call = tokio::spawn(async move {
+            other.execute(&qapi::commands::Quit::default()).await
+        });
         support::read(&mut reader).await;
         support::write(&mut writer, malformed).await;
         assert!(
@@ -74,10 +79,13 @@ async fn malformed_envelopes_fail_the_connection_instead_of_becoming_success() {
 
 #[tokio::test]
 async fn truncated_json_at_eof_and_invalid_utf8_are_errors() {
-    for bytes in [b"{\"return\":{},\"id\":1}".as_slice(), b"\xff\n".as_slice()] {
-        let (client, _, mut reader, mut writer) = support::raw_qmp(ClientOptions::default()).await;
-        let call =
-            tokio::spawn(async move { client.execute_raw::<Value>("ping", json!({})).await });
+    for bytes in [b"{\"return\":{},\"id\":1}".as_slice(), b"\xff\n".as_slice()]
+    {
+        let (client, _, mut reader, mut writer) =
+            support::raw_qmp(ClientOptions::default()).await;
+        let call = tokio::spawn(async move {
+            client.execute_raw::<Value>("ping", json!({})).await
+        });
         support::read(&mut reader).await;
         writer.write_all(bytes).await.unwrap();
         drop(writer);
@@ -93,13 +101,18 @@ async fn fragmented_read_survives_outbound_activity() {
     writer.write_all(b"{\"event\":\"ST").await.unwrap();
     tokio::task::yield_now().await;
     let other = client.clone();
-    let call = tokio::spawn(async move { other.execute_raw::<Value>("ping", json!({})).await });
+    let call = tokio::spawn(async move {
+        other.execute_raw::<Value>("ping", json!({})).await
+    });
     let request = support::read(&mut reader).await;
     writer
-        .write_all(b"OP\",\"timestamp\":{\"seconds\":-1,\"microseconds\":-1}}\r\n")
+        .write_all(
+            b"OP\",\"timestamp\":{\"seconds\":-1,\"microseconds\":-1}}\r\n",
+        )
         .await
         .unwrap();
-    support::write(&mut writer, json!({"return": null, "id": request["id"]})).await;
+    support::write(&mut writer, json!({"return": null, "id": request["id"]}))
+        .await;
     assert!(call.await.unwrap().unwrap().is_null());
     let event = events.recv().await.unwrap();
     assert_eq!(event.event, "STOP");
@@ -108,7 +121,8 @@ async fn fragmented_read_survives_outbound_activity() {
 }
 
 #[tokio::test]
-async fn invalid_raw_requests_fail_before_writing_and_do_not_poison_the_session() {
+async fn invalid_raw_requests_fail_before_writing_and_do_not_poison_the_session()
+ {
     let (client, _, mut peer) = support::qmp(ClientOptions::default()).await;
     let limit = ClientOptions::default().max_message_bytes;
     for oob in [false, true] {
@@ -125,17 +139,19 @@ async fn invalid_raw_requests_fail_before_writing_and_do_not_poison_the_session(
                 client.execute_raw::<Value>(name, args).await
             };
             match result {
-                Err(Error::InvalidRequest(InvalidRequestKind::EmptyCommandName)) => {
+                Err(Error::InvalidRequest(
+                    InvalidRequestKind::EmptyCommandName,
+                )) => {
                     assert!(name.is_empty())
                 }
-                Err(Error::InvalidRequest(InvalidRequestKind::ArgumentsNotObject {
-                    command,
-                    ..
-                })) => assert_eq!(command, "ping"),
-                Err(Error::InvalidRequest(InvalidRequestKind::RequestTooLarge {
-                    limit: refused,
-                    ..
-                })) => assert_eq!(refused, limit),
+                Err(Error::InvalidRequest(
+                    InvalidRequestKind::ArgumentsNotObject { command, .. },
+                )) => assert_eq!(command, "ping"),
+                Err(Error::InvalidRequest(
+                    InvalidRequestKind::RequestTooLarge {
+                        limit: refused, ..
+                    },
+                )) => assert_eq!(refused, limit),
                 other => panic!("{name} (oob: {oob}): {other:?}"),
             }
             assert!(!client.is_closed());
@@ -143,21 +159,20 @@ async fn invalid_raw_requests_fail_before_writing_and_do_not_poison_the_session(
         }
     }
     // Nothing reached the peer: the next command it reads is the next call.
-    let (result, ()) = tokio::join!(client.execute_raw::<Value>("ping", json!({})), async {
-        assert_eq!(peer.recv_command().await.unwrap().0, "ping");
-        peer.send_return(json!({})).await.unwrap();
-    });
+    let (result, ()) =
+        tokio::join!(client.execute_raw::<Value>("ping", json!({})), async {
+            assert_eq!(peer.recv_command().await.unwrap().0, "ping");
+            peer.send_return(json!({})).await.unwrap();
+        });
     assert_eq!(result.unwrap(), json!({}));
     client.shutdown().await;
 }
 
 #[tokio::test]
 async fn handshake_requires_real_capability_ack_and_preserves_early_events() {
-    for response in [
-        json!({}),
-        json!({"return":{},"id":99}),
-        json!({"return":null,"id":0}),
-    ] {
+    for response in
+        [json!({}), json!({"return":{},"id":99}), json!({"return":null,"id":0})]
+    {
         let (client, peer) = UnixStream::pair().unwrap();
         let (read, mut write) = peer.into_split();
         let mut read = tokio::io::BufReader::new(read);
@@ -185,15 +200,16 @@ async fn handshake_requires_real_capability_ack_and_preserves_early_events() {
 }
 
 #[tokio::test]
-async fn unknown_error_classes_are_preserved_and_valid_errors_allow_next_command() {
+async fn unknown_error_classes_are_preserved_and_valid_errors_allow_next_command()
+ {
     let (client, _, mut peer) = support::qmp(ClientOptions::default()).await;
     let client = Arc::new(client);
     let other = client.clone();
-    let call = tokio::spawn(async move { other.execute_raw::<Value>("ping", json!({})).await });
+    let call = tokio::spawn(async move {
+        other.execute_raw::<Value>("ping", json!({})).await
+    });
     peer.recv_command().await.unwrap();
-    peer.send_error("FutureError", "exact description")
-        .await
-        .unwrap();
+    peer.send_error("FutureError", "exact description").await.unwrap();
     match call.await.unwrap().unwrap_err() {
         Error::Remote(error) => {
             assert_eq!(error.class, "FutureError");
@@ -209,16 +225,21 @@ async fn unknown_error_classes_are_preserved_and_valid_errors_allow_next_command
 #[tokio::test]
 async fn large_upload_does_not_block_reading_an_earlier_large_reply() {
     use tokio::io::AsyncBufReadExt;
-    let (client, _, mut reader, mut writer) = support::raw_qmp(ClientOptions::default()).await;
+    let (client, _, mut reader, mut writer) =
+        support::raw_qmp(ClientOptions::default()).await;
     let client = Arc::new(client);
     let other = client.clone();
-    let download =
-        tokio::spawn(async move { other.execute_raw::<Value>("download", json!({})).await });
+    let download = tokio::spawn(async move {
+        other.execute_raw::<Value>("download", json!({})).await
+    });
     let first = support::read(&mut reader).await;
     let other = client.clone();
     let upload = tokio::spawn(async move {
         other
-            .execute_raw::<Value>("upload", json!({"data":"y".repeat(4*1024*1024)}))
+            .execute_raw::<Value>(
+                "upload",
+                json!({"data":"y".repeat(4*1024*1024)}),
+            )
             .await
     });
     // The second command has begun writing; the socket cannot buffer it all.
@@ -234,7 +255,8 @@ async fn large_upload_does_not_block_reading_an_earlier_large_reply() {
             second["arguments"]["data"].as_str().unwrap().len(),
             4 * 1024 * 1024
         );
-        support::write(&mut writer, json!({"return":{},"id":second["id"]})).await;
+        support::write(&mut writer, json!({"return":{},"id":second["id"]}))
+            .await;
         assert_eq!(
             download.await.unwrap().unwrap().as_str().unwrap().len(),
             2 * 1024 * 1024
@@ -247,13 +269,20 @@ async fn large_upload_does_not_block_reading_an_earlier_large_reply() {
 }
 
 #[tokio::test]
-async fn pretty_printed_json_and_escaped_delimiters_are_framed_as_one_message() {
-    let (client, _, mut reader, mut writer) = support::raw_qmp(ClientOptions::default()).await;
-    let call = tokio::spawn(async move { client.execute_raw::<Value>("pretty", json!({})).await });
+async fn pretty_printed_json_and_escaped_delimiters_are_framed_as_one_message()
+{
+    let (client, _, mut reader, mut writer) =
+        support::raw_qmp(ClientOptions::default()).await;
+    let call = tokio::spawn(async move {
+        client.execute_raw::<Value>("pretty", json!({})).await
+    });
     let request = support::read(&mut reader).await;
-    let payload = json!([{"text":"quoted \"}]}\" and newline\n inside a string"}]);
-    let mut bytes =
-        serde_json::to_vec_pretty(&json!({"return":payload,"id":request["id"]})).unwrap();
+    let payload =
+        json!([{"text":"quoted \"}]}\" and newline\n inside a string"}]);
+    let mut bytes = serde_json::to_vec_pretty(
+        &json!({"return":payload,"id":request["id"]}),
+    )
+    .unwrap();
     bytes.extend_from_slice(b"\r\n");
     // Split in the middle of an escaped string to exercise persistent lexer state.
     for chunk in bytes.chunks(7) {
@@ -272,7 +301,10 @@ async fn shutdown_cancels_a_blocked_write_and_wakes_its_caller() {
     let other = client.clone();
     let call = tokio::spawn(async move {
         other
-            .execute_raw::<Value>("upload", json!({"data":"x".repeat(4*1024*1024)}))
+            .execute_raw::<Value>(
+                "upload",
+                json!({"data":"x".repeat(4*1024*1024)}),
+            )
             .await
     });
     assert!(!reader.fill_buf().await.unwrap().is_empty());
@@ -286,8 +318,11 @@ async fn shutdown_cancels_a_blocked_write_and_wakes_its_caller() {
 
 #[tokio::test]
 async fn unknown_ids_of_any_json_type_are_dropped_without_harming_routing() {
-    let (client, _, mut reader, mut writer) = support::raw_qmp(ClientOptions::default()).await;
-    let call = tokio::spawn(async move { client.execute_raw::<Value>("ping", json!({})).await });
+    let (client, _, mut reader, mut writer) =
+        support::raw_qmp(ClientOptions::default()).await;
+    let call = tokio::spawn(async move {
+        client.execute_raw::<Value>("ping", json!({})).await
+    });
     let request = support::read(&mut reader).await;
     for id in [
         json!(null),
@@ -298,16 +333,20 @@ async fn unknown_ids_of_any_json_type_are_dropped_without_harming_routing() {
     ] {
         support::write(&mut writer, json!({"return":"wrong","id":id})).await;
     }
-    support::write(&mut writer, json!({"return":"correct","id":request["id"]})).await;
+    support::write(&mut writer, json!({"return":"correct","id":request["id"]}))
+        .await;
     assert_eq!(call.await.unwrap().unwrap(), json!("correct"));
 }
 
 #[tokio::test]
 async fn idless_server_error_closes_connection_and_preserves_the_cause() {
-    let (client, _, mut reader, mut writer) = support::raw_qmp(ClientOptions::default()).await;
+    let (client, _, mut reader, mut writer) =
+        support::raw_qmp(ClientOptions::default()).await;
     let client = Arc::new(client);
     let other = client.clone();
-    let call = tokio::spawn(async move { other.execute_raw::<Value>("ping", json!({})).await });
+    let call = tokio::spawn(async move {
+        other.execute_raw::<Value>("ping", json!({})).await
+    });
     support::read(&mut reader).await;
     support::write(
         &mut writer,
@@ -316,7 +355,9 @@ async fn idless_server_error_closes_connection_and_preserves_the_cause() {
     .await;
     match call.await.unwrap().unwrap_err() {
         Error::Disconnected(cause) => match &*cause {
-            Error::Remote(error) => assert_eq!(error.desc, "parser rejected input"),
+            Error::Remote(error) => {
+                assert_eq!(error.desc, "parser rejected input")
+            }
             other => panic!("{other:?}"),
         },
         other => panic!("{other:?}"),
@@ -342,10 +383,13 @@ async fn the_limit_counts_json_bytes_without_either_terminator() {
         (LIMIT + 1, "\n", false),
     ] {
         let options = ClientOptions::default().with_max_message_bytes(LIMIT);
-        let (client, _, mut reader, mut writer) = support::raw_qmp(options).await;
+        let (client, _, mut reader, mut writer) =
+            support::raw_qmp(options).await;
         let client = Arc::new(client);
         let other = client.clone();
-        let call = tokio::spawn(async move { other.execute_raw::<Value>("ping", json!({})).await });
+        let call = tokio::spawn(async move {
+            other.execute_raw::<Value>("ping", json!({})).await
+        });
         let request = support::read(&mut reader).await;
         let (mut reply, text) = reply_of(bytes, &request["id"]);
         assert_eq!(reply.len(), bytes);
@@ -370,7 +414,8 @@ async fn an_array_is_not_a_greeting() {
     let (client, peer) = UnixStream::pair().unwrap();
     let (_read, mut write) = peer.into_split();
     let greeting = support::greeting()["QMP"].clone();
-    support::write(&mut write, json!([null, null, null, null, null, greeting])).await;
+    support::write(&mut write, json!([null, null, null, null, null, greeting]))
+        .await;
     assert!(matches!(
         Qmp::from_stream(client).await,
         Err(Error::Protocol(ProtocolViolation::NotAnObject(None)))
@@ -390,10 +435,15 @@ async fn capabilities_enable_oob_only_when_the_greeting_offers_it() {
             }
             support::write(&mut write, greeting).await;
             let capabilities = support::read(&mut read).await;
-            support::write(&mut write, json!({"return": {}, "id": capabilities["id"]})).await;
+            support::write(
+                &mut write,
+                json!({"return": {}, "id": capabilities["id"]}),
+            )
+            .await;
             let query = support::read(&mut read).await;
             assert_eq!(query["execute"], "query-commands");
-            support::write(&mut write, support::probe_refusal(&query["id"])).await;
+            support::write(&mut write, support::probe_refusal(&query["id"]))
+                .await;
             (capabilities, read, write)
         });
         let (client, _) = Qmp::from_stream(client).await.unwrap();
@@ -404,10 +454,10 @@ async fn capabilities_enable_oob_only_when_the_greeting_offers_it() {
         } else {
             assert!(capabilities.get("arguments").is_none(), "{capabilities}");
             assert!(matches!(
-                client
-                    .execute_raw_oob::<Value>("query-yank", json!({}))
-                    .await,
-                Err(Error::InvalidRequest(InvalidRequestKind::OobNotNegotiated))
+                client.execute_raw_oob::<Value>("query-yank", json!({})).await,
+                Err(Error::InvalidRequest(
+                    InvalidRequestKind::OobNotNegotiated
+                ))
             ));
         }
     }
@@ -416,12 +466,16 @@ async fn capabilities_enable_oob_only_when_the_greeting_offers_it() {
 #[tokio::test]
 async fn a_reply_before_its_request_is_written_closes_the_connection() {
     use tokio::io::AsyncBufReadExt;
-    let (client, _, mut reader, mut writer) = support::raw_qmp(ClientOptions::default()).await;
+    let (client, _, mut reader, mut writer) =
+        support::raw_qmp(ClientOptions::default()).await;
     let client = Arc::new(client);
     let other = client.clone();
     let upload = tokio::spawn(async move {
         other
-            .execute_raw::<Value>("upload", json!({"data":"x".repeat(4*1024*1024)}))
+            .execute_raw::<Value>(
+                "upload",
+                json!({"data":"x".repeat(4*1024*1024)}),
+            )
             .await
     });
     // The upload has begun writing, as request 1, and cannot finish.
@@ -446,9 +500,12 @@ async fn event_data_must_be_an_object() {
             json!({"event": "STOP", "data": data, "timestamp": {"seconds": 0, "microseconds": 0}}),
         )
         .await;
-        let reason = tokio::time::timeout(Duration::from_secs(1), client.closed())
-            .await
-            .unwrap_or_else(|_| panic!("an event with data {data} was accepted"));
+        let reason =
+            tokio::time::timeout(Duration::from_secs(1), client.closed())
+                .await
+                .unwrap_or_else(|_| {
+                    panic!("an event with data {data} was accepted")
+                });
         assert!(
             matches!(
                 &*reason,

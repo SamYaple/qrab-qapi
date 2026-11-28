@@ -1,12 +1,14 @@
 //! Building the QMP and QGA registries from every pinned release.
 
-use super::lower::VersionResult;
-use super::lower::load_versions;
-use super::merge::{
-    check_lifetime, coalesce_returns, fix_recursive_types, materialize_field_history,
-    materialize_variant_history, merge_enum, merge_struct,
+use super::{
+    lower::{VersionResult, load_versions},
+    merge::{
+        check_lifetime, coalesce_returns, fix_recursive_types,
+        materialize_field_history, materialize_variant_history, merge_enum,
+        merge_struct,
+    },
+    *,
 };
-use super::*;
 
 /// Parse the QMP schemas of the given release tags and merge them into one
 /// registry. Releases before 1.0, which have no QMP schema, are left out. Extraction and parsing run in parallel across versions; merging is

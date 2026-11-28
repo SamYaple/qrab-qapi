@@ -37,22 +37,28 @@ pub struct QemuVersion {
 /// An event's message checked: the event, or `None` when it is larger than
 /// `limit` and is dropped unparsed, so that a large event never becomes a
 /// tree. The client counts the drop.
-pub(crate) fn event(bytes: &[u8], envelope: &Envelope, limit: usize) -> Result<Option<QmpEvent>> {
-    if envelope.ret.is_some() || envelope.error.is_some() || envelope.id.is_some() {
-        return Err(Error::Protocol(ProtocolViolation::EventWithResponseFields));
-    }
-    if envelope
-        .data
-        .is_some_and(|data| !data.get().starts_with('{'))
+pub(crate) fn event(
+    bytes: &[u8],
+    envelope: &Envelope,
+    limit: usize,
+) -> Result<Option<QmpEvent>> {
+    if envelope.ret.is_some()
+        || envelope.error.is_some()
+        || envelope.id.is_some()
     {
+        return Err(Error::Protocol(
+            ProtocolViolation::EventWithResponseFields,
+        ));
+    }
+    if envelope.data.is_some_and(|data| !data.get().starts_with('{')) {
         return Err(Error::Protocol(ProtocolViolation::EventDataNotObject));
     }
     if bytes.len() > limit {
         return Ok(None);
     }
-    serde_json::from_slice(bytes)
-        .map(Some)
-        .map_err(|error| Error::Protocol(ProtocolViolation::InvalidEvent(error)))
+    serde_json::from_slice(bytes).map(Some).map_err(|error| {
+        Error::Protocol(ProtocolViolation::InvalidEvent(error))
+    })
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -121,14 +127,19 @@ impl QmpHandshake {
 
     pub fn handle_frame(&mut self, bytes: &[u8]) -> Result<()> {
         debug_assert!(self.step != Step::Done, "the handshake is done");
-        debug_assert!(self.transmit.is_none(), "write the frame before reading on");
+        debug_assert!(
+            self.transmit.is_none(),
+            "write the frame before reading on"
+        );
         let envelope = wire::envelope(bytes)?;
         if self.step == Step::Greeting {
             let greeting = envelope
                 .greeting
                 .ok_or(Error::Protocol(ProtocolViolation::MissingGreeting))?;
             let greeting: Greeting = serde_json::from_str(greeting.get())
-                .map_err(|error| Error::Protocol(ProtocolViolation::InvalidGreeting(error)))?;
+                .map_err(|error| {
+                    Error::Protocol(ProtocolViolation::InvalidGreeting(error))
+                })?;
             self.oob = greeting.capabilities.iter().any(|cap| cap == "oob");
             let mut request = json!({"execute": "qmp_capabilities", "id": 0});
             if self.oob {
@@ -147,11 +158,15 @@ impl QmpHandshake {
         match self.step {
             Step::Capabilities => {
                 if envelope.numeric_id() != Some(0) {
-                    return Err(Error::Protocol(ProtocolViolation::CapabilitiesReplyId));
+                    return Err(Error::Protocol(
+                        ProtocolViolation::CapabilitiesReplyId,
+                    ));
                 }
                 let value: Value = wire::decode(wire::response(&envelope)?)?;
                 if !value.as_object().is_some_and(|o| o.is_empty()) {
-                    return Err(Error::Protocol(ProtocolViolation::CapabilitiesReply));
+                    return Err(Error::Protocol(
+                        ProtocolViolation::CapabilitiesReply,
+                    ));
                 }
                 if self.probe {
                     let request = json!({"execute": "query-commands", "id": 0});
@@ -163,7 +178,9 @@ impl QmpHandshake {
             }
             Step::Commands => {
                 if envelope.numeric_id() != Some(0) {
-                    return Err(Error::Protocol(ProtocolViolation::CommandsReplyId));
+                    return Err(Error::Protocol(
+                        ProtocolViolation::CommandsReplyId,
+                    ));
                 }
                 self.commands = commands(&envelope)?;
                 self.step = Step::Done;
@@ -236,9 +253,7 @@ mod tests {
             json_of(&handshake.poll_transmit().unwrap()),
             json!({"execute": "qmp_capabilities", "id": 0, "arguments": {"enable": ["oob"]}})
         );
-        handshake
-            .handle_frame(br#"{"return": {}, "id": 0}"#)
-            .unwrap();
+        handshake.handle_frame(br#"{"return": {}, "id": 0}"#).unwrap();
         assert_eq!(
             json_of(&handshake.poll_transmit().unwrap()),
             json!({"execute": "query-commands", "id": 0})
@@ -266,13 +281,8 @@ mod tests {
             json_of(&handshake.poll_transmit().unwrap()),
             json!({"execute": "qmp_capabilities", "id": 0})
         );
-        handshake
-            .handle_frame(br#"{"return": {}, "id": 0}"#)
-            .unwrap();
-        assert!(
-            handshake.poll_transmit().is_none(),
-            "no probe when it is off"
-        );
+        handshake.handle_frame(br#"{"return": {}, "id": 0}"#).unwrap();
+        assert!(handshake.poll_transmit().is_none(), "no probe when it is off");
         assert!(handshake.is_done());
         let established = handshake.finish();
         assert!(!established.oob);
@@ -343,7 +353,8 @@ mod tests {
 
     #[test]
     fn a_reply_without_id_zero_breaks_the_step_it_answers() {
-        for reply in [&br#"{"return": {}, "id": 1}"#[..], br#"{"return": {}}"#] {
+        for reply in [&br#"{"return": {}, "id": 1}"#[..], br#"{"return": {}}"#]
+        {
             let mut handshake = handshake(true);
             answer(&mut handshake, GREETING);
             assert!(matches!(
@@ -401,7 +412,9 @@ mod tests {
 
     #[test]
     fn an_event_is_checked_before_it_is_parsed() {
-        let check = |bytes: &[u8], limit| event(bytes, &wire::envelope(bytes).unwrap(), limit);
+        let check = |bytes: &[u8], limit| {
+            event(bytes, &wire::envelope(bytes).unwrap(), limit)
+        };
         let stop =
             br#"{"event": "STOP", "data": {}, "timestamp": {"seconds": 1, "microseconds": 2}}"#;
         assert_eq!(check(stop, 1024).unwrap().unwrap().event, "STOP");

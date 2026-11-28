@@ -1,20 +1,19 @@
-use super::common::QapiString;
-use super::common::{Malformed, keep, malformed_key};
-use super::common::{
-    expression_text, other_key, qstring, read_since, take_keyed_dict, take_kv, take_list,
+use super::{
+    common::{
+        Malformed, QapiString, expression_text, keep, malformed_key, other_key,
+        qstring, read_since, take_keyed_dict, take_kv, take_list,
+    },
+    qapi_cond::{QapiCond, take_cond},
+    qapi_documentation::QapiDocumentation,
+    qapi_enum_value::{QapiEnumValue, take_enum_value},
+    qapi_features::{QapiFeatures, take_features},
 };
-use super::qapi_cond::QapiCond;
-use super::qapi_cond::take_cond;
-use super::qapi_documentation::QapiDocumentation;
-use super::qapi_enum_value::QapiEnumValue;
-use super::qapi_enum_value::take_enum_value;
-use super::qapi_features::QapiFeatures;
-use super::qapi_features::take_features;
-use nom::IResult;
-use nom::Parser;
-use nom::branch::alt;
-use nom::combinator::opt;
-use nom::error::{Error, ErrorKind};
+use nom::{
+    IResult, Parser,
+    branch::alt,
+    combinator::opt,
+    error::{Error, ErrorKind},
+};
 
 /// The keys whose `null` QEMU 2.4 to 4.1 take for an absent key.
 const ABSENT: &[&str] = &["prefix", "if"];
@@ -51,15 +50,13 @@ impl<'i> QapiEnum<'i> {
 
     pub(crate) fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
         let (input, doc) = opt(QapiDocumentation::parse).parse(input)?;
-        let mut s = Self {
-            doc,
-            ..Default::default()
-        };
+        let mut s = Self { doc, ..Default::default() };
         let start = input;
         let mut has_data = false;
         let (input, (_, keys)) = take_keyed_dict(alt((
             take_kv("enum", qstring).map(|v| s.name = v),
-            read_since((2, 4, 0), take_kv("prefix", qstring)).map(|v| s.prefix = Some(v)),
+            read_since((2, 4, 0), take_kv("prefix", qstring))
+                .map(|v| s.prefix = Some(v)),
             take_kv("data", take_list(take_enum_value)).map(|v| {
                 has_data = true;
                 s.data = v;
@@ -67,7 +64,8 @@ impl<'i> QapiEnum<'i> {
             read_since((2, 4, 0), take_cond).map(|v| s.r#if = Some(v)),
             read_since((2, 4, 0), take_features).map(|v| s.features = Some(v)),
             other_key(READ),
-            malformed_key(READ).map(|entry| keep(&mut s.malformed, ABSENT, entry)),
+            malformed_key(READ)
+                .map(|entry| keep(&mut s.malformed, ABSENT, entry)),
         )))
         .parse(input)?;
         // From 2.4 the validation refuses a missing 'data'.
@@ -92,11 +90,13 @@ mod tests {
 
     #[test]
     fn empty_enum_retains_required_data_key() {
-        let (remaining, value) = QapiEnum::parse("{ 'enum': 'Empty', 'data': [] }").unwrap();
+        let (remaining, value) =
+            QapiEnum::parse("{ 'enum': 'Empty', 'data': [] }").unwrap();
         assert!(remaining.is_empty());
         assert!(value.data.is_empty());
         // From 2.4 the validation refuses a missing 'data'.
-        let (_, value) = QapiEnum::parse("{ 'enum': 'MissingData', 'other': [] }").unwrap();
+        let (_, value) =
+            QapiEnum::parse("{ 'enum': 'MissingData', 'other': [] }").unwrap();
         assert_eq!(value.keys, ["enum", "other"]);
         crate::set_parser_version((2, 3, 0));
         assert!(QapiEnum::parse("{ 'enum': 'MissingData' }").is_err());

@@ -2,7 +2,10 @@
 //! per process, so this test binary holds the one test that sets it; the
 //! other tests scope their versions with `with_version`.
 
-use qapi::{VersionAlreadySet, qemu_version, scoped_qemu_version, set_qemu_version, with_version};
+use qapi::{
+    VersionAlreadySet, qemu_version, scoped_qemu_version, set_qemu_version,
+    with_version,
+};
 use serde_json::json;
 
 #[qapi::qapi]
@@ -50,10 +53,7 @@ fn the_process_default_is_set_once_and_serves_serialization_only() {
     assert_eq!(scoped_qemu_version(), None);
 
     // Unscoped serialization uses the default; a scope overrides it.
-    let gated = Gated {
-        stable: 1,
-        newer: Some(2),
-    };
+    let gated = Gated { stable: 1, newer: Some(2) };
     assert_eq!(
         serde_json::to_value(&gated).unwrap_err().to_string(),
         "Gated.newer is not available in QEMU 10.1.0"
@@ -66,11 +66,19 @@ fn the_process_default_is_set_once_and_serves_serialization_only() {
 
     // Unscoped decoding takes the newest layout even though the default is
     // older; only an explicit scope selects the historical one.
-    let flat: Layout = serde_json::from_value(json!({"type": "text", "value": "flat"})).unwrap();
-    assert!(matches!(flat.u, Some(LayoutBranch::Text(ref p)) if p.value == "flat"));
+    let flat: Layout =
+        serde_json::from_value(json!({"type": "text", "value": "flat"}))
+            .unwrap();
+    assert!(
+        matches!(flat.u, Some(LayoutBranch::Text(ref p)) if p.value == "flat")
+    );
     let nested: Layout = with_version((10, 1, 0), || {
-        serde_json::from_value(json!({"type": "text", "data": {"value": "nested"}}))
+        serde_json::from_value(
+            json!({"type": "text", "data": {"value": "nested"}}),
+        )
     })
     .unwrap();
-    assert!(matches!(nested.u, Some(LayoutBranch::Text(ref p)) if p.value == "nested"));
+    assert!(
+        matches!(nested.u, Some(LayoutBranch::Text(ref p)) if p.value == "nested")
+    );
 }

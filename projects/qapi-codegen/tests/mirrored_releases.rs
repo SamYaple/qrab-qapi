@@ -2,8 +2,8 @@
 use qapi_codegen::{
     unified::{build_qga_registry, build_qmp_registry},
     versions::{
-        PINNED_VERSIONS, discover_qga_version_tags, discover_version_tags, parse_pinned_versions,
-        parse_version_tag_full, verify_pinned_versions,
+        PINNED_VERSIONS, discover_qga_version_tags, discover_version_tags,
+        parse_pinned_versions, parse_version_tag_full, verify_pinned_versions,
     },
 };
 use std::path::Path;

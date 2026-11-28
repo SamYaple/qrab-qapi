@@ -43,7 +43,10 @@ pub fn parser_version() -> (u32, u32, u32) {
 
 /// Scope synchronous parsing and lowering to one schema version.
 /// Nested calls restore the previous grammar, including on unwind.
-pub fn with_parser_version<T>(version: (u32, u32, u32), f: impl FnOnce() -> T) -> T {
+pub fn with_parser_version<T>(
+    version: (u32, u32, u32),
+    f: impl FnOnce() -> T,
+) -> T {
     struct Restore((u32, u32, u32));
     impl Drop for Restore {
         fn drop(&mut self) {

@@ -1,7 +1,9 @@
 //! Emitting the merged registry as the generated Rust modules.
 
-use super::registry::{build_qga_registry, build_qmp_registry};
-use super::*;
+use super::{
+    registry::{build_qga_registry, build_qmp_registry},
+    *,
+};
 
 /// A QAPI protocol of QEMU, whose schema the generator reads.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -72,13 +74,19 @@ struct Flavor {
 /// Name a schema item and point at QEMU's manual. QAPI schema documentation
 /// is GPL-2.0-or-later, so generated code carries none of its text. Types
 /// that the lowering synthesizes have no such line.
-fn reference_doc(meta: &Metadata, name: &str, flavor: &Flavor) -> Option<String> {
+fn reference_doc(
+    meta: &Metadata,
+    name: &str,
+    flavor: &Flavor,
+) -> Option<String> {
     let kind = meta.schema_item?;
     let wire_name = meta
         .attributes
         .iter()
         .find_map(|attr| match attr {
-            Attribute::Item { name, value } if name == "name" => Some(value.as_str()),
+            Attribute::Item { name, value } if name == "name" => {
+                Some(value.as_str())
+            }
             _ => None,
         })
         .unwrap_or(name);
@@ -120,12 +128,9 @@ fn references(value: &UnifiedType) -> Vec<String> {
             .fields
             .iter()
             .map(|field| rustify_type(&field.r#type))
-            .chain(
-                value
-                    .returns_history
-                    .iter()
-                    .map(|(_, rust)| crate::metadata_emit::returns_element(rust).0.to_owned()),
-            )
+            .chain(value.returns_history.iter().map(|(_, rust)| {
+                crate::metadata_emit::returns_element(rust).0.to_owned()
+            }))
             .collect(),
         UnifiedType::Enum(value) => value
             .ir
@@ -149,10 +154,9 @@ fn glob_imports(registry: &UnifiedRegistry) -> String {
         registry.types.values().any(|value| {
             classify_type(value) != category
                 && references(value).iter().any(|name| {
-                    registry
-                        .types
-                        .get(name)
-                        .is_some_and(|referenced| classify_type(referenced) == category)
+                    registry.types.get(name).is_some_and(|referenced| {
+                        classify_type(referenced) == category
+                    })
                 })
         })
     };
@@ -193,7 +197,9 @@ pub fn emit_registry(
         },
     };
     let flavor = &flavor;
-    if let Some((name, at)) = crate::metadata_emit::undefined_reference(registry) {
+    if let Some((name, at)) =
+        crate::metadata_emit::undefined_reference(registry)
+    {
         return Err(GenerateError::UndefinedType { name, at });
     }
     // Sorted by Rust name, case-insensitively, for a stable, readable order.
@@ -211,7 +217,9 @@ pub fn emit_registry(
         };
         tokens.extend(match value {
             UnifiedType::Enum(value) => generate_unified_enum(value, flavor),
-            UnifiedType::Struct(value) => generate_unified_struct(value, flavor),
+            UnifiedType::Struct(value) => {
+                generate_unified_struct(value, flavor)
+            }
         });
     }
 
@@ -225,9 +233,21 @@ pub fn emit_registry(
     let metadata = crate::metadata_emit::emit(registry);
     parse_rust(&metadata, "metadata.rs")?;
     Ok(GeneratedOutput {
-        types: format_rust_file(types_tokens, &glob_imports(registry), "mod.rs")?,
-        commands: format_rust_file(commands_tokens, "use super::*;\n", "commands.rs")?,
-        events: format_rust_file(events_tokens, "use super::*;\n", "events.rs")?,
+        types: format_rust_file(
+            types_tokens,
+            &glob_imports(registry),
+            "mod.rs",
+        )?,
+        commands: format_rust_file(
+            commands_tokens,
+            "use super::*;\n",
+            "commands.rs",
+        )?,
+        events: format_rust_file(
+            events_tokens,
+            "use super::*;\n",
+            "events.rs",
+        )?,
         metadata,
         warnings: registry.warnings.clone(),
     })
@@ -306,18 +326,16 @@ impl GeneratedOutput {
         mut write_file: impl FnMut(&Path, &str) -> std::io::Result<()>,
         mut rename: impl FnMut(&Path, &Path) -> std::io::Result<()>,
     ) -> Result<(), GenerateError> {
-        static WRITES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        static WRITES: std::sync::atomic::AtomicU64 =
+            std::sync::atomic::AtomicU64::new(0);
         let write = WRITES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let failed = |path: &Path, temporary: Option<&Path>| {
             let path = path.to_path_buf();
             let temporary = temporary.map(Path::to_path_buf);
-            move |source| GenerateError::Write {
-                path,
-                temporary,
-                source,
-            }
+            move |source| GenerateError::Write { path, temporary, source }
         };
-        std::fs::create_dir_all(output_dir).map_err(failed(output_dir, None))?;
+        std::fs::create_dir_all(output_dir)
+            .map_err(failed(output_dir, None))?;
         let mut staged = Vec::new();
         let mut stage = || -> Result<(), GenerateError> {
             for (name, content) in [
@@ -330,14 +348,20 @@ impl GeneratedOutput {
                 match std::fs::read(&path) {
                     Ok(existing) if existing == content.as_bytes() => continue,
                     Ok(_) => {}
-                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                    Err(source) => return Err(GenerateError::Read { path, source }),
+                    Err(error)
+                        if error.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(source) => {
+                        return Err(GenerateError::Read { path, source });
+                    }
                 }
-                let temporary =
-                    output_dir.join(format!(".{name}.{}-{write}.tmp", std::process::id()));
+                let temporary = output_dir.join(format!(
+                    ".{name}.{}-{write}.tmp",
+                    std::process::id()
+                ));
                 // Staged first, so that a partly written file goes too.
                 staged.push((temporary.clone(), path.clone()));
-                write_file(&temporary, content).map_err(failed(&path, Some(&temporary)))?;
+                write_file(&temporary, content)
+                    .map_err(failed(&path, Some(&temporary)))?;
             }
             Ok(())
         };
@@ -360,7 +384,10 @@ impl GeneratedOutput {
 }
 
 /// Parse generated Rust, locating the first error in `source`.
-fn parse_rust(source: &str, file: &'static str) -> Result<syn::File, GenerateError> {
+fn parse_rust(
+    source: &str,
+    file: &'static str,
+) -> Result<syn::File, GenerateError> {
     syn::parse_file(source).map_err(|error| {
         let message = error.to_string();
         let start = error.span().start();
@@ -431,15 +458,20 @@ fn separate_items(code: &str) -> String {
 /// the lowering writes, so that the registry's releases are the single
 /// source of truth.
 fn strip_since(attrs: &mut Vec<Attribute>) {
-    attrs.retain(|a| !matches!(a, Attribute::Item { name, .. } if name == "added"));
+    attrs.retain(
+        |a| !matches!(a, Attribute::Item { name, .. } if name == "added"),
+    );
 }
 
 /// A `deprecated(added, removed)` attribute per run of releases that
 /// deprecate an item, `removed` where a later release that has the item no
 /// longer deprecates it.
-fn deprecation_attributes(versions: &VersionRange) -> impl Iterator<Item = Attribute> + '_ {
+fn deprecation_attributes(
+    versions: &VersionRange,
+) -> impl Iterator<Item = Attribute> + '_ {
     versions.deprecated_ranges.iter().map(|(since, until)| {
-        let mut attrs = vec![Attribute::with_value("added", version_str(*since))];
+        let mut attrs =
+            vec![Attribute::with_value("added", version_str(*since))];
         if let Some(until) = until {
             attrs.push(Attribute::with_value("removed", version_str(*until)));
         }
@@ -452,13 +484,17 @@ fn deprecation_attributes(versions: &VersionRange) -> impl Iterator<Item = Attri
 /// `discriminator(added = "...", removed = "...")` per run of releases,
 /// with `added` where the run starts after the field and `removed` where it
 /// ends before the field does.
-fn discriminator_attributes(versions: &VersionRange) -> impl Iterator<Item = Attribute> + '_ {
+fn discriminator_attributes(
+    versions: &VersionRange,
+) -> impl Iterator<Item = Attribute> + '_ {
     versions.discriminator_ranges.iter().map(|(since, until)| {
         let mut attrs = Vec::new();
         if *since > versions.since {
             attrs.push(Attribute::with_value("added", version_str(*since)));
         }
-        if let Some(until) = until.filter(|until| Some(*until) != versions.until) {
+        if let Some(until) =
+            until.filter(|until| Some(*until) != versions.until)
+        {
             attrs.push(Attribute::with_value("removed", version_str(until)));
         }
         if attrs.is_empty() {
@@ -527,7 +563,10 @@ fn member_lifecycle(
 }
 
 /// Generate code for a unified enum, with the releases of the registry.
-fn generate_unified_enum(ue: &UnifiedEnum, flavor: &Flavor) -> proc_macro2::TokenStream {
+fn generate_unified_enum(
+    ue: &UnifiedEnum,
+    flavor: &Flavor,
+) -> proc_macro2::TokenStream {
     let mut ir = ue.ir.clone();
     item_lifecycle(&mut ir.meta.attributes, &ue.versions);
     for variant in &mut ir.variants {
@@ -548,7 +587,10 @@ fn generate_unified_enum(ue: &UnifiedEnum, flavor: &Flavor) -> proc_macro2::Toke
 /// coalescing made a return type early starts its Rust lifetime there, with
 /// the members it had from its first release, and its predecessor names it
 /// as its alias.
-fn generate_unified_struct(us: &UnifiedStruct, flavor: &Flavor) -> proc_macro2::TokenStream {
+fn generate_unified_struct(
+    us: &UnifiedStruct,
+    flavor: &Flavor,
+) -> proc_macro2::TokenStream {
     let mut ir = us.ir.clone();
     let mut versions = us.versions.clone();
     let mut field_versions = us.field_versions.clone();
@@ -586,10 +628,14 @@ fn generate_unified_struct(us: &UnifiedStruct, flavor: &Flavor) -> proc_macro2::
         {
             let mut inner = Vec::new();
             if range.since > versions.since {
-                inner.push(Attribute::with_value("added", version_str(range.since)));
+                inner.push(Attribute::with_value(
+                    "added",
+                    version_str(range.since),
+                ));
             }
             if let Some(until) = range.until {
-                inner.push(Attribute::with_value("removed", version_str(until)));
+                inner
+                    .push(Attribute::with_value("removed", version_str(until)));
             }
             if inner.is_empty() {
                 ir.meta.attributes.push(Attribute::new(attr_name));
@@ -611,13 +657,12 @@ fn generate_unified_struct(us: &UnifiedStruct, flavor: &Flavor) -> proc_macro2::
         }
     }
     if let Some(name) = &us.returns_enum {
-        ir.meta
-            .attributes
-            .push(Attribute::with_value("returns_enum", name));
+        ir.meta.attributes.push(Attribute::with_value("returns_enum", name));
     }
 
     for field in &mut ir.fields {
-        let flatten = field.meta.attributes.contains(&Attribute::new("flatten"));
+        let flatten =
+            field.meta.attributes.contains(&Attribute::new("flatten"));
         if flatten {
             // A flattened field has no member of its own on the wire, so a
             // wire name, which the field planning gives a renamed one, means
@@ -628,11 +673,8 @@ fn generate_unified_struct(us: &UnifiedStruct, flavor: &Flavor) -> proc_macro2::
                 .retain(|attr| !matches!(attr, Attribute::Item { name, .. } if name == "name"));
         }
         let discriminator = Attribute::new("discriminator");
-        if let Some(at) = field
-            .meta
-            .attributes
-            .iter()
-            .position(|attr| *attr == discriminator)
+        if let Some(at) =
+            field.meta.attributes.iter().position(|attr| *attr == discriminator)
             && let Some(versions) = field_versions.get(&field.name)
         {
             field
@@ -676,14 +718,10 @@ mod tests {
     #[test]
     fn invalid_rust_is_located() {
         let tokens = quote::quote! { pub struct Valid {} pub struct ; };
-        let error = format_rust_file(tokens, "use super::*;\n", "commands.rs").unwrap_err();
-        let GenerateError::InvalidRust {
-            file,
-            line,
-            column,
-            message,
-            near,
-        } = &error
+        let error = format_rust_file(tokens, "use super::*;\n", "commands.rs")
+            .unwrap_err();
+        let GenerateError::InvalidRust { file, line, column, message, near } =
+            &error
         else {
             panic!("{error:?}")
         };
@@ -691,7 +729,9 @@ mod tests {
         assert_eq!(message, "expected identifier");
         assert_eq!(near, ";");
 
-        let Err(error) = parse_rust("static A: u8 = 1;\nstatic B u8 = 2;\n", "metadata.rs") else {
+        let Err(error) =
+            parse_rust("static A: u8 = 1;\nstatic B u8 = 2;\n", "metadata.rs")
+        else {
             panic!("parsed")
         };
         assert!(
@@ -717,7 +757,9 @@ mod tests {
             "{error:?}"
         );
         // Within a group, at its closing delimiter.
-        let Err(error) = parse_rust("static A: u8 = 1;\nfn f() { let }\n\n", "metadata.rs") else {
+        let Err(error) =
+            parse_rust("static A: u8 = 1;\nfn f() { let }\n\n", "metadata.rs")
+        else {
             panic!("parsed")
         };
         assert!(
@@ -764,10 +806,7 @@ mod tests {
             .map(|entry| {
                 let path = entry.unwrap().path();
                 let text = std::fs::read_to_string(&path).unwrap();
-                (
-                    path.file_name().unwrap().to_string_lossy().into_owned(),
-                    text,
-                )
+                (path.file_name().unwrap().to_string_lossy().into_owned(), text)
             })
             .collect();
         files.sort();
@@ -830,10 +869,7 @@ mod tests {
             .map(|entry| {
                 let path = entry.unwrap().path();
                 let text = std::fs::read_to_string(&path).unwrap_or_default();
-                (
-                    path.file_name().unwrap().to_string_lossy().into_owned(),
-                    text,
-                )
+                (path.file_name().unwrap().to_string_lossy().into_owned(), text)
             })
             .collect();
         files.sort();
@@ -849,7 +885,8 @@ mod tests {
         let out = dir.path().join("out");
         output("old").write_to(&out).unwrap();
         assert_eq!(files(&out).len(), 4);
-        let inode = |name: &str| std::fs::metadata(out.join(name)).unwrap().ino();
+        let inode =
+            |name: &str| std::fs::metadata(out.join(name)).unwrap().ino();
         let before = inode("events.rs");
         let mut changed = output("old");
         changed.types = "new types".into();
@@ -879,11 +916,8 @@ mod tests {
                 |from, to| std::fs::rename(from, to),
             )
             .unwrap_err();
-        let GenerateError::Write {
-            path,
-            temporary: Some(temporary),
-            ..
-        } = &error
+        let GenerateError::Write { path, temporary: Some(temporary), .. } =
+            &error
         else {
             panic!("{error:?}")
         };
@@ -1006,7 +1040,8 @@ mod tests {
                 }
             })
             .collect();
-        let lowered = super::super::lower::lower_versions(&tags, sources).unwrap();
+        let lowered =
+            super::super::lower::lower_versions(&tags, sources).unwrap();
         super::super::registry::merge_releases("QMP", lowered).unwrap()
     }
 
@@ -1021,17 +1056,21 @@ mod tests {
              { 'struct': 'Answer', 'data': { 'v': 'int' } }\n\
              { 'command': 'ask', 'returns': 'Answer' }",
         )]);
-        assert!(emit_registry(&registry, Protocol::Qmp, Docs::Reference).is_ok());
+        assert!(
+            emit_registry(&registry, Protocol::Qmp, Docs::Reference).is_ok()
+        );
         let complete = registry.types.clone();
         registry.types.remove("Payload");
-        let error = emit_registry(&registry, Protocol::Qmp, Docs::Reference).unwrap_err();
+        let error = emit_registry(&registry, Protocol::Qmp, Docs::Reference)
+            .unwrap_err();
         assert_eq!(
             error.to_string(),
             "Holder.p refers to the undefined type 'Payload'"
         );
         registry.types = complete;
         registry.types.remove("Answer");
-        let error = emit_registry(&registry, Protocol::Qmp, Docs::Reference).unwrap_err();
+        let error = emit_registry(&registry, Protocol::Qmp, Docs::Reference)
+            .unwrap_err();
         assert_eq!(
             error.to_string(),
             "Ask returns refers to the undefined type 'Answer'"
@@ -1052,11 +1091,14 @@ mod tests {
              { 'event': 'HAPPENED', 'data': { 'h': 'Holder' } }",
         )]);
         let mut name_from = |name: &str, field: usize, r#type: &str| {
-            let Some(UnifiedType::Struct(value)) = registry.types.get_mut(name) else {
+            let Some(UnifiedType::Struct(value)) = registry.types.get_mut(name)
+            else {
                 panic!("{name}")
             };
             value.ir.fields[field].r#type = r#type.to_owned();
-            let output = emit_registry(&registry, Protocol::Qmp, Docs::Reference).unwrap();
+            let output =
+                emit_registry(&registry, Protocol::Qmp, Docs::Reference)
+                    .unwrap();
             assert!(
                 output.commands.contains("\npub struct Args {"),
                 "{}",
@@ -1123,7 +1165,10 @@ mod tests {
             let UnifiedType::Struct(value) = &registry.types[name] else {
                 panic!("{name}")
             };
-            assert_eq!(classify_type(&registry.types[name]), TypeCategory::Command);
+            assert_eq!(
+                classify_type(&registry.types[name]),
+                TypeCategory::Command
+            );
             (
                 value.versions.deprecated_ranges.clone(),
                 value.versions.unstable_ranges.clone(),
@@ -1137,25 +1182,30 @@ mod tests {
             lifecycle("SnapSync"),
             (vec![((6, 1, 0), None)], vec![((6, 2, 0), None)])
         );
-        let output = emit_registry(&registry, Protocol::Qmp, Docs::Reference).unwrap();
+        let output =
+            emit_registry(&registry, Protocol::Qmp, Docs::Reference).unwrap();
         let attributes = |name: &str| -> Vec<&str> {
-            let start = output
-                .commands
-                .find(&format!("pub struct {name} "))
-                .unwrap();
+            let start =
+                output.commands.find(&format!("pub struct {name} ")).unwrap();
             output.commands[..start]
                 .lines()
                 .rev()
                 .take_while(|line| line.starts_with("#[qapi("))
                 .collect()
         };
-        assert!(attributes("DriveBackup").contains(&"#[qapi(deprecated(added = \"6.2.0\"))]"));
+        assert!(
+            attributes("DriveBackup")
+                .contains(&"#[qapi(deprecated(added = \"6.2.0\"))]")
+        );
         assert!(
             !attributes("DriveBackup")
                 .iter()
                 .any(|attr| attr.contains("unstable"))
         );
-        assert!(attributes("SnapSync").contains(&"#[qapi(unstable(added = \"6.2.0\"))]"));
+        assert!(
+            attributes("SnapSync")
+                .contains(&"#[qapi(unstable(added = \"6.2.0\"))]")
+        );
         assert!(output.metadata.contains(
             "CommandMeta { name: \"DriveBackup\", wire_name: \"drive-backup\", args: &STRUCT_DriveBackup, returns: None, allow_oob: &[], allow_preconfig: &[], success_response: &[Releases { since: (6u32, 1u32, 0u32), until: None }], since: (6u32, 1u32, 0u32), until: None, deprecated: &[Releases { since: (6u32, 2u32, 0u32), until: None }], unstable: &[] }"
         ));

@@ -5,12 +5,15 @@
 //! place. The walk keeps its own stack, so a chain of bases as long as the
 //! generator takes needs no deeper call stack.
 
-use crate::schema_validation::{Meta, Schema, since, spelled};
-use crate::unified::{NameRule, SchemaContext, SchemaErrorKind, SchemaResult, require};
-use crate::{MembersOrRef, QapiMember, QapiMembers, QapiSchemaToken, QapiTypeRef, QapiUnion};
-use crate::{QapiVariant, schema_names};
-use std::collections::HashMap;
-use std::rc::Rc;
+use crate::{
+    MembersOrRef, QapiMember, QapiMembers, QapiSchemaToken, QapiTypeRef,
+    QapiUnion, QapiVariant, schema_names,
+    schema_validation::{Meta, Schema, since, spelled},
+    unified::{
+        NameRule, SchemaContext, SchemaErrorKind, SchemaResult, require,
+    },
+};
+use std::{collections::HashMap, rc::Rc};
 
 /// A member, enum value, branch name or feature, with the definition that
 /// declares it. Its parts are shared, as each object that inherits it
@@ -45,7 +48,9 @@ impl Member {
             optional: field.optional,
             r#type: match &field.r#type {
                 QapiTypeRef::Ref(name) => Some((name.as_ref().into(), false)),
-                QapiTypeRef::ArrayRef(name) => Some((name.as_ref().into(), true)),
+                QapiTypeRef::ArrayRef(name) => {
+                    Some((name.as_ref().into(), true))
+                }
                 _ => None,
             },
             ..Self::new(&field.name, owner)
@@ -81,7 +86,11 @@ pub(crate) struct Objects {
 
 /// Record `member` in `seen`, refusing a clash of C names; from QEMU 2.6 to
 /// 4.1 also uppercase, unless the release exempts the member's owner.
-pub(crate) fn clash(schema: &Schema<'_, '_>, seen: &mut Seen, member: Member) -> SchemaResult {
+pub(crate) fn clash(
+    schema: &Schema<'_, '_>,
+    seen: &mut Seen,
+    member: Member,
+) -> SchemaResult {
     if since((2, 6, 0)) && !since((4, 2, 0)) {
         require(
             !member.name.contains(|c: char| c.is_ascii_uppercase())
@@ -165,7 +174,10 @@ impl<'a, 's> Frame<'a, 's> {
                         if modern {
                             steps.push(Step::ResolveBase(base));
                         }
-                        steps.extend([Step::Check(base.to_owned()), Step::TakeBase]);
+                        steps.extend([
+                            Step::Check(base.to_owned()),
+                            Step::TakeBase,
+                        ]);
                     }
                     steps.push(Step::Local(&value.data, name.to_owned()));
                 }
@@ -178,9 +190,14 @@ impl<'a, 's> Frame<'a, 's> {
                             if modern {
                                 steps.push(Step::ResolveBase(base));
                             }
-                            steps.extend([Step::Check(base.to_string()), Step::TakeBase]);
+                            steps.extend([
+                                Step::Check(base.to_string()),
+                                Step::TakeBase,
+                            ]);
                         }
-                        MembersOrRef::Members(fields) if !fields.0.is_empty() => {
+                        MembersOrRef::Members(fields)
+                            if !fields.0.is_empty() =>
+                        {
                             steps.extend([
                                 Step::Check(format!("q_obj_{name}-base")),
                                 Step::TakeBase,
@@ -197,7 +214,10 @@ impl<'a, 's> Frame<'a, 's> {
                         Some(discriminator) => {
                             branches = true;
                             if modern {
-                                steps.push(Step::Discriminator(discriminator, value));
+                                steps.push(Step::Discriminator(
+                                    discriminator,
+                                    value,
+                                ));
                             }
                             steps.extend(value.data.0.iter().map(Step::Branch));
                             steps.push(Step::Variants);
@@ -208,8 +228,10 @@ impl<'a, 's> Frame<'a, 's> {
             }
             // 4.1 checks a struct's features after its members, and before
             // 4.2 the documentation with the type.
-            if let Some(token @ (QapiSchemaToken::Struct(_) | QapiSchemaToken::Union(_))) =
-                schema.token(name)
+            if let Some(
+                token
+                @ (QapiSchemaToken::Struct(_) | QapiSchemaToken::Union(_)),
+            ) = schema.token(name)
                 && !modern
             {
                 if since((4, 1, 0)) {
@@ -244,9 +266,11 @@ impl<'a, 's> Frame<'a, 's> {
                 let meta = schema
                     .resolve(&QapiTypeRef::Ref(base.into()))
                     .within(|| "'base'".into())?;
-                require(meta == Meta::Struct, || SchemaErrorKind::TypeNotAllowed {
-                    meta: meta.word(),
-                    reference: format!("'{base}'"),
+                require(meta == Meta::Struct, || {
+                    SchemaErrorKind::TypeNotAllowed {
+                        meta: meta.word(),
+                        reference: format!("'{base}'"),
+                    }
                 })
                 .within(|| "'base'".into())?;
             }
@@ -269,7 +293,10 @@ impl<'a, 's> Frame<'a, 's> {
                             schema.alternate_tag(name)?;
                         }
                         if since((5, 0, 0)) {
-                            schema.features_clash(field.features.as_ref(), &field.name)?;
+                            schema.features_clash(
+                                field.features.as_ref(),
+                                &field.name,
+                            )?;
                         }
                         Ok(())
                     };
@@ -292,9 +319,10 @@ impl<'a, 's> Frame<'a, 's> {
             Step::Discriminator(discriminator, value) => {
                 let (enumeration, values) =
                     discriminator_enum(schema, &self.members, discriminator)?;
-                require(!value.data.0.is_empty() || !values.is_empty(), || {
-                    SchemaErrorKind::NoBranches
-                })?;
+                require(
+                    !value.data.0.is_empty() || !values.is_empty(),
+                    || SchemaErrorKind::NoBranches,
+                )?;
                 self.tags = Some((enumeration, values));
             }
             Step::Branch(branch) => {
@@ -303,7 +331,8 @@ impl<'a, 's> Frame<'a, 's> {
                         .resolve(&branch.r#type)
                         .within(|| format!("branch '{}'", branch.name))?;
                     schema.branch_value(&branch.name, enumeration, values)?;
-                    let object = meta == Meta::Struct || meta == Meta::Union && since((8, 1, 0));
+                    let object = meta == Meta::Struct
+                        || meta == Meta::Union && since((8, 1, 0));
                     require(
                         object && matches!(branch.r#type, QapiTypeRef::Ref(_)),
                         || SchemaErrorKind::TypeNotAllowed {
@@ -314,10 +343,15 @@ impl<'a, 's> Frame<'a, 's> {
                     .within(|| format!("branch '{}'", branch.name))?;
                 }
                 if let QapiTypeRef::Ref(branch_type) = &branch.r#type
-                    && matches!(schema.meta(branch_type), Some(Meta::Struct | Meta::Union))
+                    && matches!(
+                        schema.meta(branch_type),
+                        Some(Meta::Struct | Meta::Union)
+                    )
                 {
-                    self.steps
-                        .extend([Step::Variant, Step::Check(branch_type.to_string())]);
+                    self.steps.extend([
+                        Step::Variant,
+                        Step::Check(branch_type.to_string()),
+                    ]);
                 }
             }
             Step::Variant => self.variants.extend(self.checked.take()),
@@ -369,20 +403,18 @@ fn discriminator_enum<'a>(
         .then(|| schema.enum_values(&enumeration))
         .flatten()
         .ok_or_else(|| SchemaErrorKind::DiscriminatorNotEnum {
-            discriminator: discriminator.to_owned(),
-            discriminator_type: if array {
-                format!("['{enumeration}']")
-            } else {
-                enumeration.clone()
-            },
-        })?;
+        discriminator: discriminator.to_owned(),
+        discriminator_type: if array {
+            format!("['{enumeration}']")
+        } else {
+            enumeration.clone()
+        },
+    })?;
     require(!tag.optional, || SchemaErrorKind::OptionalDiscriminator {
         discriminator: discriminator.to_owned(),
     })?;
-    require(!tag.conditional, || {
-        SchemaErrorKind::ConditionalDiscriminator {
-            discriminator: discriminator.to_owned(),
-        }
+    require(!tag.conditional, || SchemaErrorKind::ConditionalDiscriminator {
+        discriminator: discriminator.to_owned(),
     })?;
     Ok((enumeration, values))
 }
@@ -420,18 +452,18 @@ impl Objects {
             let next = schema.located(index, frame.step(schema, step))?;
             if let Some(next) = next {
                 match self.states.get(&next) {
-                    Some(State::Done(object)) => frame.checked = Some(object.clone()),
+                    Some(State::Done(object)) => {
+                        frame.checked = Some(object.clone())
+                    }
                     _ => {
-                        let next = schema.located(index, self.start(schema, &next))?;
+                        let next =
+                            schema.located(index, self.start(schema, &next))?;
                         stack.push(next);
                     }
                 }
             }
         }
-        Err(SchemaErrorKind::UnknownType {
-            name: name.to_owned(),
-        }
-        .into())
+        Err(SchemaErrorKind::UnknownType { name: name.to_owned() }.into())
     }
 
     /// Begin the check of `name`; an object type being checked already
@@ -443,11 +475,9 @@ impl Objects {
     ) -> SchemaResult<Frame<'a, 's>> {
         let index = match schema.implicit(name) {
             Some((owner, _)) => owner,
-            None => schema
-                .index(name)
-                .ok_or_else(|| SchemaErrorKind::UnknownType {
-                    name: name.to_owned(),
-                })?,
+            None => schema.index(name).ok_or_else(|| {
+                SchemaErrorKind::UnknownType { name: name.to_owned() }
+            })?,
         };
         if let Some(State::Checking) = self.states.get(name) {
             return schema.located(

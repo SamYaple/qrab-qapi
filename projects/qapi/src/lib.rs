@@ -46,9 +46,10 @@ pub mod __private {
 
 #[doc(inline)]
 pub use qapi_core::{
-    EncodeError, PreconfigSafe, QapiCommand, QapiEvent, VersionAlreadySet, VersionComponent,
-    VersionParseError, VersionParseErrorKind, parse_qga_version, qemu_version, scoped_qemu_version,
-    set_qemu_version, to_value, with_version,
+    EncodeError, PreconfigSafe, QapiCommand, QapiEvent, VersionAlreadySet,
+    VersionComponent, VersionParseError, VersionParseErrorKind,
+    parse_qga_version, qemu_version, scoped_qemu_version, set_qemu_version,
+    to_value, with_version,
 };
 
 /// Inspect and decode a QAPI union branch selected by its discriminator.
@@ -72,7 +73,9 @@ pub trait QapiFlatUnion: Sized {
     ) -> Result<Self, serde_json::Error> {
         use serde::de::Error as _;
         match value {
-            serde_json::Value::Object(map) => Self::deserialize_variant(discriminator, map),
+            serde_json::Value::Object(map) => {
+                Self::deserialize_variant(discriminator, map)
+            }
             _ => Err(serde_json::Error::custom(
                 "expected an object for a flat union payload",
             )),
@@ -112,19 +115,16 @@ mod metadata_types;
 mod generated;
 #[cfg(qrab_qapi_schema_docs)]
 include!(concat!(env!("OUT_DIR"), "/schema_docs_modules.rs"));
-/// QMP data types (structs, enums, unions) re-exported at the crate root.
-pub use generated::*;
-
 /// QMP command types — access via `qapi::commands::QueryStatus`, etc.
 pub use generated::commands;
-
 /// QMP event types — access via `qapi::events::ShutdownEvent`, etc.
 pub use generated::events;
-
 /// Compile-time schema metadata — access via `qapi::metadata::COMMANDS`,
 /// `qapi::metadata::STRUCTS`, etc., for tooling that renders QAPI schema
 /// information at run time.
 pub use generated::metadata;
+/// QMP data types (structs, enums, unions) re-exported at the crate root.
+pub use generated::*;
 
 /// QEMU Guest Agent (QGA) types.
 #[cfg(not(qrab_qapi_schema_docs))]

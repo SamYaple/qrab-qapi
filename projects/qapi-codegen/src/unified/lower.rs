@@ -1,11 +1,12 @@
 //! Per-release extraction, parsing and lowering to the Rust IR.
 
-use super::error::{SchemaResult, definition, require};
-use super::merge::{field_rust_name, variant_rust_name};
-use super::*;
+use super::{
+    error::{SchemaResult, definition, require},
+    merge::{field_rust_name, variant_rust_name},
+    *,
+};
 use crate::symbols::synthesized;
-use std::collections::HashSet;
-use std::path::PathBuf;
+use std::{collections::HashSet, path::PathBuf};
 
 /// Process a single version's schema through the IR pipeline, with symbols
 /// planned for that version alone.
@@ -25,7 +26,10 @@ pub(crate) fn process_version_schema(
 fn plan_version(
     sources: &[(PathBuf, String)],
 ) -> SchemaResult<(crate::symbols::SchemaNames, BTreeSet<&'static str>)> {
-    let schemas = crate::builtins::parse_sources(sources, &crate::builtins::PREDEFINED.into())?;
+    let schemas = crate::builtins::parse_sources(
+        sources,
+        &crate::builtins::PREDEFINED.into(),
+    )?;
     let used = crate::builtins::used_predefined(&schemas);
     let mut symbols = crate::symbols::SchemaNames::default();
     for (_, schema) in &schemas {
@@ -35,7 +39,9 @@ fn plan_version(
 }
 
 /// The name a definition's documentation block gives, with the definition's own.
-fn documented_symbol<'a>(token: &'a QapiSchemaToken<'_>) -> Option<(&'a str, &'a str)> {
+fn documented_symbol<'a>(
+    token: &'a QapiSchemaToken<'_>,
+) -> Option<(&'a str, &'a str)> {
     let (name, doc) = match token {
         QapiSchemaToken::Enum(value) => (value.name.as_ref(), &value.doc),
         QapiSchemaToken::Struct(value) => (value.name.as_ref(), &value.doc),
@@ -85,16 +91,18 @@ fn base_kind(
 ) -> Result<(), SchemaErrorKind> {
     match base {
         crate::MembersOrRef::Unset => Ok(()),
-        crate::MembersOrRef::Members(_) => Err(SchemaErrorKind::AnonymousStruct),
+        crate::MembersOrRef::Members(_) => {
+            Err(SchemaErrorKind::AnonymousStruct)
+        }
         crate::MembersOrRef::Ref(name) => match kinds.get(name.as_ref()) {
             Some(&"struct") => Ok(()),
             Some(meta) => Err(SchemaErrorKind::TypeNotAllowed {
                 meta,
                 reference: format!("'{name}'"),
             }),
-            None => Err(SchemaErrorKind::UnknownType {
-                name: name.to_string(),
-            }),
+            None => {
+                Err(SchemaErrorKind::UnknownType { name: name.to_string() })
+            }
         },
     }
 }
@@ -118,11 +126,12 @@ fn add_struct(
     names: &mut HashSet<String>,
 ) -> SchemaResult {
     let label = format!("struct '{}'", value.name);
-    let (processed, extracted) = process_struct(value, structs, names).map_err(|error| {
-        SchemaError::from(error)
-            .located(Some(label), location.0)
-            .at(position(location))
-    })?;
+    let (processed, extracted) = process_struct(value, structs, names)
+        .map_err(|error| {
+            SchemaError::from(error)
+                .located(Some(label), location.0)
+                .at(position(location))
+        })?;
     for value in std::iter::once(processed).chain(extracted) {
         structs.insert(value.name.clone(), value);
     }
@@ -159,11 +168,11 @@ fn undefined_types(
         }
     }
     let defined = |name: &str| builtins.defines(name) || types.contains(name);
-    fn members<'t>(fields: &'t QapiMembers<'_>, defined: &dyn Fn(&str) -> bool) -> Option<&'t str> {
-        fields
-            .0
-            .iter()
-            .find_map(|field| reference(&field.r#type, defined))
+    fn members<'t>(
+        fields: &'t QapiMembers<'_>,
+        defined: &dyn Fn(&str) -> bool,
+    ) -> Option<&'t str> {
+        fields.0.iter().find_map(|field| reference(&field.r#type, defined))
     }
     fn reference<'t>(
         value: &'t QapiTypeRef<'_>,
@@ -193,7 +202,9 @@ fn undefined_types(
         for token in &schema.0 {
             let undefined = match token {
                 // Bases that are no struct are constructs of their own.
-                QapiSchemaToken::Struct(value) => members(&value.data, &defined),
+                QapiSchemaToken::Struct(value) => {
+                    members(&value.data, &defined)
+                }
                 QapiSchemaToken::Union(value) => match &value.base {
                     MembersOrRef::Members(fields) => members(fields, &defined),
                     _ => None,
@@ -213,7 +224,9 @@ fn undefined_types(
                             .and_then(|returns| reference(returns, &defined))
                     })
                 }
-                QapiSchemaToken::Event(value) => object(value.data.as_ref(), &defined),
+                QapiSchemaToken::Event(value) => {
+                    object(value.data.as_ref(), &defined)
+                }
                 _ => None,
             };
             if let Some(name) = undefined {
@@ -270,16 +283,16 @@ pub(super) fn process_version_schema_with_names(
     let locations: HashMap<_, _> = schemas
         .iter()
         .flat_map(|(path, schema)| {
-            schema
-                .0
-                .iter()
-                .filter_map(move |token| Some((definition(token)?, place(contents, path, token))))
+            schema.0.iter().filter_map(move |token| {
+                Some((definition(token)?, place(contents, path, token)))
+            })
         })
         .collect();
     if crate::parser_version() < (2, 4, 0) {
         undefined_types(&schemas, contents)?;
     }
-    let location = |label: &String| locations.get(label).copied().unwrap_or_default();
+    let location =
+        |label: &String| locations.get(label).copied().unwrap_or_default();
     let locate = |label: String| {
         let location = location(&label);
         move |error: SchemaError| {
@@ -297,18 +310,26 @@ pub(super) fn process_version_schema_with_names(
             match token {
                 QapiSchemaToken::Union(value) if !value.legacy_alternate => {
                     let root = symbols.type_name(&value.name);
-                    let branch = synthesized(&symbols.role(&format!("{root}Branch")));
+                    let branch =
+                        synthesized(&symbols.role(&format!("{root}Branch")));
                     let discriminator =
-                        synthesized(&symbols.type_name(&crate::symbols::implicit_tag(&value.name)));
-                    union_names.insert(value.name.to_string(), (branch, discriminator));
+                        synthesized(&symbols.type_name(
+                            &crate::symbols::implicit_tag(&value.name),
+                        ));
+                    union_names.insert(
+                        value.name.to_string(),
+                        (branch, discriminator),
+                    );
                 }
                 QapiSchemaToken::Event(value) => {
                     let name = synthesized(&symbols.event_name(&value.name));
                     event_names.insert(value.name.to_string(), name);
                 }
                 QapiSchemaToken::Command(value) => {
-                    let name =
-                        symbols.role(&format!("{}Command", symbols.command_root(&value.name)));
+                    let name = symbols.role(&format!(
+                        "{}Command",
+                        symbols.command_root(&value.name)
+                    ));
                     command_names.insert(value.name.to_string(), name);
                 }
                 _ => {}
@@ -332,7 +353,9 @@ pub(super) fn process_version_schema_with_names(
             let word = match token {
                 QapiSchemaToken::Struct(_) => "struct",
                 QapiSchemaToken::Enum(_) => "enum",
-                QapiSchemaToken::Union(value) if value.legacy_alternate => "alternate",
+                QapiSchemaToken::Union(value) if value.legacy_alternate => {
+                    "alternate"
+                }
                 QapiSchemaToken::Union(_) => "union",
                 QapiSchemaToken::Alternate(_) => "alternate",
                 _ => return None,
@@ -359,11 +382,10 @@ pub(super) fn process_version_schema_with_names(
             let label = definition(&token);
             let location = place(contents, path, &token);
             let at = |error: SchemaError| {
-                error
-                    .located(label.clone(), Some(path))
-                    .at(position(location))
+                error.located(label.clone(), Some(path)).at(position(location))
             };
-            if let (Some((name, documented)), Some(label)) = (documented_symbol(&token), &label)
+            if let (Some((name, documented)), Some(label)) =
+                (documented_symbol(&token), &label)
                 && !documented.eq_ignore_ascii_case(name)
             {
                 warnings.push(WarningKind::MislabeledDocumentation {
@@ -376,8 +398,12 @@ pub(super) fn process_version_schema_with_names(
             // before 2.4 QEMU accepts them; from 2.4 the validation refuses
             // them.
             let shared = match &token {
-                QapiSchemaToken::Command(value) => !commands.insert(value.name.to_string()),
-                QapiSchemaToken::Event(value) => !events.insert(value.name.to_string()),
+                QapiSchemaToken::Command(value) => {
+                    !commands.insert(value.name.to_string())
+                }
+                QapiSchemaToken::Event(value) => {
+                    !events.insert(value.name.to_string())
+                }
                 _ => false,
             };
             if let Some(name) = token.definition_name().filter(|_| shared) {
@@ -386,9 +412,7 @@ pub(super) fn process_version_schema_with_names(
                     "{name} is no duplicate"
                 );
                 return Err(at(SchemaErrorKind::Unsupported {
-                    construct: Construct::SharedName {
-                        name: name.to_owned(),
-                    },
+                    construct: Construct::SharedName { name: name.to_owned() },
                 }
                 .into()));
             }
@@ -415,7 +439,9 @@ pub(super) fn process_version_schema_with_names(
                 && crate::builtins::Builtins::current().reserves(name)
             {
                 let construct = Construct::BuiltinName { name: name.clone() };
-                return Err(at(SchemaErrorKind::Unsupported { construct }.into()));
+                return Err(at(
+                    SchemaErrorKind::Unsupported { construct }.into()
+                ));
             }
             for (symbol, name) in defined {
                 if let Some((previous, _)) =
@@ -460,7 +486,9 @@ pub(super) fn process_version_schema_with_names(
                         && v.data.iter().any(|value| value.dictionary) =>
                 {
                     let construct = Construct::Expression;
-                    return Err(at(SchemaErrorKind::Unsupported { construct }.into()));
+                    return Err(at(
+                        SchemaErrorKind::Unsupported { construct }.into()
+                    ));
                 }
                 QapiSchemaToken::Enum(v) => {
                     let processed = process_enum(v);
@@ -469,14 +497,19 @@ pub(super) fn process_version_schema_with_names(
                 // 2.5 checks an alternate's branches against its implicit
                 // tag member, `type`.
                 QapiSchemaToken::Alternate(v)
-                    if ((2, 5, 0)..(2, 6, 0)).contains(&crate::parser_version())
-                        && v.data.0.iter().any(|branch| branch.name == "type") =>
+                    if ((2, 5, 0)..(2, 6, 0))
+                        .contains(&crate::parser_version())
+                        && v.data
+                            .0
+                            .iter()
+                            .any(|branch| branch.name == "type") =>
                 {
                     let crash = Crash::AlternateTypeBranch;
                     return Err(at(SchemaErrorKind::Crash { crash }.into()));
                 }
                 QapiSchemaToken::Alternate(v) => {
-                    let processed = process_alternate(v).map_err(|e| at(e.into()))?;
+                    let processed =
+                        process_alternate(v).map_err(|e| at(e.into()))?;
                     enums_lookup.insert(processed.name.clone(), processed);
                 }
                 QapiSchemaToken::Struct(v) => {
@@ -491,9 +524,11 @@ pub(super) fn process_version_schema_with_names(
                     // from 2.0 like any union's.
                     let base = std::mem::take(&mut value.base);
                     if crate::parser_version() >= (2, 0, 0) {
-                        base_kind(&base, &kinds).map_err(|kind| at(kind.into()))?;
+                        base_kind(&base, &kinds)
+                            .map_err(|kind| at(kind.into()))?;
                     }
-                    let processed = process_legacy_alternate(value).map_err(|e| at(e.into()))?;
+                    let processed = process_legacy_alternate(value)
+                        .map_err(|e| at(e.into()))?;
                     enums_lookup.insert(processed.name.clone(), processed);
                 }
                 QapiSchemaToken::Union(v) => {
@@ -509,9 +544,10 @@ pub(super) fn process_version_schema_with_names(
                     let position = contents
                         .get(path)
                         .and_then(|content| crate::locate(content, text));
-                    let error = SchemaError::from(SchemaErrorKind::Unsupported {
-                        construct: Construct::Expression,
-                    });
+                    let error =
+                        SchemaError::from(SchemaErrorKind::Unsupported {
+                            construct: Construct::Expression,
+                        });
                     return Err(error.located(None, Some(path)).at(position));
                 }
                 _ => continue,
@@ -561,7 +597,9 @@ pub(super) fn process_version_schema_with_names(
                         construct: Construct::UndefinedBases {
                             pending: pending
                                 .iter()
-                                .map(|(value, base)| (value.name.to_string(), base.to_string()))
+                                .map(|(value, base)| {
+                                    (value.name.to_string(), base.to_string())
+                                })
                                 .collect(),
                         },
                     },
@@ -587,9 +625,7 @@ pub(super) fn process_version_schema_with_names(
             && let crate::MembersOrRef::Ref(base) = &v.base
         {
             return Err(at(SchemaErrorKind::Unsupported {
-                construct: Construct::UnionBase {
-                    base: base.to_string(),
-                },
+                construct: Construct::UnionBase { base: base.to_string() },
             }
             .into()));
         }
@@ -605,13 +641,19 @@ pub(super) fn process_version_schema_with_names(
                     .fields
                     .iter()
                     .find(|field| field.name == discriminator)
-                    .map(|field| (field.r#type.clone(), field.optional, field.array)),
+                    .map(|field| {
+                        (field.r#type.clone(), field.optional, field.array)
+                    }),
                 crate::MembersOrRef::Members(members) => members
                     .iter()
                     .find(|field| field.name == discriminator)
                     .map(|field| {
                         let field = process_member(field.clone(), &v.name)?;
-                        Ok::<_, LowerError>((field.r#type, field.optional, field.array))
+                        Ok::<_, LowerError>((
+                            field.r#type,
+                            field.optional,
+                            field.array,
+                        ))
                     })
                     .transpose()
                     .map_err(|e| at(e.into()))?,
@@ -627,7 +669,10 @@ pub(super) fn process_version_schema_with_names(
             // QEMU accepts them before 2.0; from 2.0 the validation refuses
             // them.
             if optional || array {
-                debug_assert!(crate::parser_version() < (2, 0, 0), "{discriminator}");
+                debug_assert!(
+                    crate::parser_version() < (2, 0, 0),
+                    "{discriminator}"
+                );
                 return Err(at(SchemaErrorKind::Unsupported {
                     construct: Construct::DiscriminatorShape {
                         discriminator: discriminator.to_owned(),
@@ -646,7 +691,9 @@ pub(super) fn process_version_schema_with_names(
                 let discriminator = discriminator.to_owned();
                 return Err(at(if version < (4, 2, 0) {
                     SchemaErrorKind::Crash {
-                        crash: Crash::ImplicitTagDiscriminator { discriminator },
+                        crash: Crash::ImplicitTagDiscriminator {
+                            discriminator,
+                        },
                     }
                 } else {
                     SchemaErrorKind::Unsupported {
@@ -659,7 +706,8 @@ pub(super) fn process_version_schema_with_names(
                 .into()));
             }
             if let Some(tags) = enums_lookup.get(&discriminator_type) {
-                let tags: Vec<_> = tags.variants.iter().map(|tag| &tag.name).collect();
+                let tags: Vec<_> =
+                    tags.variants.iter().map(|tag| &tag.name).collect();
                 for branch in &v.data.0 {
                     require(
                         tags.iter().any(|tag| **tag == branch.name)
@@ -688,7 +736,8 @@ pub(super) fn process_version_schema_with_names(
         }
         let (branch_name, discriminator_name) = &union_names[v.name.as_ref()];
         let (mut s, mut e, disc_enum) =
-            process_union(v, &structs_lookup, &enums_lookup).map_err(|e| at(e.into()))?;
+            process_union(v, &structs_lookup, &enums_lookup)
+                .map_err(|e| at(e.into()))?;
         e.name.clone_from(branch_name);
         for field in &mut s.fields {
             if field.meta.attributes.contains(&Attribute::new("flatten")) {
@@ -713,24 +762,31 @@ pub(super) fn process_version_schema_with_names(
     }
     // QEMU takes an alternate as boxed arguments until 4.1 (boxed arrives
     // in 2.7); from 4.2 the validation refuses them.
-    let boxed_alternate = |boxed: Option<&str>, data: &Option<crate::MembersOrRef<'_>>| match data {
-        Some(crate::MembersOrRef::Ref(name))
-            if boxed == Some("true") && alternates.contains(name.as_ref()) =>
+    let boxed_alternate =
+        |boxed: Option<&str>, data: &Option<crate::MembersOrRef<'_>>| match data
         {
-            debug_assert!(crate::parser_version() < (4, 2, 0), "{name} is boxed");
-            Err(SchemaError::from(SchemaErrorKind::Unsupported {
-                construct: Construct::BoxedAlternate {
-                    name: name.to_string(),
-                },
-            }))
-        }
-        _ => Ok(()),
-    };
+            Some(crate::MembersOrRef::Ref(name))
+                if boxed == Some("true")
+                    && alternates.contains(name.as_ref()) =>
+            {
+                debug_assert!(
+                    crate::parser_version() < (4, 2, 0),
+                    "{name} is boxed"
+                );
+                Err(SchemaError::from(SchemaErrorKind::Unsupported {
+                    construct: Construct::BoxedAlternate {
+                        name: name.to_string(),
+                    },
+                }))
+            }
+            _ => Ok(()),
+        };
     for v in unprocessed_events {
         let at = locate(format!("event '{}'", v.name));
         boxed_alternate(v.boxed, &v.data).map_err(&at)?;
         let event_name = &event_names[v.name.as_ref()];
-        let mut processed = process_event(v, &structs_lookup).map_err(|e| at(e.into()))?;
+        let mut processed =
+            process_event(v, &structs_lookup).map_err(|e| at(e.into()))?;
         processed.name.clone_from(event_name);
         structs_lookup.insert(processed.name.clone(), processed);
     }
@@ -744,12 +800,10 @@ pub(super) fn process_version_schema_with_names(
         }
     };
     let mut occupied = symbols.data_symbols();
-    occupied.extend(
-        structs_lookup
-            .values()
-            .map(|value| symbol_name(&value.name)),
-    );
-    occupied.extend(enums_lookup.values().map(|value| symbol_name(&value.name)));
+    occupied
+        .extend(structs_lookup.values().map(|value| symbol_name(&value.name)));
+    occupied
+        .extend(enums_lookup.values().map(|value| symbol_name(&value.name)));
     for v in unprocessed_commands {
         let at = locate(format!("command '{}'", v.name));
         boxed_alternate(v.boxed, &v.data).map_err(&at)?;
@@ -788,7 +842,8 @@ pub(super) fn process_version_schema_with_names(
             };
             Some(if array { format!("Vec<{name}>") } else { name })
         });
-        let mut processed = process_command(v, &structs_lookup).map_err(|e| at(e.into()))?;
+        let mut processed =
+            process_command(v, &structs_lookup).map_err(|e| at(e.into()))?;
         if request_name != rustify_name(&processed.name) {
             processed
                 .meta
@@ -900,13 +955,14 @@ pub(super) fn normalize_member_names(versions: &mut [VersionResult]) {
         reserved: BTreeMap<String, BTreeSet<String>>,
     }
     impl Groups {
-        fn observe(&mut self, owner: &str, members: impl Iterator<Item = (String, String, bool)>) {
+        fn observe(
+            &mut self,
+            owner: &str,
+            members: impl Iterator<Item = (String, String, bool)>,
+        ) {
             let mut local: BTreeMap<String, Vec<_>> = BTreeMap::new();
             for (raw, preferred, virtual_field) in members {
-                local
-                    .entry(preferred)
-                    .or_default()
-                    .push((raw, virtual_field));
+                local.entry(preferred).or_default().push((raw, virtual_field));
             }
             for (preferred, identities) in local {
                 self.reserved
@@ -946,7 +1002,8 @@ pub(super) fn normalize_member_names(versions: &mut [VersionResult]) {
                     .reserved
                     .get_mut(&owner)
                     .expect("observe reserves every owner it groups");
-                let base = format!("{}{suffix}", preferred.trim_start_matches("r#"));
+                let base =
+                    format!("{}{suffix}", preferred.trim_start_matches("r#"));
                 for identity in group.identities.into_iter().skip(1) {
                     let mut name = base.clone();
                     let mut number = 2;
@@ -972,7 +1029,10 @@ pub(super) fn normalize_member_names(versions: &mut [VersionResult]) {
                     (
                         field.name.clone(),
                         field_rust_name(field),
-                        field.meta.attributes.contains(&Attribute::new("flatten")),
+                        field
+                            .meta
+                            .attributes
+                            .contains(&Attribute::new("flatten")),
                     )
                 }),
             );
@@ -980,10 +1040,9 @@ pub(super) fn normalize_member_names(versions: &mut [VersionResult]) {
         for (owner, value) in &version.enums {
             variants.observe(
                 owner,
-                value
-                    .variants
-                    .iter()
-                    .map(|variant| (variant.name.clone(), variant_rust_name(variant), false)),
+                value.variants.iter().map(|variant| {
+                    (variant.name.clone(), variant_rust_name(variant), false)
+                }),
             );
         }
     }
@@ -1016,7 +1075,9 @@ pub(super) fn normalize_member_names(versions: &mut [VersionResult]) {
         }
         for (owner, value) in &mut version.enums {
             for variant in &mut value.variants {
-                if let Some(name) = variants.get(&(owner.clone(), (variant.name.clone(), false))) {
+                if let Some(name) = variants
+                    .get(&(owner.clone(), (variant.name.clone(), false)))
+                {
                     rename(&mut variant.name, &mut variant.meta, name);
                 }
             }
@@ -1030,9 +1091,8 @@ pub(super) fn parse_versions<T: Send>(
     tags: &[&str],
     parse: impl Fn(&str) -> Result<T, RegistryError> + Sync,
 ) -> Result<Vec<T>, RegistryError> {
-    let workers = std::thread::available_parallelism()
-        .map_or(1, |n| n.get())
-        .min(8);
+    let workers =
+        std::thread::available_parallelism().map_or(1, |n| n.get()).min(8);
     let mut results = Vec::with_capacity(tags.len());
     for batch in tags.chunks(workers) {
         // Join every worker before returning: a worker left running when the
@@ -1077,14 +1137,11 @@ pub(super) fn extract_version_sources(
     tag: &str,
     protocol: Protocol,
 ) -> Result<Option<VersionSources>, RegistryError> {
-    let order =
-        parse_version_tag_full(tag).ok_or_else(|| RegistryError::Tag { tag: tag.into() })?;
+    let order = parse_version_tag_full(tag)
+        .ok_or_else(|| RegistryError::Tag { tag: tag.into() })?;
     let version = (order.0, order.1, order.2);
-    let tmpdir =
-        extract_schema_from_tag(qemu_repo, tag).map_err(|source| RegistryError::Extract {
-            tag: tag.into(),
-            source,
-        })?;
+    let tmpdir = extract_schema_from_tag(qemu_repo, tag)
+        .map_err(|source| RegistryError::Extract { tag: tag.into(), source })?;
     let entry = match protocol {
         Protocol::Qmp => find_schema_entry(tmpdir.path()),
         Protocol::Qga => find_qga_schema_entry(tmpdir.path()),
@@ -1099,12 +1156,10 @@ pub(super) fn extract_version_sources(
             });
         }
     };
-    let sources =
-        crate::read_schema_with_version(&schema_entry, Some(version)).map_err(|source| {
-            RegistryError::Read {
-                tag: tag.into(),
-                source: tmpdir.label_error(source),
-            }
+    let sources = crate::read_schema_with_version(&schema_entry, Some(version))
+        .map_err(|source| RegistryError::Read {
+            tag: tag.into(),
+            source: tmpdir.label_error(source),
         })?;
     // merge_releases skips a release whose hash equals the previous one's.
     // Identical files lower differently across a change of the predefined
@@ -1152,10 +1207,8 @@ pub(super) fn lower_versions(
     tags: &[&str],
     sources: Vec<VersionSources>,
 ) -> Result<Vec<VersionResult>, RegistryError> {
-    let by_tag: HashMap<_, _> = sources
-        .iter()
-        .map(|source| (source.tag.as_str(), source))
-        .collect();
+    let by_tag: HashMap<_, _> =
+        sources.iter().map(|source| (source.tag.as_str(), source)).collect();
     let plans = parse_versions(tags, |tag| {
         let Some(source) = by_tag.get(tag) else {
             return Ok(None);
@@ -1163,10 +1216,7 @@ pub(super) fn lower_versions(
         crate::set_parser_version(source.version);
         plan_version(&source.sources)
             .map(Some)
-            .map_err(|source| RegistryError::Schema {
-                tag: tag.into(),
-                source,
-            })
+            .map_err(|source| RegistryError::Schema { tag: tag.into(), source })
     })?;
     let mut symbols = crate::symbols::SchemaNames::default();
     let mut used = BTreeSet::new();
@@ -1182,12 +1232,13 @@ pub(super) fn lower_versions(
         };
         crate::set_parser_version(source.version);
         let mut warnings = Vec::new();
-        let (enums, structs) =
-            process_version_schema_with_names(&source.sources, &symbols, &used, &mut warnings)
-                .map_err(|source| RegistryError::Schema {
-                    tag: tag.into(),
-                    source,
-                })?;
+        let (enums, structs) = process_version_schema_with_names(
+            &source.sources,
+            &symbols,
+            &used,
+            &mut warnings,
+        )
+        .map_err(|source| RegistryError::Schema { tag: tag.into(), source })?;
         Ok(Some(VersionResult {
             tag: source.tag.clone(),
             version: source.version,
@@ -1197,10 +1248,7 @@ pub(super) fn lower_versions(
             structs,
             warnings: warnings
                 .into_iter()
-                .map(|kind| Warning {
-                    tag: source.tag.clone(),
-                    kind,
-                })
+                .map(|kind| Warning { tag: source.tag.clone(), kind })
                 .collect(),
         }))
     })?;

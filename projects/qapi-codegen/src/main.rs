@@ -1,11 +1,11 @@
-use qapi_codegen::unified::{Docs, GenerateError, Protocol, Releases, generate};
-use qapi_codegen::versions::{
-    PINNED_VERSIONS, PinError, TreeError, parse_pinned_versions, parse_version_tag,
-    verify_pinned_versions,
+use qapi_codegen::{
+    unified::{Docs, GenerateError, Protocol, Releases, generate},
+    versions::{
+        PINNED_VERSIONS, PinError, TreeError, parse_pinned_versions,
+        parse_version_tag, verify_pinned_versions,
+    },
 };
-use std::ffi::OsString;
-use std::path::PathBuf;
-use std::process::ExitCode;
+use std::{ffi::OsString, path::PathBuf, process::ExitCode};
 
 const USAGE: &str = "\
 Usage: qapi-codegen [OPTIONS] --output-dir <DIR> [--] [QEMU_TREE]
@@ -54,11 +54,7 @@ enum CliError {
     #[error(
         "Refusing to write empty {protocol} modules: {lockfile} pins no release from {first}, the first with a {protocol} schema"
     )]
-    NoSchema {
-        lockfile: String,
-        protocol: &'static str,
-        first: String,
-    },
+    NoSchema { lockfile: String, protocol: &'static str, first: String },
     #[error("Failed to check {} against the release pins of {lockfile}", repo.display())]
     Tree {
         repo: PathBuf,
@@ -88,11 +84,14 @@ struct Options {
 
 /// Parse the arguments, or `None` for `--help`. Paths may be any OS string,
 /// and options must be UTF-8.
-fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<Option<Options>, CliError> {
+fn parse_args(
+    args: impl IntoIterator<Item = OsString>,
+) -> Result<Option<Options>, CliError> {
     let usage = |message: String| Err(CliError::Usage(message));
     let mut args = args.into_iter();
     let (mut repo, mut output_dir, mut versions_file) = (None, None, None);
-    let (mut protocol, mut docs, mut options) = (Protocol::Qmp, Docs::Reference, true);
+    let (mut protocol, mut docs, mut options) =
+        (Protocol::Qmp, Docs::Reference, true);
     while let Some(arg) = args.next() {
         let text = arg.to_string_lossy();
         if !options || !text.starts_with('-') {
@@ -103,7 +102,9 @@ fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<Option<Options
             continue;
         }
         let (name, inline) = match text.split_once('=') {
-            Some((name, value)) if name.starts_with("--") => (name, Some(value)),
+            Some((name, value)) if name.starts_with("--") => {
+                (name, Some(value))
+            }
             _ => (text.as_ref(), None),
         };
         match (name, inline) {
@@ -159,17 +160,15 @@ fn run(args: impl IntoIterator<Item = OsString>) -> Result<(), CliError> {
     let text;
     let (pins, lockfile) = match &options.versions_file {
         Some(path) => {
-            text = std::fs::read_to_string(path).map_err(|source| CliError::ReadLockfile {
-                path: path.clone(),
-                source,
+            text = std::fs::read_to_string(path).map_err(|source| {
+                CliError::ReadLockfile { path: path.clone(), source }
             })?;
             (text.as_str(), path.display().to_string())
         }
         None => (PINNED_VERSIONS, "the embedded qemu-versions.lock".into()),
     };
-    let pins = parse_pinned_versions(pins).map_err(|source| CliError::Lockfile {
-        lockfile: lockfile.clone(),
-        source,
+    let pins = parse_pinned_versions(pins).map_err(|source| {
+        CliError::Lockfile { lockfile: lockfile.clone(), source }
     })?;
     let protocol = options.protocol.name();
     let since = options.protocol.first_release();
@@ -177,21 +176,14 @@ fn run(args: impl IntoIterator<Item = OsString>) -> Result<(), CliError> {
         (major, minor, 0) => format!("{major}.{minor}"),
         (major, minor, micro) => format!("{major}.{minor}.{micro}"),
     };
-    if !pins
-        .iter()
-        .any(|pin| parse_version_tag(&pin.tag).is_some_and(|version| version >= since))
-    {
-        return Err(CliError::NoSchema {
-            lockfile,
-            protocol,
-            first,
-        });
+    if !pins.iter().any(|pin| {
+        parse_version_tag(&pin.tag).is_some_and(|version| version >= since)
+    }) {
+        return Err(CliError::NoSchema { lockfile, protocol, first });
     }
     let start = std::time::Instant::now();
-    verify_pinned_versions(&options.repo, &pins).map_err(|source| CliError::Tree {
-        repo: options.repo.clone(),
-        lockfile,
-        source,
+    verify_pinned_versions(&options.repo, &pins).map_err(|source| {
+        CliError::Tree { repo: options.repo.clone(), lockfile, source }
     })?;
     let tags: Vec<_> = pins.iter().map(|pin| pin.tag.as_str()).collect();
     let output = generate(
@@ -268,16 +260,10 @@ mod tests {
                 &["--output-dir", "out", "--versions-file"],
                 "--versions-file requires a value",
             ),
-            (
-                &["--output-dir", "out", "--unknown"],
-                "Unknown option --unknown",
-            ),
+            (&["--output-dir", "out", "--unknown"], "Unknown option --unknown"),
             (&["--output-dir", "out", "-q"], "Unknown option -q"),
             (&["--output-dir", "out", "-h=x"], "Unknown option -h=x"),
-            (
-                &["--output-dir", "out", "--qga=yes"],
-                "--qga takes no value",
-            ),
+            (&["--output-dir", "out", "--qga=yes"], "--qga takes no value"),
             (
                 &["--output-dir", "out", "qemu", "other"],
                 "Unexpected argument other",
@@ -319,7 +305,12 @@ mod tests {
             }
         );
         assert_eq!(
-            options(&["--output-dir=a=b", "--versions-file=-pins", "--", "--qga"]),
+            options(&[
+                "--output-dir=a=b",
+                "--versions-file=-pins",
+                "--",
+                "--qga"
+            ]),
             Options {
                 repo: "--qga".into(),
                 output_dir: "a=b".into(),
@@ -339,9 +330,13 @@ mod tests {
     fn paths_need_not_be_utf8() {
         use std::os::unix::ffi::OsStrExt;
         let path = std::ffi::OsStr::from_bytes(b"out\xff");
-        let options = parse_args([OsString::from("--output-dir"), path.into(), path.into()])
-            .unwrap()
-            .unwrap();
+        let options = parse_args([
+            OsString::from("--output-dir"),
+            path.into(),
+            path.into(),
+        ])
+        .unwrap()
+        .unwrap();
         assert_eq!(options.output_dir, PathBuf::from(path));
         assert_eq!(options.repo, PathBuf::from(path));
         let inline = std::ffi::OsStr::from_bytes(b"--output-dir=out\xff");

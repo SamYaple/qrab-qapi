@@ -1,14 +1,21 @@
-use super::lower::{extract_version_sources, load_versions, lower_versions, parse_versions};
-use super::merge::{TRACKED_BOOL_ATTRS, has_feature};
-use super::registry::{build_qga_registry, build_qmp_registry, merge_releases};
-use super::*;
+use super::{
+    lower::{
+        extract_version_sources, load_versions, lower_versions, parse_versions,
+    },
+    merge::{TRACKED_BOOL_ATTRS, has_feature},
+    registry::{build_qga_registry, build_qmp_registry, merge_releases},
+    *,
+};
 
 fn deprecation_recorded<'a>(
     ranges: impl Iterator<Item = &'a VersionRange>,
     version: Version,
 ) -> bool {
     ranges
-        .filter(|range| version >= range.since && range.until.is_none_or(|until| version < until))
+        .filter(|range| {
+            version >= range.since
+                && range.until.is_none_or(|until| version < until)
+        })
         .any(|range| range.deprecated.is_some_and(|since| since <= version))
 }
 
@@ -16,7 +23,10 @@ fn deprecation_recorded<'a>(
 #[ignore = "compares every pinned QMP/QGA flag against its source release"]
 fn boolean_flag_ranges_match_each_source_release() {
     let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../vendor/qemu");
-    let pins = crate::versions::parse_pinned_versions(crate::versions::PINNED_VERSIONS).unwrap();
+    let pins = crate::versions::parse_pinned_versions(
+        crate::versions::PINNED_VERSIONS,
+    )
+    .unwrap();
     let tags: Vec<_> = pins.iter().map(|pin| pin.tag.as_str()).collect();
     let mut mismatches = Vec::new();
     for qga in [false, true] {
@@ -33,7 +43,8 @@ fn boolean_flag_ranges_match_each_source_release() {
         };
         for source in sources {
             for (name, value) in &registry.types {
-                let present = source.structs.contains_key(name) || source.enums.contains_key(name);
+                let present = source.structs.contains_key(name)
+                    || source.enums.contains_key(name);
                 let range = match value {
                     UnifiedType::Enum(value) => &value.versions,
                     UnifiedType::Struct(value) => &value.versions,
@@ -48,11 +59,12 @@ fn boolean_flag_ranges_match_each_source_release() {
                 }
                 if let UnifiedType::Struct(value) = value {
                     let command = Attribute::new("command");
-                    let expected = source
-                        .structs
-                        .get(name)
-                        .is_some_and(|value| value.meta.attributes.contains(&command));
-                    let actual = active && value.ir.meta.attributes.contains(&command);
+                    let expected =
+                        source.structs.get(name).is_some_and(|value| {
+                            value.meta.attributes.contains(&command)
+                        });
+                    let actual =
+                        active && value.ir.meta.attributes.contains(&command);
                     if expected != actual {
                         mismatches.push(format!(
                             "{} {name}: command binding present={expected}, merged={actual}",
@@ -74,7 +86,8 @@ fn boolean_flag_ranges_match_each_source_release() {
                     ));
                 }
                 for flag in TRACKED_BOOL_ATTRS {
-                    let expected = value.meta.attributes.contains(&Attribute::new(flag));
+                    let expected =
+                        value.meta.attributes.contains(&Attribute::new(flag));
                     let actual = merged.flag_enabled(flag, source.version);
                     if expected != actual {
                         mismatches.push(format!(
@@ -85,11 +98,15 @@ fn boolean_flag_ranges_match_each_source_release() {
                 }
                 for field in &value.fields {
                     if has_feature(&field.meta, "deprecated") {
-                        let ranges = merged.field_versions.get(&field.name).into_iter().chain(
-                            merged.field_history.iter().filter_map(|(old, range)| {
-                                (old.name == field.name).then_some(range)
-                            }),
-                        );
+                        let ranges = merged
+                            .field_versions
+                            .get(&field.name)
+                            .into_iter()
+                            .chain(merged.field_history.iter().filter_map(
+                                |(old, range)| {
+                                    (old.name == field.name).then_some(range)
+                                },
+                            ));
                         if !deprecation_recorded(ranges, source.version) {
                             mismatches.push(format!(
                                 "{} {name}.{}: missing or late deprecation date",
@@ -118,9 +135,11 @@ fn boolean_flag_ranges_match_each_source_release() {
                             .variant_versions
                             .get(&variant.name)
                             .into_iter()
-                            .chain(merged.variant_history.iter().filter_map(|(old, range)| {
-                                (old.name == variant.name).then_some(range)
-                            }));
+                            .chain(merged.variant_history.iter().filter_map(
+                                |(old, range)| {
+                                    (old.name == variant.name).then_some(range)
+                                },
+                            ));
                         if !deprecation_recorded(ranges, source.version) {
                             mismatches.push(format!(
                                 "{} {name}.{}: missing or late deprecation date",
@@ -149,7 +168,9 @@ fn featured(
             .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
         for token in &schema.0 {
             let (name, features) = match token {
-                QapiSchemaToken::Command(value) => (&value.name, &value.features),
+                QapiSchemaToken::Command(value) => {
+                    (&value.name, &value.features)
+                }
                 QapiSchemaToken::Event(value) => (&value.name, &value.features),
                 _ => continue,
             };
@@ -179,8 +200,12 @@ fn discriminators(
             if let QapiSchemaToken::Union(value) = token
                 && !value.legacy_alternate
             {
-                let discriminator = value.discriminator.as_ref().map_or("type", AsRef::as_ref);
-                discriminators.insert(value.name.as_ref().to_owned(), discriminator.to_owned());
+                let discriminator =
+                    value.discriminator.as_ref().map_or("type", AsRef::as_ref);
+                discriminators.insert(
+                    value.name.as_ref().to_owned(),
+                    discriminator.to_owned(),
+                );
             }
         }
     }
@@ -192,7 +217,9 @@ fn wire_name<'a>(name: &'a str, meta: &'a Metadata) -> &'a str {
     meta.attributes
         .iter()
         .find_map(|attr| match attr {
-            Attribute::Item { name, value } if name == "name" => Some(value.as_str()),
+            Attribute::Item { name, value } if name == "name" => {
+                Some(value.as_str())
+            }
             _ => None,
         })
         .unwrap_or(name)
@@ -208,7 +235,9 @@ fn structs_of(
         .values()
         .filter(|value| classify_type(value) == category)
         .filter_map(|value| match value {
-            UnifiedType::Struct(value) => Some((wire_name(&value.ir.name, &value.ir.meta), value)),
+            UnifiedType::Struct(value) => {
+                Some((wire_name(&value.ir.name, &value.ir.meta), value))
+            }
             UnifiedType::Enum(_) => None,
         })
         .collect()
@@ -224,25 +253,31 @@ fn structs_of(
 #[ignore = "compares every pinned QMP/QGA command, event and union with its source schema"]
 fn commands_events_and_unions_match_each_source_schema() {
     let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../vendor/qemu");
-    let pins = crate::versions::parse_pinned_versions(crate::versions::PINNED_VERSIONS).unwrap();
+    let pins = crate::versions::parse_pinned_versions(
+        crate::versions::PINNED_VERSIONS,
+    )
+    .unwrap();
     let tags: Vec<_> = pins.iter().map(|pin| pin.tag.as_str()).collect();
     let mut mismatches = Vec::new();
     let (mut checked, mut unions) = (0, 0);
     let live = |range: &VersionRange, version: Version| {
-        version >= range.since && range.until.is_none_or(|until| version < until)
+        version >= range.since
+            && range.until.is_none_or(|until| version < until)
     };
     for protocol in [Protocol::Qmp, Protocol::Qga] {
         let name = protocol.name();
-        let sources: Vec<_> =
-            parse_versions(&tags, |tag| extract_version_sources(&repo, tag, protocol))
-                .unwrap()
-                .into_iter()
-                .flatten()
-                .collect();
+        let sources: Vec<_> = parse_versions(&tags, |tag| {
+            extract_version_sources(&repo, tag, protocol)
+        })
+        .unwrap()
+        .into_iter()
+        .flatten()
+        .collect();
         let expected: Vec<_> = sources
             .iter()
             .map(|source| {
-                let feature = |name| featured(&source.sources, source.version, name);
+                let feature =
+                    |name| featured(&source.sources, source.version, name);
                 (
                     source.version,
                     feature("deprecated"),
@@ -251,7 +286,9 @@ fn commands_events_and_unions_match_each_source_schema() {
                 )
             })
             .collect();
-        let registry = merge_releases(name, lower_versions(&tags, sources).unwrap()).unwrap();
+        let registry =
+            merge_releases(name, lower_versions(&tags, sources).unwrap())
+                .unwrap();
         let mut merged = structs_of(&registry, TypeCategory::Command);
         merged.extend(structs_of(&registry, TypeCategory::Event));
         let data = structs_of(&registry, TypeCategory::DataType);
@@ -268,7 +305,11 @@ fn commands_events_and_unions_match_each_source_schema() {
                         deprecated,
                         value.versions.is_deprecated(*version),
                     ),
-                    ("unstable", unstable, value.versions.is_unstable(*version)),
+                    (
+                        "unstable",
+                        unstable,
+                        value.versions.is_unstable(*version),
+                    ),
                 ] {
                     if source.contains(*wire) != merged {
                         mismatches.push(format!(
@@ -280,12 +321,15 @@ fn commands_events_and_unions_match_each_source_schema() {
             }
             for wire in deprecated.iter().chain(unstable) {
                 if !merged.contains_key(wire.as_str()) {
-                    mismatches.push(format!("{name} {release}: no command or event {wire}"));
+                    mismatches.push(format!(
+                        "{name} {release}: no command or event {wire}"
+                    ));
                 }
             }
             for (union, discriminator) in discriminators {
                 let Some(value) = data.get(union.as_str()) else {
-                    mismatches.push(format!("{name} {release}: no union {union}"));
+                    mismatches
+                        .push(format!("{name} {release}: no union {union}"));
                     continue;
                 };
                 unions += 1;
@@ -294,9 +338,12 @@ fn commands_events_and_unions_match_each_source_schema() {
                     .fields
                     .iter()
                     .filter(|field| {
-                        value.field_versions.get(&field.name).is_some_and(|range| {
-                            live(range, *version) && range.is_discriminator(*version)
-                        })
+                        value.field_versions.get(&field.name).is_some_and(
+                            |range| {
+                                live(range, *version)
+                                    && range.is_discriminator(*version)
+                            },
+                        )
                     })
                     .map(|field| wire_name(&field.name, &field.meta))
                     .collect();

@@ -76,8 +76,12 @@ fn metadata_references_resolve_including_enum_payloads() {
     };
     for (at, ty) in TYPE_REFS.iter().enumerate() {
         match ty.kind() {
-            TypeKind::Struct => assert!(STRUCTS.contains_key(ty.name()), "{}", ty.name()),
-            TypeKind::Enum => assert!(ENUMS.contains_key(ty.name()), "{}", ty.name()),
+            TypeKind::Struct => {
+                assert!(STRUCTS.contains_key(ty.name()), "{}", ty.name())
+            }
+            TypeKind::Enum => {
+                assert!(ENUMS.contains_key(ty.name()), "{}", ty.name())
+            }
             TypeKind::List => assert!(index(ty.element().unwrap()) < at),
             TypeKind::Primitive => {}
             other => panic!("{other:?}"),
@@ -124,7 +128,11 @@ fn commands_table_has_full_qapi_surface() {
 /// Every command of `COMMANDS` is a struct of the protocol's `commands`
 /// module and every event one of its `events`, as the generated sources
 /// `files` (`mod.rs`, `commands.rs`, `events.rs`) declare them.
-fn assert_in_their_modules(protocol: &str, commands: &[&str], files: [&str; 3]) {
+fn assert_in_their_modules(
+    protocol: &str,
+    commands: &[&str],
+    files: [&str; 3],
+) {
     let [types, command_structs, events] = files;
     for name in commands {
         assert!(
@@ -133,10 +141,7 @@ fn assert_in_their_modules(protocol: &str, commands: &[&str], files: [&str; 3]) 
         );
     }
     let count = |source: &str, attribute: &str| {
-        source
-            .lines()
-            .filter(|line| line.trim() == attribute)
-            .count()
+        source.lines().filter(|line| line.trim() == attribute).count()
     };
     assert_eq!(
         count(command_structs, "#[qapi(command)]"),
@@ -146,7 +151,9 @@ fn assert_in_their_modules(protocol: &str, commands: &[&str], files: [&str; 3]) 
     for (module, source) in [("mod.rs", types), ("events.rs", events)] {
         assert_eq!(count(source, "#[qapi(command)]"), 0, "{protocol} {module}");
     }
-    for (module, source) in [("mod.rs", types), ("commands.rs", command_structs)] {
+    for (module, source) in
+        [("mod.rs", types), ("commands.rs", command_structs)]
+    {
         assert_eq!(count(source, "#[qapi(event)]"), 0, "{protocol} {module}");
     }
 }
@@ -156,8 +163,13 @@ fn assert_in_their_modules(protocol: &str, commands: &[&str], files: [&str; 3]) 
 /// QGA modules likewise.
 #[test]
 fn every_command_and_event_is_in_its_module() {
-    use qapi::QapiCommand;
-    use qapi::commands::{BlockDirtyBitmapAdd, BlockdevBackup, BlockdevSnapshotSync, DriveBackup};
+    use qapi::{
+        QapiCommand,
+        commands::{
+            BlockDirtyBitmapAdd, BlockdevBackup, BlockdevSnapshotSync,
+            DriveBackup,
+        },
+    };
     assert_eq!(BlockDirtyBitmapAdd::NAME, "block-dirty-bitmap-add");
     assert_eq!(BlockdevBackup::NAME, "blockdev-backup");
     assert_eq!(BlockdevSnapshotSync::NAME, "blockdev-snapshot-sync");
@@ -197,11 +209,7 @@ fn structs_and_enums_populated() {
         "expected >=800 structs, got {}",
         STRUCTS.len()
     );
-    assert!(
-        ENUMS.len() >= 100,
-        "expected >=100 enums, got {}",
-        ENUMS.len()
-    );
+    assert!(ENUMS.len() >= 100, "expected >=100 enums, got {}", ENUMS.len());
 }
 
 #[test]
@@ -231,17 +239,13 @@ fn empty_args_command_present() {
         "query-status should have zero fields, got {}",
         cmd.args().fields().len()
     );
-    assert!(
-        cmd.returns().is_some(),
-        "query-status should have a return type"
-    );
+    assert!(cmd.returns().is_some(), "query-status should have a return type");
 }
 
 #[test]
 fn alternate_enum_classified() {
-    let e = ENUMS
-        .get("StrOrNull")
-        .expect("StrOrNull alternate missing from ENUMS");
+    let e =
+        ENUMS.get("StrOrNull").expect("StrOrNull alternate missing from ENUMS");
     assert_eq!(
         e.kind(),
         EnumKind::Alternate,
@@ -299,11 +303,8 @@ fn changed_branch_payloads_expose_distinct_lifetimes_and_original_wire_tags() {
 #[test]
 fn required_wire_fields_stay_required_in_metadata_after_version_merging() {
     let info = STRUCTS.get("VersionInfo").unwrap();
-    let qemu = info
-        .fields()
-        .iter()
-        .find(|field| field.name() == "qemu")
-        .unwrap();
+    let qemu =
+        info.fields().iter().find(|field| field.name() == "qemu").unwrap();
     assert!(
         !qemu.is_optional(),
         "version merging must not turn wire-required into schema-optional"
@@ -336,9 +337,18 @@ fn flags_and_features_describe_every_release() {
     let pause = command("migrate-pause");
     assert_eq!(runs(pause.allow_oob()), [((3, 0, 0), None)]);
     let complete = command("block-job-complete");
-    assert!(!complete.allows_preconfig((7, 0, 0)) && complete.allows_preconfig((7, 1, 0)));
-    assert!(!complete.is_deprecated((10, 0, 0)) && complete.is_deprecated((10, 1, 0)));
-    assert!(complete.sends_success_response((1, 3, 0)) && !complete.is_unstable((11, 1, 3)));
+    assert!(
+        !complete.allows_preconfig((7, 0, 0))
+            && complete.allows_preconfig((7, 1, 0))
+    );
+    assert!(
+        !complete.is_deprecated((10, 0, 0))
+            && complete.is_deprecated((10, 1, 0))
+    );
+    assert!(
+        complete.sends_success_response((1, 3, 0))
+            && !complete.is_unstable((11, 1, 3))
+    );
     // migrate's detach was deprecated in 10.1 and removed in 11.0.
     let detach = STRUCTS
         .get("Migrate")
@@ -348,7 +358,9 @@ fn flags_and_features_describe_every_release() {
         .find(|field| field.wire_name() == "detach")
         .unwrap();
     assert_eq!(runs(detach.deprecated()), [((10, 1, 0), Some((11, 0, 0)))]);
-    assert!(!detach.is_deprecated((10, 0, 0)) && detach.is_deprecated((10, 2, 0)));
+    assert!(
+        !detach.is_deprecated((10, 0, 0)) && detach.is_deprecated((10, 2, 0))
+    );
     // The guest agent replied to guest-shutdown until 1.1, and its replies
     // name their builtins as the newest release does.
     let qga = |wire_name| {

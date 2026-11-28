@@ -52,10 +52,8 @@ pub struct Table<T: 'static> {
 impl<T> Table<T> {
     /// The entry for the Rust type `name`.
     pub fn get(&self, name: &str) -> Option<&'static T> {
-        let index = self
-            .entries
-            .binary_search_by(|(key, _)| (*key).cmp(name))
-            .ok()?;
+        let index =
+            self.entries.binary_search_by(|(key, _)| (*key).cmp(name)).ok()?;
         Some(self.entries[index].1)
     }
 
@@ -75,7 +73,9 @@ impl<T> Table<T> {
     }
 
     /// Names and entries in name order.
-    pub fn iter(&self) -> impl ExactSizeIterator<Item = (&'static str, &'static T)> {
+    pub fn iter(
+        &self,
+    ) -> impl ExactSizeIterator<Item = (&'static str, &'static T)> {
         self.entries.iter().copied()
     }
 
@@ -522,9 +522,7 @@ impl StructMeta {
 
     /// The field that is a union's discriminator in `version`.
     pub fn discriminator(&self, version: Ver) -> Option<&'static FieldMeta> {
-        self.fields
-            .iter()
-            .find(|field| field.is_discriminator(version))
+        self.fields.iter().find(|field| field.is_discriminator(version))
     }
 
     /// Whether a command takes undeclared arguments in `version`.

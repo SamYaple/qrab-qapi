@@ -14,7 +14,8 @@
 //! with those it has disabled; a command it disables or does not list fails
 //! before anything is sent ([`Qga::commands`]).
 use crate::{
-    ClientOptions, Error, InvalidRequestKind, PeerCommands, Required, Result, TimeoutPhase,
+    ClientOptions, Error, InvalidRequestKind, PeerCommands, Required, Result,
+    TimeoutPhase,
     engine::{
         self,
         qga::{QgaCall, QgaHandshake},
@@ -78,13 +79,17 @@ impl Qga {
         Self::connect_with_options(path, ClientOptions::default()).await
     }
 
-    pub async fn connect_with_options(path: &Path, options: ClientOptions) -> Result<Self> {
+    pub async fn connect_with_options(
+        path: &Path,
+        options: ClientOptions,
+    ) -> Result<Self> {
         options.validate()?;
-        let stream = timeout(options.connect_timeout, UnixStream::connect(path))
-            .await
-            .map_err(|_| Error::Timeout {
-                phase: TimeoutPhase::Connect,
-            })??;
+        let stream =
+            timeout(options.connect_timeout, UnixStream::connect(path))
+                .await
+                .map_err(|_| Error::Timeout {
+                    phase: TimeoutPhase::Connect,
+                })??;
         Self::from_stream_with_options(stream, options).await
     }
 
@@ -112,7 +117,9 @@ impl Qga {
                     break;
                 }
                 if handshake.is_syncing() {
-                    handshake.handle_sync_line(session.reader.sync_message().await?)?;
+                    handshake.handle_sync_line(
+                        session.reader.sync_message().await?,
+                    )?;
                 } else {
                     handshake.handle_frame(&session.reader.next().await?)?;
                 }
@@ -120,15 +127,8 @@ impl Qga {
             Ok::<_, Error>(handshake.finish())
         })
         .await
-        .map_err(|_| Error::Timeout {
-            phase: TimeoutPhase::Handshake,
-        })??;
-        Ok(Self {
-            version,
-            commands,
-            options,
-            session: Some(session),
-        })
+        .map_err(|_| Error::Timeout { phase: TimeoutPhase::Handshake })??;
+        Ok(Self { version, commands, options, session: Some(session) })
     }
 
     pub fn version(&self) -> (u32, u32, u32) {
@@ -147,9 +147,7 @@ impl Qga {
     /// Whether the agent can run `C`: its release has the command and, when
     /// the agent listed its commands, it lists it as enabled.
     pub fn supports<C: QapiCommand>(&self) -> bool {
-        Required::of::<C>()
-            .refusal(self.version, self.commands())
-            .is_none()
+        Required::of::<C>().refusal(self.version, self.commands()).is_none()
     }
 
     /// Check that the agent can run every command in `required`, as
@@ -173,9 +171,11 @@ impl Qga {
 
     /// Commands with success-response:false must use send_no_response, which
     /// explicitly acknowledges delivery rather than claiming remote success.
-    pub async fn execute<C: QapiCommand>(&mut self, cmd: &C) -> Result<C::Returns> {
-        self.execute_with_reply_limit(cmd, self.options.max_message_bytes)
-            .await
+    pub async fn execute<C: QapiCommand>(
+        &mut self,
+        cmd: &C,
+    ) -> Result<C::Returns> {
+        self.execute_with_reply_limit(cmd, self.options.max_message_bytes).await
     }
 
     /// [`execute`](Self::execute), accepting a reply of up to
@@ -213,7 +213,11 @@ impl Qga {
         request: Value,
         max_reply_bytes: usize,
     ) -> Result<T> {
-        let mut call = QgaCall::new(&request, self.options.max_message_bytes, max_reply_bytes)?;
+        let mut call = QgaCall::new(
+            &request,
+            self.options.max_message_bytes,
+            max_reply_bytes,
+        )?;
         // Ownership leaves self before any I/O await. Cancellation drops the
         // session, so a late reply cannot be mistaken for the next command.
         let mut session = self.session.take().ok_or(Error::Closed)?;
@@ -242,14 +246,18 @@ impl Qga {
     /// Send an explicitly response-less command and close the connection.
     /// Success only means the bytes were written. The agent can still fail the
     /// command or shut down later, and no remote success acknowledgement exists.
-    pub async fn send_no_response<C: QapiCommand<Returns = ()>>(&mut self, cmd: &C) -> Result<()> {
+    pub async fn send_no_response<C: QapiCommand<Returns = ()>>(
+        &mut self,
+        cmd: &C,
+    ) -> Result<()> {
         if C::sends_success_response(self.version) {
-            return Err(Error::InvalidRequest(InvalidRequestKind::HasResponse {
-                command: C::NAME.into(),
-            }));
+            return Err(Error::InvalidRequest(
+                InvalidRequestKind::HasResponse { command: C::NAME.into() },
+            ));
         }
         let request = wire::command(cmd, self.version, self.commands(), false)?;
-        let mut call = QgaCall::without_reply(&request, self.options.max_message_bytes)?;
+        let mut call =
+            QgaCall::without_reply(&request, self.options.max_message_bytes)?;
         let mut session = self.session.take().ok_or(Error::Closed)?;
         let written = timeout(
             self.options.command_timeout,

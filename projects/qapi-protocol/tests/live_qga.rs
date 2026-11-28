@@ -1,8 +1,8 @@
 //! Real current-QEMU guest-agent smoke; only a temporary private Unix socket
 //! and files are used. No guest VM, root privileges or host configuration.
 use qapi::qga::commands::{
-    GuestExecCommand, GuestExecStatusCommand, GuestFileClose, GuestFileOpen, GuestFileReadCommand,
-    GuestPing,
+    GuestExecCommand, GuestExecStatusCommand, GuestFileClose, GuestFileOpen,
+    GuestFileReadCommand, GuestPing,
 };
 use qapi_protocol::qga::{FILE_READ_REPLY_BYTES, Qga};
 use std::{process::Stdio, time::Duration};
@@ -10,7 +10,8 @@ use std::{process::Stdio, time::Duration};
 #[tokio::test]
 #[ignore = "requires qemu-ga; set QRAB_TEST_QGA and run with --ignored"]
 async fn real_guest_agent_sync_ping_and_large_typed_file_read() {
-    let binary = std::env::var_os("QRAB_TEST_QGA").unwrap_or_else(|| "qemu-ga".into());
+    let binary =
+        std::env::var_os("QRAB_TEST_QGA").unwrap_or_else(|| "qemu-ga".into());
     let dir = tempfile::tempdir().unwrap();
     let socket = dir.path().join("qga.sock");
     let pidfile = dir.path().join("qga.pid");

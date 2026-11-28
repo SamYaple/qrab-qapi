@@ -1,8 +1,10 @@
 //! QAPI definitions supplied implicitly by QEMU rather than schema files.
-use crate::unified::{SchemaContext, SchemaError, SchemaErrorKind, SchemaResult, Version};
 use crate::{
-    MembersOrRef, QapiEnum, QapiEnumValue, QapiMembers, QapiSchema, QapiSchemaToken, QapiStruct,
-    QapiTypeRef,
+    MembersOrRef, QapiEnum, QapiEnumValue, QapiMembers, QapiSchema,
+    QapiSchemaToken, QapiStruct, QapiTypeRef,
+    unified::{
+        SchemaContext, SchemaError, SchemaErrorKind, SchemaResult, Version,
+    },
 };
 use std::{
     collections::BTreeSet,
@@ -99,18 +101,20 @@ impl Builtins {
 
     /// The definitions of `names` that QEMU makes in every release of this
     /// era.
-    fn predefined(self, names: &BTreeSet<&str>) -> Vec<QapiSchemaToken<'static>> {
+    fn predefined(
+        self,
+        names: &BTreeSet<&str>,
+    ) -> Vec<QapiSchemaToken<'static>> {
         if self < Self::QType {
             return Vec::new();
         }
         let values: &[&'static str] = if self == Self::QType {
             &[
-                "none", "qnull", "qint", "qstring", "qdict", "qlist", "qfloat", "qbool",
+                "none", "qnull", "qint", "qstring", "qdict", "qlist", "qfloat",
+                "qbool",
             ]
         } else {
-            &[
-                "none", "qnull", "qnum", "qstring", "qdict", "qlist", "qbool",
-            ]
+            &["none", "qnull", "qnum", "qstring", "qdict", "qlist", "qbool"]
         };
         let tokens = [
             QapiSchemaToken::Enum(QapiEnum {
@@ -133,15 +137,16 @@ impl Builtins {
         tokens
             .into_iter()
             .filter(|token| {
-                token
-                    .definition_name()
-                    .is_some_and(|name| names.contains(name))
+                token.definition_name().is_some_and(|name| names.contains(name))
             })
             .collect()
     }
 }
 
-fn type_references<'a>(value: &'a QapiTypeRef<'_>, names: &mut BTreeSet<&'a str>) {
+fn type_references<'a>(
+    value: &'a QapiTypeRef<'_>,
+    names: &mut BTreeSet<&'a str>,
+) {
     match value {
         QapiTypeRef::Ref(name) | QapiTypeRef::ArrayRef(name) => {
             names.insert(name);
@@ -151,13 +156,19 @@ fn type_references<'a>(value: &'a QapiTypeRef<'_>, names: &mut BTreeSet<&'a str>
     }
 }
 
-fn member_references<'a>(fields: &'a QapiMembers<'_>, names: &mut BTreeSet<&'a str>) {
+fn member_references<'a>(
+    fields: &'a QapiMembers<'_>,
+    names: &mut BTreeSet<&'a str>,
+) {
     for field in &fields.0 {
         type_references(&field.r#type, names);
     }
 }
 
-fn object_references<'a>(value: &'a MembersOrRef<'_>, names: &mut BTreeSet<&'a str>) {
+fn object_references<'a>(
+    value: &'a MembersOrRef<'_>,
+    names: &mut BTreeSet<&'a str>,
+) {
     match value {
         MembersOrRef::Ref(name) => {
             names.insert(name);
@@ -168,7 +179,9 @@ fn object_references<'a>(value: &'a MembersOrRef<'_>, names: &mut BTreeSet<&'a s
 }
 
 /// The [`PREDEFINED`] definitions that the schemas refer to.
-pub(crate) fn used_predefined(schemas: &[(&Path, QapiSchema<'_>)]) -> BTreeSet<&'static str> {
+pub(crate) fn used_predefined(
+    schemas: &[(&Path, QapiSchema<'_>)],
+) -> BTreeSet<&'static str> {
     let mut names = BTreeSet::new();
     for token in schemas.iter().flat_map(|(_, schema)| &schema.0) {
         match token {
@@ -205,10 +218,7 @@ pub(crate) fn used_predefined(schemas: &[(&Path, QapiSchema<'_>)]) -> BTreeSet<&
             _ => {}
         }
     }
-    PREDEFINED
-        .into_iter()
-        .filter(|name| names.contains(name))
-        .collect()
+    PREDEFINED.into_iter().filter(|name| names.contains(name)).collect()
 }
 
 /// Parse a release's schema files and add the predefined definitions of
@@ -226,7 +236,8 @@ pub(crate) fn parse_sources<'s>(
             let schema = crate::parse_schema(content)
                 .map_err(|error| {
                     let position = (error.line, error.column);
-                    SchemaError::from(SchemaErrorKind::Parse(error)).at(Some(position))
+                    SchemaError::from(SchemaErrorKind::Parse(error))
+                        .at(Some(position))
                 })
                 .in_file(path)?;
             Ok((path.as_path(), schema))
@@ -236,7 +247,10 @@ pub(crate) fn parse_sources<'s>(
     crate::arrays::normalize(&mut schemas, sources)?;
     let predefined = Builtins::current().predefined(predefined);
     if !predefined.is_empty() {
-        schemas.push((Path::new("<predefined QAPI types>"), QapiSchema(predefined)));
+        schemas.push((
+            Path::new("<predefined QAPI types>"),
+            QapiSchema(predefined),
+        ));
     }
     Ok(schemas)
 }
@@ -263,7 +277,10 @@ mod tests {
             ((2, 5, 0), "**"),
             ((2, 9, 0), "null"),
         ] {
-            assert!(!Builtins::of(version).defines(other), "{version:?} {other}");
+            assert!(
+                !Builtins::of(version).defines(other),
+                "{version:?} {other}"
+            );
         }
     }
 
@@ -272,7 +289,8 @@ mod tests {
         let predefined = |version| -> (Vec<String>, Vec<String>) {
             crate::set_parser_version(version);
             let schemas = parse_sources(&[], &PREDEFINED.into()).unwrap();
-            let tokens: Vec<_> = schemas.iter().flat_map(|(_, schema)| &schema.0).collect();
+            let tokens: Vec<_> =
+                schemas.iter().flat_map(|(_, schema)| &schema.0).collect();
             let names = tokens
                 .iter()
                 .filter_map(|token| token.definition_name().map(str::to_owned))
@@ -281,7 +299,13 @@ mod tests {
                 .iter()
                 .find_map(|token| match token {
                     QapiSchemaToken::Enum(value) if value.name == "QType" => {
-                        Some(value.data.iter().map(|v| v.name.to_string()).collect())
+                        Some(
+                            value
+                                .data
+                                .iter()
+                                .map(|v| v.name.to_string())
+                                .collect(),
+                        )
                     }
                     _ => None,
                 })
@@ -294,16 +318,15 @@ mod tests {
         assert_eq!(
             values,
             [
-                "none", "qnull", "qint", "qstring", "qdict", "qlist", "qfloat", "qbool"
+                "none", "qnull", "qint", "qstring", "qdict", "qlist", "qfloat",
+                "qbool"
             ]
         );
         let (names, values) = predefined((2, 10, 0));
         assert_eq!(names, ["QType", "q_empty"]);
         assert_eq!(
             values,
-            [
-                "none", "qnull", "qnum", "qstring", "qdict", "qlist", "qbool"
-            ]
+            ["none", "qnull", "qnum", "qstring", "qdict", "qlist", "qbool"]
         );
     }
 }

@@ -24,11 +24,13 @@
 //!   `Returns` enum;
 //! - the statics of `metadata.rs`.
 
-use crate::qapi_ir::{
-    Attribute, EnumVariantKind, Metadata, RUNTIME_ITEMS, SchemaItem, rustify_field, rustify_name,
-    rustify_variant,
+use crate::{
+    qapi_ir::{
+        Attribute, EnumVariantKind, Metadata, RUNTIME_ITEMS, SchemaItem,
+        rustify_field, rustify_name, rustify_variant,
+    },
+    unified::{RegistryError, UnifiedRegistry, UnifiedType, Version},
 };
-use crate::unified::{RegistryError, UnifiedRegistry, UnifiedType, Version};
 use heck::{ToPascalCase, ToSnakeCase};
 use std::collections::{BTreeMap, HashMap};
 
@@ -148,7 +150,11 @@ fn type_pattern(key: &str, value: &UnifiedType) -> Pattern {
     let (meta, wire) = meta(value);
     match meta.schema_item {
         None => match value {
-            UnifiedType::Enum(_) if meta.attributes.contains(&Attribute::new("union_branch")) => {
+            UnifiedType::Enum(_)
+                if meta
+                    .attributes
+                    .contains(&Attribute::new("union_branch")) =>
+            {
                 Pattern::Branch
             }
             UnifiedType::Enum(_) => Pattern::ImplicitTag,
@@ -189,11 +195,7 @@ fn member_pattern(
     let legacy = ir_name.rfind("_legacy").max(ir_name.rfind("Legacy"));
     let alt = ir_name.rfind("_alt").max(ir_name.rfind("Alt"));
     if ir_name != wire && (legacy.is_some() || alt.is_some()) {
-        if legacy > alt {
-            Pattern::Legacy
-        } else {
-            Pattern::Alt
-        }
+        if legacy > alt { Pattern::Legacy } else { Pattern::Alt }
     } else if meta.attributes.contains(&Attribute::new("flatten"))
         || (ir_name == "r-type" && wire == "type")
     {
@@ -258,7 +260,9 @@ fn returns_enum_name(
 ) -> String {
     table
         .iter()
-        .find(|(table_protocol, table_wire, _)| *table_protocol == protocol && *table_wire == wire)
+        .find(|(table_protocol, table_wire, _)| {
+            *table_protocol == protocol && *table_wire == wire
+        })
         .map_or_else(
             || format!("{command}Returns"),
             |(.., name)| (*name).to_owned(),
@@ -304,9 +308,9 @@ pub(crate) fn plan_returns_enums_with(
                     .then(|| format!("the reserved name {name}"))
             })
             .or_else(|| {
-                planned
-                    .get(&name)
-                    .map(|other| format!("the enum of return types of command '{other}'"))
+                planned.get(&name).map(|other| {
+                    format!("the enum of return types of command '{other}'")
+                })
             });
         if let Some(holder) = holder {
             let (changed, _) = command.returns_history[1];
@@ -325,7 +329,8 @@ pub(crate) fn plan_returns_enums_with(
         names.insert(key.clone(), name);
     }
     for (key, name) in names {
-        if let Some(UnifiedType::Struct(command)) = registry.types.get_mut(&key) {
+        if let Some(UnifiedType::Struct(command)) = registry.types.get_mut(&key)
+        {
             command.returns_enum = Some(name);
         }
     }
@@ -333,7 +338,9 @@ pub(crate) fn plan_returns_enums_with(
 }
 
 /// The reserved names of a protocol's items, with what each is.
-fn reserved(protocol: &str) -> impl Iterator<Item = (&'static str, String)> + '_ {
+fn reserved(
+    protocol: &str,
+) -> impl Iterator<Item = (&'static str, String)> + '_ {
     MODULES
         .iter()
         .map(|module| (*module, format!("the module {module}")))
@@ -353,16 +360,18 @@ pub fn inventory(
     registry: &UnifiedRegistry,
     protocol: &'static str,
 ) -> Result<Vec<Name>, RegistryError> {
-    let mut inventory = Inventory {
-        protocol,
-        names: Vec::new(),
-        namespaces: BTreeMap::new(),
-    };
+    let mut inventory =
+        Inventory { protocol, names: Vec::new(), namespaces: BTreeMap::new() };
     for (name, source) in reserved(protocol) {
         inventory.add("items", name, Pattern::Reserved, source)?;
     }
     for (key, value) in &registry.types {
-        inventory.add("items", key, type_pattern(key, value), describe(key, value))?;
+        inventory.add(
+            "items",
+            key,
+            type_pattern(key, value),
+            describe(key, value),
+        )?;
     }
     for (key, value) in &registry.types {
         match value {
@@ -370,9 +379,12 @@ pub fn inventory(
                 let namespace = format!("fields of {key}");
                 for field in &value.ir.fields {
                     let ident = rustify_field(&field.name);
-                    let pattern = member_pattern(&field.name, &ident, &field.meta, |wire| {
-                        wire.to_snake_case()
-                    });
+                    let pattern = member_pattern(
+                        &field.name,
+                        &ident,
+                        &field.meta,
+                        |wire| wire.to_snake_case(),
+                    );
                     let wire = item(&field.meta, "name").unwrap_or(&field.name);
                     let source = match value.field_versions.get(&field.name) {
                         Some(range) => format!(
@@ -400,7 +412,8 @@ pub fn inventory(
                     )?;
                     let namespace = format!("variants of {name}");
                     for (added, returns) in &value.returns_history {
-                        let variant = format!("V{}_{}_{}", added.0, added.1, added.2);
+                        let variant =
+                            format!("V{}_{}_{}", added.0, added.1, added.2);
                         inventory.add(
                             &namespace,
                             &variant,
@@ -417,10 +430,14 @@ pub fn inventory(
                 let namespace = format!("variants of {key}");
                 for variant in &value.ir.variants {
                     let ident = rustify_variant(&variant.name);
-                    let pattern = member_pattern(&variant.name, &ident, &variant.meta, |wire| {
-                        wire.to_pascal_case()
-                    });
-                    let wire = item(&variant.meta, "name").unwrap_or(&variant.name);
+                    let pattern = member_pattern(
+                        &variant.name,
+                        &ident,
+                        &variant.meta,
+                        |wire| wire.to_pascal_case(),
+                    );
+                    let wire =
+                        item(&variant.meta, "name").unwrap_or(&variant.name);
                     let payload = match &variant.kind {
                         EnumVariantKind::Tuple(ty) => format!(" ({ty})"),
                         EnumVariantKind::Unit => String::new(),

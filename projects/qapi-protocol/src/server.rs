@@ -10,10 +10,12 @@ use crate::{
     framing::{self, JsonReader},
 };
 use serde_json::{Value, json};
-use tokio::io::AsyncWriteExt;
-use tokio::net::{
-    UnixListener, UnixStream,
-    unix::{OwnedReadHalf, OwnedWriteHalf},
+use tokio::{
+    io::AsyncWriteExt,
+    net::{
+        UnixListener, UnixStream,
+        unix::{OwnedReadHalf, OwnedWriteHalf},
+    },
 };
 
 /// A command a mock session received.
@@ -33,14 +35,13 @@ fn validate(value: &Value, oob: bool) -> Result<()> {
     let object = value
         .as_object()
         .ok_or(Error::Protocol(ProtocolViolation::NotAnObject(None)))?;
-    if !object
-        .get(verb)
-        .and_then(Value::as_str)
-        .is_some_and(|s| !s.is_empty())
+    if !object.get(verb).and_then(Value::as_str).is_some_and(|s| !s.is_empty())
         || object.keys().any(|k| k != verb && k != "arguments")
         || object.get("arguments").is_some_and(|v| !v.is_object())
     {
-        return Err(Error::Protocol(ProtocolViolation::InvalidCommand { verb }));
+        return Err(Error::Protocol(ProtocolViolation::InvalidCommand {
+            verb,
+        }));
     }
     Ok(())
 }
@@ -85,7 +86,8 @@ pub struct QmpWriter {
 impl QmpReader {
     pub async fn recv_command_full(&mut self) -> Result<ParsedCommand> {
         let bytes = self.reader.next().await?;
-        let mut value: Value = serde_json::from_slice(&bytes).map_err(Error::Malformed)?;
+        let mut value: Value =
+            serde_json::from_slice(&bytes).map_err(Error::Malformed)?;
         let id = value.as_object_mut().and_then(|o| o.remove("id"));
         let oob = value.get("exec-oob").is_some();
         validate(&value, oob)?;
@@ -95,7 +97,10 @@ impl QmpReader {
         let verb = if oob { "exec-oob" } else { "execute" };
         Ok(ParsedCommand {
             name: value[verb].as_str().unwrap().to_owned(),
-            arguments: value.get("arguments").cloned().unwrap_or_else(|| json!({})),
+            arguments: value
+                .get("arguments")
+                .cloned()
+                .unwrap_or_else(|| json!({})),
             oob,
             id,
         })
@@ -106,7 +111,11 @@ impl QmpWriter {
     async fn send(&mut self, value: Value) -> Result<()> {
         framing::write_json(&mut self.writer, &value, LIMIT).await
     }
-    pub async fn send_return_with_id(&mut self, value: Value, id: Option<Value>) -> Result<()> {
+    pub async fn send_return_with_id(
+        &mut self,
+        value: Value,
+        id: Option<Value>,
+    ) -> Result<()> {
         let mut reply = json!({"return": value});
         if let Some(id) = id {
             reply["id"] = id;
@@ -198,7 +207,12 @@ impl QmpSession {
     pub fn probes(&self) -> usize {
         self.probes
     }
-    pub async fn send_greeting(&mut self, major: u32, minor: u32, micro: u32) -> Result<()> {
+    pub async fn send_greeting(
+        &mut self,
+        major: u32,
+        minor: u32,
+        micro: u32,
+    ) -> Result<()> {
         self.writer.send(json!({"QMP": {"version": {"qemu": {"major": major, "minor": minor, "micro": micro}, "package": ""}, "capabilities": ["oob"]}})).await
     }
     /// Answer `qmp_capabilities`, then the client's `query-commands`. The
@@ -213,7 +227,9 @@ impl QmpSession {
             None => {}
             Some(enable) if enable == &json!(["oob"]) => self.reader.oob = true,
             Some(_) => {
-                return Err(Error::Protocol(ProtocolViolation::UnsupportedCapabilities));
+                return Err(Error::Protocol(
+                    ProtocolViolation::UnsupportedCapabilities,
+                ));
             }
         }
         self.send_return(json!({})).await?;
@@ -223,14 +239,18 @@ impl QmpSession {
         let next = self.reader.recv_command_full().await?;
         // The client sends its probe with the handshake's ID 0; its later
         // requests, a query-commands of its own included, count from 1.
-        if next.name != "query-commands" || next.oob || next.id != Some(json!(0)) {
+        if next.name != "query-commands"
+            || next.oob
+            || next.id != Some(json!(0))
+        {
             self.pending = Some(next);
             return Ok(());
         }
         self.probes += 1;
         match &self.offered {
             Some(names) => {
-                let names: Vec<Value> = names.iter().map(|name| json!({"name": name})).collect();
+                let names: Vec<Value> =
+                    names.iter().map(|name| json!({"name": name})).collect();
                 self.writer
                     .send_return_with_id(Value::Array(names), next.id)
                     .await
@@ -261,17 +281,17 @@ impl QmpSession {
     /// Replies to the most recently received command. For pipelined mocks,
     /// preserve each ParsedCommand.id and use send_return_with_id instead.
     pub async fn send_return(&mut self, value: Value) -> Result<()> {
-        self.writer
-            .send_return_with_id(value, self.last_id.clone())
-            .await
+        self.writer.send_return_with_id(value, self.last_id.clone()).await
     }
-    pub async fn send_return_with_id(&mut self, value: Value, id: Option<Value>) -> Result<()> {
+    pub async fn send_return_with_id(
+        &mut self,
+        value: Value,
+        id: Option<Value>,
+    ) -> Result<()> {
         self.writer.send_return_with_id(value, id).await
     }
     pub async fn send_error(&mut self, class: &str, desc: &str) -> Result<()> {
-        self.writer
-            .send_error_with_id(class, desc, self.last_id.clone())
-            .await
+        self.writer.send_error_with_id(class, desc, self.last_id.clone()).await
     }
     pub async fn send_event(&mut self, name: &str, data: Value) -> Result<()> {
         self.writer.send_event(name, data).await
@@ -290,10 +310,7 @@ impl QgaSession {
     }
     pub fn from_stream(stream: UnixStream) -> Self {
         let session = QmpSession::from_stream(stream);
-        Self {
-            reader: session.reader,
-            writer: session.writer,
-        }
+        Self { reader: session.reader, writer: session.writer }
     }
     pub async fn handle_sync(&mut self) -> Result<i64> {
         self.reader.reader.reset_at_sentinel().await?;

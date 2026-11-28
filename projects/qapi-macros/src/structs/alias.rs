@@ -36,7 +36,10 @@ pub(crate) fn check_alias(ta: &TypeAttrs) -> syn::Result<()> {
 
 fn alias_type(value: &syn::LitStr) -> syn::Result<Type> {
     value.parse().map_err(|error| {
-        syn::Error::new_spanned(value, format!("qapi: `alias` is not a Rust type: {error}"))
+        syn::Error::new_spanned(
+            value,
+            format!("qapi: `alias` is not a Rust type: {error}"),
+        )
     })
 }
 

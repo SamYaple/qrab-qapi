@@ -16,9 +16,6 @@ pub fn stderr_of(name: &str) -> String {
         .output()
         .unwrap();
     let stderr = String::from_utf8(output.stderr).unwrap();
-    assert!(
-        output.status.success(),
-        "{name} failed in the child: {stderr}"
-    );
+    assert!(output.status.success(), "{name} failed in the child: {stderr}");
     stderr
 }

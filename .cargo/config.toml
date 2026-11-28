@@ -1,0 +1,4 @@
+[alias]
+# rustfmt with the import style: one `use` per crate, all in one sorted
+# group. Run `cargo xfmt`, or `cargo xfmt --check` as CI does.
+xfmt = "fmt -- --config imports_granularity=Crate --config group_imports=One"

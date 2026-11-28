@@ -10,12 +10,12 @@ use serde_json::json;
 fn cpu_info_preserves_both_instruction_pointer_fields() {
     for version in [(1, 0, 0), (1, 4, 1), (2, 5, 1)] {
         qapi::with_version(version, || {
-            let mut wire =
-                json!({"CPU":0,"current":true,"halted":false,"thread_id":123,"pc":11,"PC":22});
+            let mut wire = json!({"CPU":0,"current":true,"halted":false,"thread_id":123,"pc":11,"PC":22});
             if version >= (2, 4, 0) {
                 wire["qom_path"] = json!("/machine/cpu0");
             }
-            let value: qapi::CpuInfo = serde_json::from_value(wire.clone()).unwrap();
+            let value: qapi::CpuInfo =
+                serde_json::from_value(wire.clone()).unwrap();
             assert_eq!(value.pc, Some(11));
             assert_eq!(value.pc_alt, Some(22));
             assert_eq!(serde_json::to_value(value).unwrap(), wire);

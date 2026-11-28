@@ -2,14 +2,17 @@
 //! release and the latest patch of each maintained series, and regressions
 //! of the registries and the generator on QEMU's releases and fixture
 //! trees.
-use qapi_codegen::unified::{
-    RegistryError, UnifiedRegistry, UnifiedType, Version, build_qga_registry, build_qmp_registry,
-};
-use qapi_codegen::versions::{
-    PINNED_VERSIONS, PinnedVersion, parse_pinned_versions, verify_pinned_versions,
-};
 use qapi_codegen::{
-    QapiSchemaToken, parse_schema, parse_schema_with_version, read_schema_with_version,
+    QapiSchemaToken, parse_schema, parse_schema_with_version,
+    read_schema_with_version,
+    unified::{
+        RegistryError, UnifiedRegistry, UnifiedType, Version,
+        build_qga_registry, build_qmp_registry,
+    },
+    versions::{
+        PINNED_VERSIONS, PinnedVersion, parse_pinned_versions,
+        verify_pinned_versions,
+    },
 };
 use std::{collections::BTreeSet, path::Path, process::Command};
 
@@ -21,10 +24,7 @@ fn qemu() -> std::path::PathBuf {
 }
 
 fn newest_pin() -> PinnedVersion {
-    parse_pinned_versions(PINNED_VERSIONS)
-        .unwrap()
-        .pop()
-        .unwrap()
+    parse_pinned_versions(PINNED_VERSIONS).unwrap().pop().unwrap()
 }
 
 /// The grammar of the newest pin, which vendor/qemu must be checked out at:
@@ -48,7 +48,11 @@ fn baseline() -> (u32, u32, u32) {
     qapi_codegen::versions::parse_version_tag(&pin.tag).unwrap()
 }
 
-fn assert_definition_coverage(repo: &Path, entry: &str, version: (u32, u32, u32)) {
+fn assert_definition_coverage(
+    repo: &Path,
+    entry: &str,
+    version: (u32, u32, u32),
+) {
     let output = Command::new("python3")
         .arg("-c")
         .arg(
@@ -78,7 +82,9 @@ for expr in parser.exprs:
         .map(str::to_owned)
         .collect();
     let mut actual = BTreeSet::new();
-    for (_, content) in read_schema_with_version(&repo.join(entry), Some(version)).unwrap() {
+    for (_, content) in
+        read_schema_with_version(&repo.join(entry), Some(version)).unwrap()
+    {
         for token in parse_schema_with_version(&content, version).unwrap() {
             let (kind, name) = match token {
                 QapiSchemaToken::Enum(v) => ("enum", v.name),
@@ -140,7 +146,11 @@ fn recent_release_matrix_matches_each_releases_own_parser() {
             .unpack(schemas.path())
             .unwrap();
         for entry in ["qapi/qapi-schema.json", "qga/qapi-schema.json"] {
-            assert_definition_coverage(schemas.path(), entry, parse_version_tag(&pin.tag).unwrap());
+            assert_definition_coverage(
+                schemas.path(),
+                entry,
+                parse_version_tag(&pin.tag).unwrap(),
+            );
         }
     }
 }
@@ -157,11 +167,17 @@ fn qga_commands_do_not_overwrite_their_response_types() {
         ("GuestFsfreezeStatus", "frozen"),
     ] {
         let kept = match &registry.types[name] {
-            UnifiedType::Struct(response) => response.ir.fields.iter().any(|f| f.name == member),
-            UnifiedType::Enum(response) => response.ir.variants.iter().any(|v| v.name == member),
+            UnifiedType::Struct(response) => {
+                response.ir.fields.iter().any(|f| f.name == member)
+            }
+            UnifiedType::Enum(response) => {
+                response.ir.variants.iter().any(|v| v.name == member)
+            }
         };
         assert!(kept, "Lost {name}.{member}");
-        let UnifiedType::Struct(command) = &registry.types[&format!("{name}Command")] else {
+        let UnifiedType::Struct(command) =
+            &registry.types[&format!("{name}Command")]
+        else {
             panic!("Missing command {name}")
         };
         assert!(command.ir.meta.attributes.iter().any(|a| matches!(a, qapi_codegen::qapi_ir::Attribute::Item { name: key, value } if key == "returns" && value == name)));
@@ -203,10 +219,7 @@ fn an_invalid_guest_agent_schema_names_its_release_file() {
     };
     assert_eq!(tag, "v11.1.3");
     assert_eq!(source.definition(), Some("command 'broken'"));
-    assert_eq!(
-        source.file(),
-        Some(Path::new("v11.1.3:qga/qapi-schema.json"))
-    );
+    assert_eq!(source.file(), Some(Path::new("v11.1.3:qga/qapi-schema.json")));
 }
 
 #[test]
@@ -325,10 +338,7 @@ fn command_returns_follow_the_newest_release() {
     let qga = build_qga_registry(&qemu(), &tags).unwrap();
     let qga_expected: &[ReturnChange] = &[(
         "GuestFstrim",
-        vec![
-            ((1, 2, 0), "()"),
-            ((2, 4, 0), "GuestFilesystemTrimResponse"),
-        ],
+        vec![((1, 2, 0), "()"), ((2, 4, 0), "GuestFilesystemTrimResponse")],
     )];
     assert_eq!(changed_returns(&qga), owned(qga_expected));
     assert!(qga.coalesced.is_empty());
@@ -359,10 +369,7 @@ fn schema_grammar_matches_qemu() {
             "{ 'enum': 'ExampleEnum', 'data': ['a'], 'if': { 'all': [] } }",
             false,
         ),
-        (
-            "{ 'enum': 'ExampleEnum', 'data': ['a'], 'if': 'config_a' }",
-            false,
-        ),
+        ("{ 'enum': 'ExampleEnum', 'data': ['a'], 'if': 'config_a' }", false),
         (
             "{ 'enum': 'ExampleEnum', 'data': ['a'], 'if': {'not': {'any': ['CONFIG_A', 'CONFIG_B']}} }",
             true,
@@ -448,10 +455,9 @@ fn simple_union_layout_lifetimes_follow_each_types_actual_transition() {
         &["v2.9.0", "v2.10.0", "v6.1.0", "v6.2.0", "v11.1.3"],
     )
     .unwrap();
-    for (name, until) in [
-        ("SocketAddress", (2, 10, 0)),
-        ("SocketAddressLegacy", (6, 2, 0)),
-    ] {
+    for (name, until) in
+        [("SocketAddress", (2, 10, 0)), ("SocketAddressLegacy", (6, 2, 0))]
+    {
         let UnifiedType::Struct(value) = &registry.types[name] else {
             panic!("missing {name}")
         };
@@ -461,17 +467,15 @@ fn simple_union_layout_lifetimes_follow_each_types_actual_transition() {
 
 #[test]
 fn legacy_untagged_unions_keep_alternate_identity_and_original_lifetime() {
-    let registry = build_qmp_registry(&qemu(), &["v1.7.0", "v2.0.0", "v2.1.0", "v11.1.3"]).unwrap();
+    let registry =
+        build_qmp_registry(&qemu(), &["v1.7.0", "v2.0.0", "v2.1.0", "v11.1.3"])
+            .unwrap();
     let UnifiedType::Enum(value) = &registry.types["BlockdevRef"] else {
         panic!("legacy alternate became a tagged struct")
     };
     assert_eq!(value.versions.since, (1, 7, 0));
     assert!(
-        value
-            .ir
-            .variants
-            .iter()
-            .any(|variant| variant.name == "reference")
+        value.ir.variants.iter().any(|variant| variant.name == "reference")
     );
     assert!(!registry.types.contains_key("BlockdevRefBranch"));
     assert!(!registry.types.contains_key("BlockdevRefType"));
@@ -479,7 +483,9 @@ fn legacy_untagged_unions_keep_alternate_identity_and_original_lifetime() {
 
 #[test]
 fn historical_guest_agent_schema_paths_are_not_silently_skipped() {
-    let registry = build_qga_registry(&qemu(), &["v0.15.0", "v1.0", "v1.4.0", "v11.1.3"]).unwrap();
+    let registry =
+        build_qga_registry(&qemu(), &["v0.15.0", "v1.0", "v1.4.0", "v11.1.3"])
+            .unwrap();
     assert_eq!(registry.versions.first(), Some(&(0, 15, 0)));
     let UnifiedType::Struct(command) = &registry.types["GuestPing"] else {
         panic!("missing early guest-ping")
@@ -529,10 +535,7 @@ fn qga_only_schema_repositories_extract_without_a_qmp_tree() {
     );
     git(repo.path(), &["tag", "v0.15.0"]);
     assert!(
-        build_qmp_registry(repo.path(), &["v0.15.0"])
-            .unwrap()
-            .types
-            .is_empty()
+        build_qmp_registry(repo.path(), &["v0.15.0"]).unwrap().types.is_empty()
     );
 }
 
@@ -546,18 +549,17 @@ fn missing_modern_guest_agent_schemas_are_errors_not_skipped_releases() {
     );
     git(repo.path(), &["tag", "v0.14.0"]);
     assert!(
-        build_qga_registry(repo.path(), &["v0.14.0"])
-            .unwrap()
-            .types
-            .is_empty()
+        build_qga_registry(repo.path(), &["v0.14.0"]).unwrap().types.is_empty()
     );
 }
 
 #[test]
-fn four_component_release_schemas_generate_the_same_rust_as_their_base_release() {
+fn four_component_release_schemas_generate_the_same_rust_as_their_base_release()
+{
     use qapi_codegen::unified::{Docs, Protocol, Releases, generate};
     let repo = qemu();
-    let discovered = qapi_codegen::versions::discover_version_tags(&repo).unwrap();
+    let discovered =
+        qapi_codegen::versions::discover_version_tags(&repo).unwrap();
     for (base, extra) in [
         ("v2.4.0", "v2.4.0.1"),
         ("v2.5.1", "v2.5.1.1"),
@@ -569,15 +571,17 @@ fn four_component_release_schemas_generate_the_same_rust_as_their_base_release()
                 < discovered.iter().position(|tag| tag == extra).unwrap()
         );
         let files = |output: qapi_codegen::unified::GeneratedOutput| {
-            [
-                output.types,
-                output.commands,
-                output.events,
-                output.metadata,
-            ]
+            [output.types, output.commands, output.events, output.metadata]
         };
         for protocol in [Protocol::Qmp, Protocol::Qga] {
-            let output = |tag| generate(&repo, Releases::Tags(&[tag]), protocol, Docs::Reference);
+            let output = |tag| {
+                generate(
+                    &repo,
+                    Releases::Tags(&[tag]),
+                    protocol,
+                    Docs::Reference,
+                )
+            };
             let before = files(output(base).unwrap());
             let after = files(output(extra).unwrap());
             assert_eq!(before, after, "{} {extra}", protocol.name());
@@ -588,8 +592,11 @@ fn four_component_release_schemas_generate_the_same_rust_as_their_base_release()
 #[test]
 fn known_issues_describe_every_warning_of_the_pinned_releases() {
     use qapi_codegen::unified::WarningKind;
-    let known =
-        std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/KNOWN_ISSUES.md")).unwrap();
+    let known = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/KNOWN_ISSUES.md"
+    ))
+    .unwrap();
     let tags = pinned_tags();
     let tags: Vec<_> = tags.iter().map(String::as_str).collect();
     let mut warnings = build_qmp_registry(&qemu(), &tags).unwrap().warnings;
@@ -597,17 +604,12 @@ fn known_issues_describe_every_warning_of_the_pinned_releases() {
     let mut described = BTreeSet::new();
     for warning in &warnings {
         let entry = match &warning.kind {
-            WarningKind::MislabeledDocumentation {
-                definition,
-                documented,
-            } => {
+            WarningKind::MislabeledDocumentation { definition, documented } => {
                 let name = definition.split('\'').nth(1).unwrap();
                 format!("`{documented}` above `{name}`")
             }
             WarningKind::NonEnumDiscriminator {
-                union,
-                discriminator,
-                ..
+                union, discriminator, ..
             } => format!("`{union}.{discriminator}`"),
             other => panic!("{}: {other} is not described", warning.tag),
         };

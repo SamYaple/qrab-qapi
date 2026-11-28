@@ -1,11 +1,13 @@
-use super::common::{take_dict, take_kv};
-use super::qapi_alternative::QapiAlternative;
-use super::qapi_alternative::take_alternative;
-use super::vec_newtype;
-use nom::IResult;
-use nom::Parser;
+use super::{
+    common::{take_dict, take_kv},
+    qapi_alternative::{QapiAlternative, take_alternative},
+    vec_newtype,
+};
+use nom::{IResult, Parser};
 
-pub(crate) fn take_alternatives(input: &str) -> IResult<&str, QapiAlternatives<'_>> {
+pub(crate) fn take_alternatives(
+    input: &str,
+) -> IResult<&str, QapiAlternatives<'_>> {
     take_kv("data", QapiAlternatives::parse).parse(input)
 }
 
@@ -46,7 +48,8 @@ mod tests {
 
     #[test]
     fn test_multiple_alternatives() {
-        let input = "{ 'str-val': 'str', 'int-val': 'int', 'array-val': ['bool'] }";
+        let input =
+            "{ 'str-val': 'str', 'int-val': 'int', 'array-val': ['bool'] }";
         let (rem, a) = QapiAlternatives::parse(input).unwrap();
         assert_eq!(rem, "");
         assert_eq!(a.len(), 3);

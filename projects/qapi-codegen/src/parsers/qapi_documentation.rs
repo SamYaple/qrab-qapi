@@ -2,14 +2,15 @@ use super::{
     common::{is_whitespace, line_ending, line_space0, lines, not_line_ending},
     parser_version,
 };
-use nom::IResult;
-use nom::Parser;
-use nom::bytes::complete::{tag, tag_no_case};
-use nom::character::complete::space0;
-use nom::combinator::{not, opt, peek, recognize};
-use nom::error::{Error, ErrorKind};
-use nom::multi::{many0, many1};
-use nom::sequence::{preceded, terminated};
+use nom::{
+    IResult, Parser,
+    bytes::complete::{tag, tag_no_case},
+    character::complete::space0,
+    combinator::{not, opt, peek, recognize},
+    error::{Error, ErrorKind},
+    multi::{many0, many1},
+    sequence::{preceded, terminated},
+};
 
 // ─── Shared helpers ────────────────────────────────────────────────
 
@@ -96,7 +97,9 @@ pub struct QapiDocumentation<'i> {
 }
 
 fn documentation_line(input: &str) -> IResult<&str, &str> {
-    let (input, _) = (line_space0, tag("#"), not(peek(tag("#"))), opt(tag(" "))).parse(input)?;
+    let (input, _) =
+        (line_space0, tag("#"), not(peek(tag("#"))), opt(tag(" ")))
+            .parse(input)?;
     terminated(not_line_ending, line_ending).parse(input)
 }
 
@@ -130,11 +133,8 @@ fn block<'i>(start: &'i str, rest: &'i str) -> &'i str {
 }
 
 fn documentation_start(input: &str) -> IResult<&str, &str> {
-    let ending = if parser_version() < (2, 9, 0) {
-        take_line_end
-    } else {
-        line_ending
-    };
+    let ending =
+        if parser_version() < (2, 9, 0) { take_line_end } else { line_ending };
     terminated(preceded(line_space0, tag("##")), ending).parse(input)
 }
 
@@ -165,15 +165,21 @@ impl<'i> QapiDocumentation<'i> {
     fn parse_common(input: &'i str, legacy: bool) -> IResult<&'i str, Self> {
         let start = input;
         let (input, _) = (line_space0, tag("##")).parse(input)?;
-        let (mut input, opening) = terminated(not_line_ending, line_ending).parse(input)?;
-        let header = if legacy && opening.trim_start_matches(is_whitespace).starts_with('@') {
+        let (mut input, opening) =
+            terminated(not_line_ending, line_ending).parse(input)?;
+        let header = if legacy
+            && opening.trim_start_matches(is_whitespace).starts_with('@')
+        {
             opening.trim_matches(is_whitespace)
         } else {
-            if !opening.is_empty() && (!legacy || !opening.trim_matches(is_whitespace).is_empty()) {
+            if !opening.is_empty()
+                && (!legacy || !opening.trim_matches(is_whitespace).is_empty())
+            {
                 return Err(nom::Err::Error(Error::new(start, ErrorKind::Tag)));
             }
             loop {
-                let (next, _) = many0((line_space0, line_ending)).parse(input)?;
+                let (next, _) =
+                    many0((line_space0, line_ending)).parse(input)?;
                 input = next;
                 let (next, line) = documentation_line(input)?;
                 input = next;
@@ -184,9 +190,13 @@ impl<'i> QapiDocumentation<'i> {
         };
         let name = header
             .strip_prefix('@')
-            .and_then(|name| name.strip_suffix(':').or_else(|| legacy.then_some(name)))
+            .and_then(|name| {
+                name.strip_suffix(':').or_else(|| legacy.then_some(name))
+            })
             .filter(|name| !name.is_empty() && name.chars().all(not_name_break))
-            .ok_or_else(|| nom::Err::Error(Error::new(start, ErrorKind::Tag)))?;
+            .ok_or_else(|| {
+                nom::Err::Error(Error::new(start, ErrorKind::Tag))
+            })?;
         let mut lines = Vec::new();
         loop {
             let end = if legacy {
@@ -195,11 +205,8 @@ impl<'i> QapiDocumentation<'i> {
                 documentation_end(input)
             };
             if let Ok((next, _)) = end {
-                let mut doc = Self {
-                    name,
-                    text: block(start, next),
-                    ..Self::default()
-                };
+                let mut doc =
+                    Self { name, text: block(start, next), ..Self::default() };
                 doc.parse_lines(&lines, legacy);
                 return Ok((next, doc));
             }
@@ -266,7 +273,9 @@ impl<'i> QapiDocumentation<'i> {
                 if let Some((name, value)) = line
                     .strip_prefix('@')
                     .and_then(|text| text.split_once(':'))
-                    .filter(|(name, _)| !name.is_empty() && name.chars().all(not_name_break))
+                    .filter(|(name, _)| {
+                        !name.is_empty() && name.chars().all(not_name_break)
+                    })
                 {
                     let target = if features {
                         &mut self.features
@@ -293,8 +302,10 @@ impl<'i> QapiDocumentation<'i> {
                         name.to_ascii_lowercase()
                     } else {
                         match name {
-                            "Returns" | "Errors" | "Note" | "Notes" | "Example" | "Examples"
-                            | "Features" | "Since" => name.to_ascii_lowercase(),
+                            "Returns" | "Errors" | "Note" | "Notes"
+                            | "Example" | "Examples" | "Features" | "Since" => {
+                                name.to_ascii_lowercase()
+                            }
                             "TODO" => "todo".into(),
                             _ => String::new(),
                         }
@@ -302,7 +313,9 @@ impl<'i> QapiDocumentation<'i> {
                     let next = match name.as_str() {
                         "returns" => Some(Section::Returns),
                         // QEMU reads an Errors section from 9.0.
-                        "errors" if parser_version() >= (9, 0, 0) => Some(Section::Errors),
+                        "errors" if parser_version() >= (9, 0, 0) => {
+                            Some(Section::Errors)
+                        }
                         "note" | "notes" => Some(Section::Notes),
                         "example" | "examples" => Some(Section::Examples),
                         "todo" => Some(Section::Todos),
@@ -314,7 +327,8 @@ impl<'i> QapiDocumentation<'i> {
                             continue;
                         }
                         "since" => {
-                            self.since = Some(value.trim().trim_end_matches('.'));
+                            self.since =
+                                Some(value.trim().trim_end_matches('.'));
                             features = false;
                             section = Section::Description;
                             previous_blank = true;
@@ -335,7 +349,10 @@ impl<'i> QapiDocumentation<'i> {
                     && line
                         .get(..5)
                         .is_some_and(|word| word.eq_ignore_ascii_case("since"))
-                    && line.as_bytes().get(5).is_some_and(u8::is_ascii_whitespace)
+                    && line
+                        .as_bytes()
+                        .get(5)
+                        .is_some_and(u8::is_ascii_whitespace)
                 {
                     self.since = Some(line[5..].trim().trim_end_matches('.'));
                     section = Section::Description;
@@ -345,8 +362,11 @@ impl<'i> QapiDocumentation<'i> {
                 }
                 if previous_blank
                     && !line.is_empty()
-                    && (matches!(section, Section::Field(_) | Section::Feature(_))
-                        || (!legacy && !matches!(section, Section::Description)))
+                    && (matches!(
+                        section,
+                        Section::Field(_) | Section::Feature(_)
+                    ) || (!legacy
+                        && !matches!(section, Section::Description)))
                 {
                     section = Section::Description;
                     features = false;
@@ -382,7 +402,8 @@ impl<'i> QapiDocumentation<'i> {
         ] {
             trim_lines(lines);
         }
-        for (_, lines) in self.fields.iter_mut().chain(self.features.iter_mut()) {
+        for (_, lines) in self.fields.iter_mut().chain(self.features.iter_mut())
+        {
             trim_lines(lines);
         }
     }
@@ -423,7 +444,10 @@ impl<'i> QapiSectionDocumentation<'i> {
         Self::parse_common(input, true)
     }
 
-    fn parse_common(input: &'i str, _allow_leading_ws: bool) -> IResult<&'i str, Self> {
+    fn parse_common(
+        input: &'i str,
+        _allow_leading_ws: bool,
+    ) -> IResult<&'i str, Self> {
         let (input, _) = documentation_start(input)?;
         let (input, _) = many0(take_empty_line).parse(input)?;
         // Section docs start with "= Section Name" or similar
@@ -444,15 +468,10 @@ impl<'i> QapiSectionDocumentation<'i> {
             documentation_end(input)
         }?;
 
-        let description = desc_str.map(|s| lines(s).collect()).unwrap_or_default();
+        let description =
+            desc_str.map(|s| lines(s).collect()).unwrap_or_default();
 
-        Ok((
-            input,
-            Self {
-                name: name.trim(),
-                description,
-            },
-        ))
+        Ok((input, Self { name: name.trim(), description }))
     }
 }
 
@@ -490,7 +509,10 @@ impl<'i> QapiFreeformDoc<'i> {
         Self::parse_common(input, true)
     }
 
-    fn parse_common(input: &'i str, _allow_leading_ws: bool) -> IResult<&'i str, Self> {
+    fn parse_common(
+        input: &'i str,
+        _allow_leading_ws: bool,
+    ) -> IResult<&'i str, Self> {
         let start = input;
         let (input, _) = documentation_start(input)?;
         // Named documentation must reach its definition parser.
@@ -501,9 +523,9 @@ impl<'i> QapiFreeformDoc<'i> {
             }
             tmp
         };
-        if documentation_line(check_input)
-            .is_ok_and(|(_, line)| line.trim_start_matches(is_whitespace).starts_with('@'))
-        {
+        if documentation_line(check_input).is_ok_and(|(_, line)| {
+            line.trim_start_matches(is_whitespace).starts_with('@')
+        }) {
             return Err(nom::Err::Error(Error::new(start, ErrorKind::Tag)));
         }
         // Consume lines starting with # until ##
@@ -522,8 +544,11 @@ impl<'i> QapiFreeformDoc<'i> {
                 input = next;
                 continue;
             }
-            if let Ok((next, _)) =
-                preceded(take_line_start, terminated(not_line_ending, line_ending)).parse(input)
+            if let Ok((next, _)) = preceded(
+                take_line_start,
+                terminated(not_line_ending, line_ending),
+            )
+            .parse(input)
             {
                 input = next;
                 continue;
@@ -540,20 +565,22 @@ mod tests {
 
     #[test]
     fn section_tags_match_case_sensitively_from_2_9() {
-        let input = "##\n# @Example:\n#\n# returns: text\n#\n# errors: text\n##\n";
+        let input =
+            "##\n# @Example:\n#\n# returns: text\n#\n# errors: text\n##\n";
         set_parser_version((11, 1, 3));
         let (_, doc) = QapiDocumentation::parse(input).unwrap();
         assert!(doc.returns.is_empty() && doc.errors.is_empty());
         assert_eq!(doc.description, ["returns: text", "", "errors: text"]);
-        let input = input
-            .replace("returns", "Returns")
-            .replace("errors", "Errors");
+        let input =
+            input.replace("returns", "Returns").replace("errors", "Errors");
         let (_, doc) = QapiDocumentation::parse(&input).unwrap();
         assert_eq!((doc.returns, doc.errors), (vec!["text"], vec!["text"]));
         // Before 2.9 comments had no grammar: any case names a section.
         set_parser_version((2, 8, 0));
-        let (_, doc) =
-            QapiDocumentation::parse("##\n# @Example:\n#\n# RETURNS: text\n##\n").unwrap();
+        let (_, doc) = QapiDocumentation::parse(
+            "##\n# @Example:\n#\n# RETURNS: text\n##\n",
+        )
+        .unwrap();
         assert_eq!(doc.returns, ["text"]);
     }
 
@@ -601,7 +628,10 @@ mod tests {
         assert!(remaining.starts_with("\n{ 'struct'"));
         assert_eq!(doc.fields.len(), 1);
         assert_eq!(doc.fields[0].0, "member");
-        assert_eq!(doc.fields[0].1, ["first line", "    indented continuation"]);
+        assert_eq!(
+            doc.fields[0].1,
+            ["first line", "    indented continuation"]
+        );
         assert_eq!(doc.features, [("flag", vec!["feature text"])]);
         assert_eq!(doc.returns, ["inline result"]);
         assert_eq!(doc.errors, ["failure details"]);
@@ -630,7 +660,8 @@ mod tests {
     #[test]
     fn test_doc_v1_optional_colon() {
         set_parser_version((2, 5, 0));
-        let input = "##\n# @ErrorClass\n#\n# QEMU error classes\n#\n# Since: 1.2\n##";
+        let input =
+            "##\n# @ErrorClass\n#\n# QEMU error classes\n#\n# Since: 1.2\n##";
         let result = QapiDocumentation::parse(input);
         match result {
             Ok((rem, doc)) => {
@@ -644,7 +675,8 @@ mod tests {
     #[test]
     fn test_doc_v1_shorthand() {
         set_parser_version((2, 5, 0));
-        let input = "## @ACPISlotType\n#\n# @DIMM: memory slot\n#\n# Since: 2.1\n##";
+        let input =
+            "## @ACPISlotType\n#\n# @DIMM: memory slot\n#\n# Since: 2.1\n##";
         let result = QapiDocumentation::parse(input);
         match result {
             Ok((rem, doc)) => {

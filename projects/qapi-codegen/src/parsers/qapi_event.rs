@@ -1,20 +1,19 @@
-use super::common::QapiString;
-use super::common::{Malformed, keep, malformed_key};
-use super::common::{
-    expression_text, other_key, qbool, qstring, read_since, take_keyed_dict, take_kv,
+use super::{
+    common::{
+        Malformed, QapiString, expression_text, keep, malformed_key, other_key,
+        qbool, qstring, read_since, take_keyed_dict, take_kv,
+    },
+    qapi_cond::{QapiCond, take_cond},
+    qapi_documentation::QapiDocumentation,
+    qapi_features::{QapiFeatures, take_features},
+    qapi_members::{MembersOrRef, take_members_or_ref},
 };
-use super::qapi_cond::QapiCond;
-use super::qapi_cond::take_cond;
-use super::qapi_documentation::QapiDocumentation;
-use super::qapi_features::QapiFeatures;
-use super::qapi_features::take_features;
-use super::qapi_members::MembersOrRef;
-use super::qapi_members::take_members_or_ref;
-use nom::IResult;
-use nom::Parser;
-use nom::branch::alt;
-use nom::combinator::opt;
-use nom::error::{Error, ErrorKind};
+use nom::{
+    IResult, Parser,
+    branch::alt,
+    combinator::opt,
+    error::{Error, ErrorKind},
+};
 
 /// The keys whose `null` QEMU 2.4 to 4.1 take for an absent key.
 const ABSENT: &[&str] = &["data", "if"];
@@ -60,19 +59,18 @@ impl<'i> QapiEvent<'i> {
 
     pub(crate) fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
         let (input, doc) = opt(QapiDocumentation::parse).parse(input)?;
-        let mut s = Self {
-            doc,
-            ..Default::default()
-        };
+        let mut s = Self { doc, ..Default::default() };
         let start = input;
         let (input, (_, keys)) = take_keyed_dict(alt((
             take_kv("event", qstring).map(|v| s.name = v),
-            read_since((2, 4, 0), take_kv("boxed", qbool)).map(|v| s.boxed = Some(v)),
+            read_since((2, 4, 0), take_kv("boxed", qbool))
+                .map(|v| s.boxed = Some(v)),
             read_since((2, 4, 0), take_cond).map(|v| s.r#if = Some(v)),
             read_since((2, 4, 0), take_features).map(|v| s.features = Some(v)),
             take_kv("data", take_members_or_ref).map(|v| s.data = Some(v)),
             other_key(READ),
-            malformed_key(READ).map(|entry| keep(&mut s.malformed, ABSENT, entry)),
+            malformed_key(READ)
+                .map(|entry| keep(&mut s.malformed, ABSENT, entry)),
         )))
         .parse(input)?;
         if !super::common::named(&keys, "event", &s.name) {

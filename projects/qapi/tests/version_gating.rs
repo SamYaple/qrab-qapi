@@ -17,7 +17,8 @@ const BELOW_LIMITS: (u32, u32, u32) = (10, 1, 0);
 /// Build a representative `ImageInfo` with the gated `limits` field
 /// populated. Required fields kept minimal.
 fn image_info_with_limits() -> ImageInfo {
-    let mut info = ImageInfo::new("test.qcow2".to_string(), "qcow2".to_string(), 1 << 30);
+    let mut info =
+        ImageInfo::new("test.qcow2".to_string(), "qcow2".to_string(), 1 << 30);
     info.limits = Some(BlockLimitsInfo::new(1024, 512, 4096, 512));
     info
 }
@@ -30,9 +31,14 @@ fn field_above_runtime_version_is_refused_on_serialize() {
     let mut info = image_info_with_limits();
     match to_value(BELOW_LIMITS, &info) {
         Err(EncodeError::Unavailable { name, version }) => {
-            assert_eq!((name.as_str(), version), ("ImageInfo.limits", BELOW_LIMITS));
+            assert_eq!(
+                (name.as_str(), version),
+                ("ImageInfo.limits", BELOW_LIMITS)
+            );
         }
-        other => panic!("limits (added 10.2.0) must be refused at 10.1.0: {other:?}"),
+        other => {
+            panic!("limits (added 10.2.0) must be refused at 10.1.0: {other:?}")
+        }
     }
     info.limits = None;
     let parsed = to_value(BELOW_LIMITS, &info).unwrap();
@@ -49,7 +55,8 @@ fn field_above_runtime_version_is_refused_on_serialize() {
 #[test]
 fn field_above_runtime_version_deserializes_as_default() {
     // JSON as an older QEMU (pre-10.2.0) would emit — no `limits` key.
-    let json = r#"{"filename":"old.qcow2","format":"qcow2","virtual-size":536870912}"#;
+    let json =
+        r#"{"filename":"old.qcow2","format":"qcow2","virtual-size":536870912}"#;
     let info: ImageInfo = serde_json::from_str(json).unwrap();
     assert_eq!(info.filename, "old.qcow2");
     assert_eq!(info.format, "qcow2");
@@ -67,6 +74,7 @@ fn gated_field_round_trips_from_its_release() {
     let info = image_info_with_limits();
     let json = to_value((10, 2, 0), &info).unwrap();
     assert_eq!(json["limits"]["max-iov"], 1024);
-    let back: ImageInfo = with_version((10, 2, 0), || serde_json::from_value(json)).unwrap();
+    let back: ImageInfo =
+        with_version((10, 2, 0), || serde_json::from_value(json)).unwrap();
     assert_eq!(back.limits.map(|limits| limits.max_iov), Some(1024));
 }

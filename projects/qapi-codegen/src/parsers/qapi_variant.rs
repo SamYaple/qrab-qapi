@@ -1,16 +1,17 @@
-use super::common::QapiString;
-use super::common::{
-    Malformed, keep, malformed_key, other_key, qstring, qtag, raw_value, take_keyed_dict,
+use super::{
+    common::{
+        Malformed, QapiString, keep, malformed_key, other_key, qstring, qtag,
+        raw_value, take_keyed_dict,
+    },
+    qapi_cond::{QapiCond, take_cond},
+    qapi_type_ref::{QapiTypeRef, take_type_ref},
 };
-use super::qapi_cond::QapiCond;
-use super::qapi_cond::take_cond;
-use super::qapi_type_ref::QapiTypeRef;
-use super::qapi_type_ref::take_type_ref;
-use nom::IResult;
-use nom::Parser;
-use nom::branch::alt;
-use nom::error::{Error, ErrorKind};
-use nom::sequence::terminated;
+use nom::{
+    IResult, Parser,
+    branch::alt,
+    error::{Error, ErrorKind},
+    sequence::terminated,
+};
 
 #[cfg(test)]
 mod tests {
@@ -132,7 +133,8 @@ impl<'i> QapiVariant<'i> {
     /// refuses as the branch's type.
     fn malformed_parser(input: &'i str) -> IResult<&'i str, Self> {
         let mut s = Self::default();
-        let (input, (name, _, value)) = (qstring, qtag(":"), raw_value).parse(input)?;
+        let (input, (name, _, value)) =
+            (qstring, qtag(":"), raw_value).parse(input)?;
         s.name = name;
         s.malformed.push(("type".into(), value));
         Ok((input, s))
@@ -154,7 +156,8 @@ impl<'i> QapiVariant<'i> {
                 type_parser,
                 cond_parser,
                 other_key(&["type", "if"]),
-                malformed_key(&["type", "if"]).map(|entry| keep(&mut s.malformed, &["if"], entry)),
+                malformed_key(&["type", "if"])
+                    .map(|entry| keep(&mut s.malformed, &["if"], entry)),
             ))),
         )
             .parse(input)?;

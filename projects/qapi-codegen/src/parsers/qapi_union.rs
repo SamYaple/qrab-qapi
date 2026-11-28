@@ -1,26 +1,29 @@
-use super::common::QapiString;
-use super::common::{Malformed, keep, malformed_key};
-use super::common::{
-    expression_text, other_key, qstring, qtag, read_since, take_keyed_dict, take_kv,
+use super::{
+    common::{
+        Malformed, QapiString, expression_text, keep, malformed_key, other_key,
+        qstring, qtag, read_since, take_keyed_dict, take_kv,
+    },
+    parser_version,
+    qapi_branches::{QapiBranches, take_branches},
+    qapi_cond::{QapiCond, take_cond},
+    qapi_documentation::QapiDocumentation,
+    qapi_features::{QapiFeatures, take_features},
+    qapi_members::{MembersOrRef, take_members_or_ref},
 };
-use super::parser_version;
-use super::qapi_branches::{QapiBranches, take_branches};
-use super::qapi_cond::{QapiCond, take_cond};
-use super::qapi_documentation::QapiDocumentation;
-use super::qapi_features::{QapiFeatures, take_features};
-use super::qapi_members::{MembersOrRef, take_members_or_ref};
-use nom::IResult;
-use nom::Parser;
-use nom::branch::alt;
-use nom::combinator::opt;
-use nom::error::{Error, ErrorKind};
+use nom::{
+    IResult, Parser,
+    branch::alt,
+    combinator::opt,
+    error::{Error, ErrorKind},
+};
 
 /// The keys whose `null` QEMU 2.4 to 4.1 take for an absent key.
 const ABSENT: &[&str] = &["base", "discriminator", "if"];
 
 /// The keys that the parser reads; from 2.4 the others are kept for the
 /// validation.
-const READ: &[&str] = &["union", "data", "discriminator", "if", "features", "base"];
+const READ: &[&str] =
+    &["union", "data", "discriminator", "if", "features", "base"];
 #[derive(Debug, Clone, Default)]
 pub struct QapiUnion<'i> {
     pub name: QapiString<'i>,
@@ -59,10 +62,7 @@ impl<'i> QapiUnion<'i> {
     /// of later releases is ignored.
     pub(crate) fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
         let (input, doc) = opt(QapiDocumentation::parse).parse(input)?;
-        let mut s = Self {
-            doc,
-            ..Default::default()
-        };
+        let mut s = Self { doc, ..Default::default() };
         let start = input;
         let mut has_data = false;
         let (input, (_, keys)) = take_keyed_dict(alt((
@@ -72,7 +72,8 @@ impl<'i> QapiUnion<'i> {
                 s.data = v;
             }),
             other_key(READ),
-            malformed_key(READ).map(|entry| keep(&mut s.malformed, ABSENT, entry)),
+            malformed_key(READ)
+                .map(|entry| keep(&mut s.malformed, ABSENT, entry)),
         )))
         .parse(input)?;
         if !super::common::named(&keys, "union", &s.name) || !has_data {
@@ -86,10 +87,7 @@ impl<'i> QapiUnion<'i> {
     /// v2 (QEMU v1.6.0–v6.1.0): simple unions + discriminated unions coexist.
     pub(crate) fn parse_v2(input: &'i str) -> IResult<&'i str, Self> {
         let (input, doc) = opt(QapiDocumentation::parse).parse(input)?;
-        let mut s = Self {
-            doc,
-            ..Default::default()
-        };
+        let mut s = Self { doc, ..Default::default() };
         let start = input;
         let mut has_data = false;
         let (input, (_, keys)) = take_keyed_dict(alt((
@@ -98,14 +96,17 @@ impl<'i> QapiUnion<'i> {
                 has_data = true;
                 s.data = v;
             }),
-            take_kv("discriminator", qstring).map(|v| s.discriminator = Some(v)),
+            take_kv("discriminator", qstring)
+                .map(|v| s.discriminator = Some(v)),
             // Historical untagged alternate syntax.
-            take_kv("discriminator", (qtag("{"), qtag("}"))).map(|_| s.legacy_alternate = true),
+            take_kv("discriminator", (qtag("{"), qtag("}")))
+                .map(|_| s.legacy_alternate = true),
             read_since((2, 4, 0), take_cond).map(|v| s.r#if = Some(v)),
             read_since((2, 4, 0), take_features).map(|v| s.features = Some(v)),
             take_kv("base", take_members_or_ref).map(|v| s.base = v),
             other_key(READ),
-            malformed_key(READ).map(|entry| keep(&mut s.malformed, ABSENT, entry)),
+            malformed_key(READ)
+                .map(|entry| keep(&mut s.malformed, ABSENT, entry)),
         )))
         .parse(input)?;
         // From 2.4 the validation refuses a missing 'data'.
@@ -115,7 +116,9 @@ impl<'i> QapiUnion<'i> {
             return Err(nom::Err::Error(Error::new(start, ErrorKind::Tag)));
         }
         // Before 2.4 an empty discriminator names none: a simple union.
-        if s.discriminator.as_deref() == Some("") && parser_version() < (2, 4, 0) {
+        if s.discriminator.as_deref() == Some("")
+            && parser_version() < (2, 4, 0)
+        {
             s.discriminator = None;
         }
         s.keys = keys;
@@ -127,10 +130,7 @@ impl<'i> QapiUnion<'i> {
     /// v3 (QEMU v6.2.0+): discriminated (flat) unions only — base + discriminator required.
     pub(crate) fn parse_v3(input: &'i str) -> IResult<&'i str, Self> {
         let (input, doc) = opt(QapiDocumentation::parse).parse(input)?;
-        let mut s = Self {
-            doc,
-            ..Default::default()
-        };
+        let mut s = Self { doc, ..Default::default() };
         let start = input;
         let mut has_data = false;
         let (input, (_, keys)) = take_keyed_dict(alt((
@@ -139,12 +139,14 @@ impl<'i> QapiUnion<'i> {
                 has_data = true;
                 s.data = v;
             }),
-            take_kv("discriminator", qstring).map(|v| s.discriminator = Some(v)),
+            take_kv("discriminator", qstring)
+                .map(|v| s.discriminator = Some(v)),
             take_cond.map(|v| s.r#if = Some(v)),
             take_features.map(|v| s.features = Some(v)),
             take_kv("base", take_members_or_ref).map(|v| s.base = v),
             other_key(READ),
-            malformed_key(READ).map(|entry| keep(&mut s.malformed, ABSENT, entry)),
+            malformed_key(READ)
+                .map(|entry| keep(&mut s.malformed, ABSENT, entry)),
         )))
         .parse(input)?;
         if !super::common::named(&keys, "union", &s.name) {
@@ -165,11 +167,13 @@ mod tests {
     fn flat_unions_allow_implicit_empty_payloads_but_require_data() {
         for version in [(2, 1, 0), (6, 2, 0), (11, 1, 3)] {
             set_parser_version(version);
-            let prefix =
-                "{ 'union': 'EmptyPayload', 'base': {'kind': 'Kind'}, 'discriminator': 'kind'";
+            let prefix = "{ 'union': 'EmptyPayload', 'base': {'kind': 'Kind'}, 'discriminator': 'kind'";
             // From 2.4 the validation refuses a missing 'data'.
             let missing = format!("{prefix} }}");
-            assert_eq!(QapiUnion::parse(&missing).is_err(), version < (2, 4, 0));
+            assert_eq!(
+                QapiUnion::parse(&missing).is_err(),
+                version < (2, 4, 0)
+            );
             let input = format!("{prefix}, 'data': {{}} }}");
             let (remaining, value) = QapiUnion::parse(&input).unwrap();
             assert!(remaining.is_empty());
@@ -178,7 +182,8 @@ mod tests {
     }
 
     #[test]
-    fn empty_discriminator_is_distinct_from_simple_union_and_rejects_nonempty_objects() {
+    fn empty_discriminator_is_distinct_from_simple_union_and_rejects_nonempty_objects()
+     {
         set_parser_version((1, 7, 0));
         let (_, alternate) = QapiUnion::parse(
             "{ 'union': 'Ref', 'discriminator': {}, 'data': {'reference':'str'} }",
@@ -186,7 +191,8 @@ mod tests {
         .unwrap();
         assert!(alternate.legacy_alternate);
         let (_, tagged) =
-            QapiUnion::parse("{ 'union': 'Ref', 'data': {'reference':'str'} }").unwrap();
+            QapiUnion::parse("{ 'union': 'Ref', 'data': {'reference':'str'} }")
+                .unwrap();
         assert!(!tagged.legacy_alternate);
         assert!(
             QapiUnion::parse(
@@ -196,8 +202,7 @@ mod tests {
         );
         // Before 2.4 the lowering checks a legacy alternate's base, from
         // 2.4 the validation.
-        let legacy =
-            "{ 'union': 'Ref', 'discriminator': {}, 'base': 'Base', 'data': {'reference':'str'} }";
+        let legacy = "{ 'union': 'Ref', 'discriminator': {}, 'base': 'Base', 'data': {'reference':'str'} }";
         assert!(QapiUnion::parse(legacy).unwrap().1.legacy_alternate);
         set_parser_version((2, 4, 0));
         assert!(QapiUnion::parse(legacy).unwrap().1.legacy_alternate);
@@ -253,7 +258,11 @@ mod tests {
         ] {
             let (rem, u) = QapiUnion::parse(input).unwrap();
             assert_eq!(rem, "", "{input}");
-            assert!(u.discriminator.is_none() && !u.legacy_alternate && u.r#if.is_none());
+            assert!(
+                u.discriminator.is_none()
+                    && !u.legacy_alternate
+                    && u.r#if.is_none()
+            );
             assert_eq!(u.base, MembersOrRef::Unset);
             assert_eq!(u.data.len(), 1);
         }

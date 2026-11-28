@@ -5,13 +5,13 @@
 // release no longer has and which are therefore deprecated.
 #![allow(deprecated)]
 
-use qapi::commands::*;
-use qapi::events::*;
-use qapi::*;
+use qapi::{commands::*, events::*, *};
 
 /// Serialize for a peer newer than every release, so that every
 /// since-gated field is included. Decoding stays unscoped (newest layout).
-fn to_json<T: serde::Serialize + ?Sized>(value: &T) -> serde_json::Result<String> {
+fn to_json<T: serde::Serialize + ?Sized>(
+    value: &T,
+) -> serde_json::Result<String> {
     with_version((99, 0, 0), || serde_json::to_string(value))
 }
 
@@ -150,15 +150,15 @@ fn enum_migration_capability_all_variants() {
         "mapped-ram",
     ];
     for name in &variants {
-        let version = if *name == "zero-blocks" {
-            (10, 2, 0)
-        } else {
-            (11, 1, 3)
-        };
+        let version =
+            if *name == "zero-blocks" { (10, 2, 0) } else { (11, 1, 3) };
         let json_str = format!("\"{}\"", name);
         let cap = serde_json::from_str::<MigrationCapability>(&json_str)
-            .unwrap_or_else(|error| panic!("Missing MigrationCapability {name}: {error}"));
-        let back = qapi::with_version(version, || serde_json::to_string(&cap)).unwrap();
+            .unwrap_or_else(|error| {
+                panic!("Missing MigrationCapability {name}: {error}")
+            });
+        let back = qapi::with_version(version, || serde_json::to_string(&cap))
+            .unwrap();
         assert_eq!(
             back, json_str,
             "Roundtrip failed for MigrationCapability {name}"
@@ -179,7 +179,9 @@ fn enum_dump_guest_memory_format() {
         "win-dmp",
     ] {
         let json_str = format!("\"{}\"", name);
-        if let Ok(fmt) = serde_json::from_str::<DumpGuestMemoryFormat>(&json_str) {
+        if let Ok(fmt) =
+            serde_json::from_str::<DumpGuestMemoryFormat>(&json_str)
+        {
             let back = to_json(&fmt).unwrap();
             assert_eq!(back, json_str);
         }

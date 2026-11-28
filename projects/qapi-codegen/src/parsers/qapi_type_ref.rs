@@ -1,10 +1,9 @@
-use super::common::QapiString;
-use super::common::{qstring, take_list};
-use super::parser_version;
-use super::qapi_members::QapiMembers;
-use nom::IResult;
-use nom::Parser;
-use nom::branch::alt;
+use super::{
+    common::{QapiString, qstring, take_list},
+    parser_version,
+    qapi_members::QapiMembers,
+};
+use nom::{IResult, Parser, branch::alt};
 
 pub(crate) fn take_type_ref(input: &str) -> IResult<&str, QapiTypeRef<'_>> {
     use super::common::take_kv;
@@ -38,10 +37,11 @@ impl<'i> QapiTypeRef<'i> {
     /// Before 4.0: a string, an array, or an anonymous struct.
     pub(crate) fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
         use super::qapi_members::take_members;
-        let array_parser = take_list(qstring).map_opt(|items| match items.as_slice() {
-            [name] => Some(name.clone()),
-            _ => None,
-        });
+        let array_parser =
+            take_list(qstring).map_opt(|items| match items.as_slice() {
+                [name] => Some(name.clone()),
+                _ => None,
+            });
         alt((
             qstring.map(Self::Ref),
             array_parser.map(Self::ArrayRef),
@@ -52,11 +52,13 @@ impl<'i> QapiTypeRef<'i> {
 
     /// From 4.0: only a string or an array.
     pub(crate) fn parse_v2(input: &'i str) -> IResult<&'i str, Self> {
-        let array_parser = take_list(qstring).map_opt(|items| match items.as_slice() {
-            [name] => Some(name.clone()),
-            _ => None,
-        });
-        alt((qstring.map(Self::Ref), array_parser.map(Self::ArrayRef))).parse(input)
+        let array_parser =
+            take_list(qstring).map_opt(|items| match items.as_slice() {
+                [name] => Some(name.clone()),
+                _ => None,
+            });
+        alt((qstring.map(Self::Ref), array_parser.map(Self::ArrayRef)))
+            .parse(input)
     }
 }
 
@@ -71,7 +73,10 @@ mod tests {
             set_parser_version(version);
             assert!(QapiTypeRef::parse("[]").is_err());
             assert!(QapiTypeRef::parse("['str', 'int']").is_err());
-            assert_eq!(QapiTypeRef::parse("['str',]").is_ok(), version < (2, 4, 0));
+            assert_eq!(
+                QapiTypeRef::parse("['str',]").is_ok(),
+                version < (2, 4, 0)
+            );
         }
     }
 

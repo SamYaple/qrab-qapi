@@ -9,10 +9,11 @@
 // The stand-in runtime, which the expansion names `::qapi`.
 extern crate self as qapi;
 mod runtime;
-use runtime::*;
-
-use qapi::{PreconfigSafe, QapiCommand, QapiEvent, take_unavailable, with_version};
+use qapi::{
+    PreconfigSafe, QapiCommand, QapiEvent, take_unavailable, with_version,
+};
 use qapi_macros::qapi;
+use runtime::*;
 use serde_json::{Value, json};
 
 #[qapi]
@@ -60,8 +61,16 @@ fn commands_describe_the_newest_schema_in_their_constants() {
         assert!(QueryThing::ALLOW_PRECONFIG);
         assert!(!QueryThing::SUCCESS_RESPONSE);
         assert!(!QueryThing::UNSTABLE);
-        assert!(!Stop::ALLOW_OOB && !Stop::ALLOW_PRECONFIG && Stop::SUCCESS_RESPONSE);
-        assert!(Experimental::UNSTABLE && Unstable::UNSTABLE && !Stabilized::UNSTABLE);
+        assert!(
+            !Stop::ALLOW_OOB
+                && !Stop::ALLOW_PRECONFIG
+                && Stop::SUCCESS_RESPONSE
+        );
+        assert!(
+            Experimental::UNSTABLE
+                && Unstable::UNSTABLE
+                && !Stabilized::UNSTABLE
+        );
     }
     assert_eq!(QueryThing::NAME, "query-thing");
     assert_eq!(QueryThing::AVAILABLE_SINCE, (1, 0, 0));
@@ -95,10 +104,18 @@ fn command_flags_hold_in_their_releases() {
     for (version, expected) in [((3, 9, 9), true), ((4, 0, 0), false)] {
         assert_eq!(QueryThing::sends_success_response(version), expected);
     }
-    assert!(!Stop::allows_oob((11, 0, 0)) && Stop::sends_success_response((11, 0, 0)));
+    assert!(
+        !Stop::allows_oob((11, 0, 0))
+            && Stop::sends_success_response((11, 0, 0))
+    );
     assert!(Experimental::is_unstable((1, 0, 0)));
-    assert!(!Unstable::is_unstable((7, 9, 9)) && Unstable::is_unstable((8, 0, 0)));
-    assert!(Stabilized::is_unstable((7, 9, 9)) && !Stabilized::is_unstable((8, 0, 0)));
+    assert!(
+        !Unstable::is_unstable((7, 9, 9)) && Unstable::is_unstable((8, 0, 0))
+    );
+    assert!(
+        Stabilized::is_unstable((7, 9, 9))
+            && !Stabilized::is_unstable((8, 0, 0))
+    );
     assert!(!QueryThing::is_unstable((5, 0, 0)));
 }
 
@@ -133,15 +150,14 @@ fn commands_with_preconfig_releases_are_preconfig_safe() {
 
 #[test]
 fn commands_serialize_their_arguments_and_display_their_name() {
-    let command = QueryThing {
-        verbose: Some(true),
-    };
+    let command = QueryThing { verbose: Some(true) };
     assert_eq!(command.to_string(), "query-thing");
     assert_eq!(
         with_version((2, 0, 0), || serde_json::to_value(&command)).unwrap(),
         json!({"verbose": true})
     );
-    let error = with_version((1, 9, 0), || serde_json::to_value(&command)).unwrap_err();
+    let error =
+        with_version((1, 9, 0), || serde_json::to_value(&command)).unwrap_err();
     assert_eq!(
         error.to_string(),
         "QueryThing.verbose is not available in QEMU 1.9.0"
@@ -191,7 +207,8 @@ fn reply<C: QapiCommand>(
     version: Option<(u32, u32, u32)>,
     json: Value,
 ) -> Result<C::Returns, String> {
-    let decode = || serde_json::from_value(json).map_err(|error| error.to_string());
+    let decode =
+        || serde_json::from_value(json).map_err(|error| error.to_string());
     match version {
         Some(version) => with_version(version, decode),
         None => decode(),
@@ -212,7 +229,9 @@ fn a_reply_decodes_into_the_return_type_of_the_peers_release() {
     }
     for version in [Some((10, 1, 0)), None] {
         match reply::<QueryTarget>(version, arch.clone()) {
-            Ok(QueryTargetReturns::V10_1_0(info)) => assert_eq!(info.arch, "x86_64"),
+            Ok(QueryTargetReturns::V10_1_0(info)) => {
+                assert_eq!(info.arch, "x86_64")
+            }
             other => panic!("{version:?}: {other:?}"),
         }
     }
@@ -242,22 +261,21 @@ fn a_release_without_a_return_value_replies_an_empty_object() {
 
 #[test]
 fn a_reply_serializes_only_for_the_releases_of_its_return_type() {
-    let old = QueryTargetReturns::V1_2_0(TargetInfo {
-        arch: Some("x86_64".into()),
-    });
+    let old =
+        QueryTargetReturns::V1_2_0(TargetInfo { arch: Some("x86_64".into()) });
     assert_eq!(
         with_version((9, 2, 0), || serde_json::to_value(&old)).unwrap(),
         json!({"arch": "x86_64"})
     );
-    let error = with_version((10, 1, 0), || serde_json::to_value(&old)).unwrap_err();
+    let error =
+        with_version((10, 1, 0), || serde_json::to_value(&old)).unwrap_err();
     assert_eq!(
         error.to_string(),
         "QueryTargetReturns::V1_2_0 is not available in QEMU 10.1.0"
     );
     assert_eq!(take_unavailable(), ["QueryTargetReturns::V1_2_0"]);
-    let new = QueryTargetReturns::V10_1_0(QemuTargetInfo {
-        arch: "x86_64".into(),
-    });
+    let new =
+        QueryTargetReturns::V10_1_0(QemuTargetInfo { arch: "x86_64".into() });
     assert!(with_version((10, 1, 0), || serde_json::to_value(&new)).is_ok());
 }
 
@@ -269,7 +287,8 @@ struct ShutdownEvent {
 #[test]
 fn events_decode_their_data_under_their_name() {
     assert_eq!(<ShutdownEvent as QapiEvent>::NAME, "SHUTDOWN");
-    let event: ShutdownEvent = serde_json::from_value(json!({"guest": true})).unwrap();
+    let event: ShutdownEvent =
+        serde_json::from_value(json!({"guest": true})).unwrap();
     assert!(event.guest);
     assert_eq!(event.to_string(), "SHUTDOWN(guest=true)");
 }

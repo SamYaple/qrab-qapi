@@ -1,10 +1,9 @@
-use super::common::QapiString;
-use super::common::{qstring, take_dict};
-use super::qapi_member::QapiMember;
-use super::vec_newtype;
-use nom::IResult;
-use nom::Parser;
-use nom::branch::alt;
+use super::{
+    common::{QapiString, qstring, take_dict},
+    qapi_member::QapiMember,
+    vec_newtype,
+};
+use nom::{IResult, Parser, branch::alt};
 
 pub(crate) fn take_members(input: &str) -> IResult<&str, QapiMembers<'_>> {
     QapiMembers::parse(input)
@@ -27,7 +26,9 @@ impl<'i> QapiMembers<'i> {
 }
 vec_newtype!(QapiMembers, QapiMember<'i>);
 
-pub(crate) fn take_members_or_ref(input: &str) -> IResult<&str, MembersOrRef<'_>> {
+pub(crate) fn take_members_or_ref(
+    input: &str,
+) -> IResult<&str, MembersOrRef<'_>> {
     MembersOrRef::parse(input)
 }
 
@@ -46,7 +47,8 @@ impl<'i> MembersOrRef<'i> {
     }
 
     pub(crate) fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
-        alt((qstring.map(Self::Ref), take_members.map(Self::Members))).parse(input)
+        alt((qstring.map(Self::Ref), take_members.map(Self::Members)))
+            .parse(input)
     }
 }
 
@@ -63,7 +65,8 @@ mod tests {
         crate::set_parser_version((11, 1, 3));
         let (_, members) = QapiMembers::parse("{ '*': 'str' }").unwrap();
         assert!(members[0].name.is_empty() && members[0].optional);
-        let (_, members) = QapiMembers::parse("{ 'name': 'str', '*name': 'int' }").unwrap();
+        let (_, members) =
+            QapiMembers::parse("{ 'name': 'str', '*name': 'int' }").unwrap();
         assert_eq!(members.len(), 2);
         assert!(members.iter().all(|member| member.name == "name"));
     }
@@ -86,7 +89,8 @@ mod tests {
 
     #[test]
     fn test_multiple_members() {
-        let input = "{ 'name': 'str', 'count': 'int', '*optional-field': 'bool' }";
+        let input =
+            "{ 'name': 'str', 'count': 'int', '*optional-field': 'bool' }";
         let (rem, m) = QapiMembers::parse(input).unwrap();
         assert_eq!(rem, "");
         assert_eq!(m.len(), 3);

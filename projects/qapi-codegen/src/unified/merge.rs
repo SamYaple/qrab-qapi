@@ -16,15 +16,14 @@ pub(crate) fn has_feature(meta: &Metadata, feature_name: &str) -> bool {
 }
 
 /// Boolean schema properties whose presence changes between releases.
-pub(super) const TRACKED_BOOL_ATTRS: &[&str] = &[
-    "allow_preconfig",
-    "allow_oob",
-    "no_success_response",
-    "simple_union",
-];
+pub(super) const TRACKED_BOOL_ATTRS: &[&str] =
+    &["allow_preconfig", "allow_oob", "no_success_response", "simple_union"];
 
 /// Extract version ranges for boolean command attributes present in metadata.
-fn extract_bool_attr_versions(meta: &Metadata, version: Version) -> BTreeMap<String, VersionRange> {
+fn extract_bool_attr_versions(
+    meta: &Metadata,
+    version: Version,
+) -> BTreeMap<String, VersionRange> {
     let mut map = BTreeMap::new();
     for attr_name in TRACKED_BOOL_ATTRS {
         if meta
@@ -40,7 +39,11 @@ fn extract_bool_attr_versions(meta: &Metadata, version: Version) -> BTreeMap<Str
 
 /// Merge boolean command attributes from a new version's struct into an existing UnifiedStruct.
 /// Adds newly-appearing attributes, marks removed ones with `until`.
-fn merge_bool_attrs(existing: &mut UnifiedStruct, new_meta: &Metadata, version: Version) {
+fn merge_bool_attrs(
+    existing: &mut UnifiedStruct,
+    new_meta: &Metadata,
+    version: Version,
+) {
     for attr_name in TRACKED_BOOL_ATTRS {
         let present_in_new = new_meta
             .attributes
@@ -50,7 +53,8 @@ fn merge_bool_attrs(existing: &mut UnifiedStruct, new_meta: &Metadata, version: 
         if present_in_new {
             if let Some(range) = existing.attr_versions.get_mut(*attr_name) {
                 if range.until.is_some() {
-                    let old = std::mem::replace(range, VersionRange::new(version));
+                    let old =
+                        std::mem::replace(range, VersionRange::new(version));
                     existing.attr_history.push((attr_name.to_string(), old));
                 }
             } else {
@@ -78,7 +82,12 @@ fn merge_bool_attrs(existing: &mut UnifiedStruct, new_meta: &Metadata, version: 
 /// such as `SGXInfo`, which QEMU 10.1 spells `SgxInfo`, is one entry. A name
 /// attribute that only the newest spelling needs joins with the release's
 /// other new attributes.
-fn refresh_name(name: &mut String, meta: &mut Metadata, latest_name: &str, latest: &Metadata) {
+fn refresh_name(
+    name: &mut String,
+    meta: &mut Metadata,
+    latest_name: &str,
+    latest: &Metadata,
+) {
     let wire = |meta: &Metadata| {
         meta.attributes
             .iter()
@@ -128,7 +137,9 @@ pub(super) fn materialize_variant_history(
                 .attributes
                 .iter()
                 .find_map(|attr| match attr {
-                    Attribute::Item { name, value } if name == "name" => Some(value.clone()),
+                    Attribute::Item { name, value } if name == "name" => {
+                        Some(value.clone())
+                    }
                     _ => None,
                 })
                 .unwrap_or_else(|| variant.name.clone())
@@ -151,19 +162,16 @@ pub(super) fn materialize_variant_history(
                 source: format!("value '{}'", wire(variant)),
             }
         });
-        let historical =
-            value
-                .variant_history
-                .iter()
-                .enumerate()
-                .map(|(index, (variant, range))| MemberRun {
-                    stem: variant_rust_name(variant),
-                    shape: shape(variant),
-                    since: range.since,
-                    until: range.until,
-                    history: Some(index),
-                    source: format!("the earlier value '{}'", wire(variant)),
-                });
+        let historical = value.variant_history.iter().enumerate().map(
+            |(index, (variant, range))| MemberRun {
+                stem: variant_rust_name(variant),
+                shape: shape(variant),
+                since: range.since,
+                until: range.until,
+                history: Some(index),
+                source: format!("the earlier value '{}'", wire(variant)),
+            },
+        );
         let runs: Vec<_> = current.chain(historical).collect();
         let used = value
             .ir
@@ -193,10 +201,7 @@ pub(super) fn materialize_variant_history(
                 .meta
                 .attributes
                 .retain(|attr| !matches!(attr, Attribute::Item { name, .. } if name == "name"));
-            variant
-                .meta
-                .attributes
-                .push(Attribute::with_value("name", wire));
+            variant.meta.attributes.push(Attribute::with_value("name", wire));
             value.variant_versions.insert(name, versions.clone());
             value.ir.variants.push(variant);
         }
@@ -244,7 +249,12 @@ impl LegacyStyle {
     /// The name of the `number`th run of a series. A variant's name stays
     /// as `rustify_variant` spells it, which joins the words of underscores
     /// and lowers the letters after a digit: `NoneLegacyV8p2`, `r2` after it.
-    fn series(self, stem: &str, (major, minor): (u32, u32), number: usize) -> String {
+    fn series(
+        self,
+        stem: &str,
+        (major, minor): (u32, u32),
+        number: usize,
+    ) -> String {
         let base = self.base(stem);
         match (self, number) {
             (Self::Field, 1) => format!("{base}_v{major}_{minor}"),
@@ -267,9 +277,13 @@ impl LegacyStyle {
 /// patch release that a later pin adds to an older series never does. A
 /// registry without releases, as unit tests build one, takes every release
 /// at which one of `runs` starts or ends.
-fn series_openers<K>(releases: &[Version], runs: &[&MemberRun<K>]) -> Vec<Version> {
+fn series_openers<K>(
+    releases: &[Version],
+    runs: &[&MemberRun<K>],
+) -> Vec<Version> {
     if releases.is_empty() {
-        let mut bounds: BTreeSet<Version> = runs.iter().map(|run| run.since).collect();
+        let mut bounds: BTreeSet<Version> =
+            runs.iter().map(|run| run.since).collect();
         bounds.extend(runs.iter().filter_map(|run| run.until));
         return bounds.into_iter().collect();
     }
@@ -326,12 +340,15 @@ fn legacy_names<K: PartialEq>(
         let mut groups: Vec<Vec<usize>> = Vec::new();
         let mut previous: Option<usize> = None;
         for opener in series_openers(releases, &runs) {
-            let Some(index) = runs.iter().position(|run| run.contains(opener)) else {
+            let Some(index) = runs.iter().position(|run| run.contains(opener))
+            else {
                 previous = None;
                 continue;
             };
             match (previous, groups.last_mut()) {
-                (Some(before), Some(group)) if runs[before].shape == runs[index].shape => {
+                (Some(before), Some(group))
+                    if runs[before].shape == runs[index].shape =>
+                {
                     if !group.contains(&index) {
                         group.push(index);
                     }
@@ -341,9 +358,9 @@ fn legacy_names<K: PartialEq>(
             previous = Some(index);
         }
         let mut numbered = BTreeMap::new();
-        let historical = groups
-            .iter()
-            .filter(|group| group.iter().all(|index| runs[*index].history.is_some()));
+        let historical = groups.iter().filter(|group| {
+            group.iter().all(|index| runs[*index].history.is_some())
+        });
         for (ordinal, group) in historical.enumerate() {
             let base = style.base(stem);
             let name = match ordinal {
@@ -429,9 +446,15 @@ pub(super) fn check_lifetime(
     }
 }
 
-pub(super) fn merge_enum(registry: &mut UnifiedRegistry, name: &str, e: &Enum, version: Version) {
+pub(super) fn merge_enum(
+    registry: &mut UnifiedRegistry,
+    name: &str,
+    e: &Enum,
+    version: Version,
+) {
     if let Some(UnifiedType::Enum(existing)) = registry.types.get_mut(name) {
-        existing.ir.meta.schema_item = e.meta.schema_item.or(existing.ir.meta.schema_item);
+        existing.ir.meta.schema_item =
+            e.meta.schema_item.or(existing.ir.meta.schema_item);
         // Update doc from latest version (latest has best docs)
         merge_doc_from(
             &mut existing.ir.meta.schema_doc,
@@ -470,15 +493,18 @@ pub(super) fn merge_enum(registry: &mut UnifiedRegistry, name: &str, e: &Enum, v
                 if !same_variant_shape(old, variant)
                     || existing.variant_versions[&variant.name].until.is_some()
                 {
-                    let mut old_versions = existing.variant_versions[&variant.name].clone();
+                    let mut old_versions =
+                        existing.variant_versions[&variant.name].clone();
                     old_versions.until = old_versions.until.or(Some(version));
                     existing.variant_history.push((old.clone(), old_versions));
-                    existing
-                        .variant_versions
-                        .insert(variant.name.clone(), VersionRange::new(version));
+                    existing.variant_versions.insert(
+                        variant.name.clone(),
+                        VersionRange::new(version),
+                    );
                 }
                 // Variant still exists — clear its removal marker.
-                let vr = existing.variant_versions.get_mut(&variant.name).unwrap();
+                let vr =
+                    existing.variant_versions.get_mut(&variant.name).unwrap();
                 vr.until = None;
                 // Promote the variant to the latest version's definition:
                 // tuple payload type and array marker track the newest
@@ -493,7 +519,10 @@ pub(super) fn merge_enum(registry: &mut UnifiedRegistry, name: &str, e: &Enum, v
                 existing_variant.kind = variant.kind.clone();
                 existing_variant.array = variant.array;
                 merge_docs_from(&mut existing_variant.meta, &variant.meta);
-                refresh_current_attributes(&mut existing_variant.meta, &variant.meta);
+                refresh_current_attributes(
+                    &mut existing_variant.meta,
+                    &variant.meta,
+                );
                 for new_attr in &variant.meta.attributes {
                     if !existing_variant
                         .meta
@@ -507,28 +536,29 @@ pub(super) fn merge_enum(registry: &mut UnifiedRegistry, name: &str, e: &Enum, v
             } else {
                 // Check if this is a rename (same Rust name, different QAPI name)
                 let rust_name = variant_rust_name(variant);
-                let renamed_from = existing
-                    .ir
-                    .variants
-                    .iter()
-                    .position(|v| variant_rust_name(v) == rust_name && v.name != variant.name);
+                let renamed_from = existing.ir.variants.iter().position(|v| {
+                    variant_rust_name(v) == rust_name && v.name != variant.name
+                });
 
                 if let Some(old_idx) = renamed_from {
                     let old = existing.ir.variants[old_idx].clone();
-                    let mut old_versions = existing.variant_versions.remove(&old.name).unwrap();
+                    let mut old_versions =
+                        existing.variant_versions.remove(&old.name).unwrap();
                     old_versions.until = old_versions.until.or(Some(version));
                     existing.variant_history.push((old, old_versions));
                     let mut value = variant.clone();
                     clean_docs(&mut value.meta);
                     existing.ir.variants[old_idx] = value;
-                    existing
-                        .variant_versions
-                        .insert(variant.name.clone(), VersionRange::new(version));
+                    existing.variant_versions.insert(
+                        variant.name.clone(),
+                        VersionRange::new(version),
+                    );
                 } else {
                     // A new variant: the IR has exactly the variants with a range.
-                    existing
-                        .variant_versions
-                        .insert(variant.name.clone(), VersionRange::new(version));
+                    existing.variant_versions.insert(
+                        variant.name.clone(),
+                        VersionRange::new(version),
+                    );
                     let mut v = variant.clone();
                     clean_docs(&mut v.meta);
                     existing.ir.variants.push(v);
@@ -538,7 +568,10 @@ pub(super) fn merge_enum(registry: &mut UnifiedRegistry, name: &str, e: &Enum, v
 
         // Mark variants NOT seen in this version
         for (vname, vr) in existing.variant_versions.iter_mut() {
-            if !seen_variants.contains(vname) && vr.until.is_none() && vr.since < version {
+            if !seen_variants.contains(vname)
+                && vr.until.is_none()
+                && vr.since < version
+            {
                 vr.until = Some(version);
             }
         }
@@ -597,7 +630,9 @@ fn same_field_shape(left: &StructField, right: &StructField) -> bool {
         && rustify_type(&left.r#type) == rustify_type(&right.r#type)
         && left.array == right.array
         && left.optional == right.optional
-        && (left.optional || condition(&left.meta).is_some() == condition(&right.meta).is_some())
+        && (left.optional
+            || condition(&left.meta).is_some()
+                == condition(&right.meta).is_some())
 }
 
 /// Materialize each earlier shape or wire spelling of a field as a field of
@@ -617,7 +652,9 @@ pub(super) fn materialize_field_history(
                 .attributes
                 .iter()
                 .find_map(|attr| match attr {
-                    Attribute::Item { name, value } if name == "name" => Some(value.clone()),
+                    Attribute::Item { name, value } if name == "name" => {
+                        Some(value.clone())
+                    }
                     _ => None,
                 })
                 .unwrap_or_else(|| field.name.clone())
@@ -632,7 +669,9 @@ pub(super) fn materialize_field_history(
                 flattened(field),
             )
         };
-        let stem = |field: &StructField| field_rust_name(field).trim_start_matches("r#").to_owned();
+        let stem = |field: &StructField| {
+            field_rust_name(field).trim_start_matches("r#").to_owned()
+        };
         let current = value.ir.fields.iter().map(|field| {
             let range = &value.field_versions[&field.name];
             MemberRun {
@@ -644,24 +683,24 @@ pub(super) fn materialize_field_history(
                 source: format!("member '{}'", wire(field)),
             }
         });
-        let historical = value
-            .field_history
-            .iter()
-            .enumerate()
-            .map(|(index, (field, range))| MemberRun {
+        let historical = value.field_history.iter().enumerate().map(
+            |(index, (field, range))| MemberRun {
                 stem: stem(field),
                 shape: shape(field),
                 since: range.since,
                 until: range.until,
                 history: Some(index),
                 source: format!("the earlier member '{}'", wire(field)),
-            });
+            },
+        );
         let runs: Vec<_> = current.chain(historical).collect();
         let used = value
             .ir
             .fields
             .iter()
-            .map(|field| (field_rust_name(field), format!("member '{}'", wire(field))))
+            .map(|field| {
+                (field_rust_name(field), format!("member '{}'", wire(field)))
+            })
             .collect();
         let names = legacy_names(
             &runs,
@@ -680,10 +719,7 @@ pub(super) fn materialize_field_history(
                 .meta
                 .attributes
                 .retain(|attr| !matches!(attr, Attribute::Item { name, .. } if name == "name"));
-            field
-                .meta
-                .attributes
-                .push(Attribute::with_value("name", wire));
+            field.meta.attributes.push(Attribute::with_value("name", wire));
             value.field_versions.insert(name, versions.clone());
             value.ir.fields.push(field);
         }
@@ -698,7 +734,8 @@ pub(super) fn merge_struct(
     version: Version,
 ) {
     if let Some(UnifiedType::Struct(existing)) = registry.types.get_mut(name) {
-        existing.ir.meta.schema_item = s.meta.schema_item.or(existing.ir.meta.schema_item);
+        existing.ir.meta.schema_item =
+            s.meta.schema_item.or(existing.ir.meta.schema_item);
         // Update doc from latest version (latest has best docs)
         merge_doc_from(
             &mut existing.ir.meta.schema_doc,
@@ -743,7 +780,8 @@ pub(super) fn merge_struct(
                 if !same_field_shape(old, field)
                     || existing.field_versions[&field.name].until.is_some()
                 {
-                    let mut old_versions = existing.field_versions[&field.name].clone();
+                    let mut old_versions =
+                        existing.field_versions[&field.name].clone();
                     old_versions.until = old_versions.until.or(Some(version));
                     existing.field_history.push((old.clone(), old_versions));
                     existing
@@ -777,7 +815,10 @@ pub(super) fn merge_struct(
                 existing_field.optional = field.optional;
                 existing_field.array = field.array;
                 merge_docs_from(&mut existing_field.meta, &field.meta);
-                refresh_current_attributes(&mut existing_field.meta, &field.meta);
+                refresh_current_attributes(
+                    &mut existing_field.meta,
+                    &field.meta,
+                );
                 for new_attr in &field.meta.attributes {
                     if !existing_field
                         .meta
@@ -791,15 +832,14 @@ pub(super) fn merge_struct(
             } else {
                 // Check for rename (same Rust field name, different QAPI name)
                 let rust_name = field_rust_name(field);
-                let renamed_from = existing
-                    .ir
-                    .fields
-                    .iter()
-                    .position(|f| field_rust_name(f) == rust_name && f.name != field.name);
+                let renamed_from = existing.ir.fields.iter().position(|f| {
+                    field_rust_name(f) == rust_name && f.name != field.name
+                });
 
                 if let Some(old_idx) = renamed_from {
                     let old = existing.ir.fields[old_idx].clone();
-                    let mut old_versions = existing.field_versions.remove(&old.name).unwrap();
+                    let mut old_versions =
+                        existing.field_versions.remove(&old.name).unwrap();
                     old_versions.until = old_versions.until.or(Some(version));
                     existing.field_history.push((old, old_versions));
                     let mut value = field.clone();
@@ -821,7 +861,10 @@ pub(super) fn merge_struct(
         }
 
         for (fname, fr) in existing.field_versions.iter_mut() {
-            if !seen_fields.contains(fname) && fr.until.is_none() && fr.since < version {
+            if !seen_fields.contains(fname)
+                && fr.until.is_none()
+                && fr.since < version
+            {
                 fr.until = Some(version);
             }
         }
@@ -832,7 +875,8 @@ pub(super) fn merge_struct(
         let mut field_versions = BTreeMap::new();
         for field in &mut ir.fields {
             clean_docs(&mut field.meta);
-            field_versions.insert(field.name.clone(), VersionRange::new(version));
+            field_versions
+                .insert(field.name.clone(), VersionRange::new(version));
         }
         // Track version-sensitive boolean attributes from initial version
         let attr_versions = extract_bool_attr_versions(&ir.meta, version);
@@ -885,7 +929,11 @@ pub(super) fn fix_recursive_types(registry: &mut UnifiedRegistry) {
             match ut {
                 UnifiedType::Struct(us) => {
                     for field in &us.ir.fields {
-                        if !field.array && !field.meta.attributes.contains(&Attribute::new("boxed"))
+                        if !field.array
+                            && !field
+                                .meta
+                                .attributes
+                                .contains(&Attribute::new("boxed"))
                         {
                             referenced.insert(rustify_type(&field.r#type));
                         }
@@ -911,8 +959,16 @@ pub(super) fn fix_recursive_types(registry: &mut UnifiedRegistry) {
                 for field in &us.ir.fields {
                     let referenced = rustify_type(&field.r#type);
                     if !field.array
-                        && !field.meta.attributes.contains(&Attribute::new("boxed"))
-                        && is_reachable(&referenced, name, &deps, &mut BTreeSet::new())
+                        && !field
+                            .meta
+                            .attributes
+                            .contains(&Attribute::new("boxed"))
+                        && is_reachable(
+                            &referenced,
+                            name,
+                            &deps,
+                            &mut BTreeSet::new(),
+                        )
                     {
                         result.insert((name.clone(), field.name.clone()));
                     }
@@ -924,7 +980,8 @@ pub(super) fn fix_recursive_types(registry: &mut UnifiedRegistry) {
 
     // Apply Box wrapping by setting a flag on the field
     for (type_name, field_name) in &needs_box {
-        if let Some(UnifiedType::Struct(us)) = registry.types.get_mut(type_name) {
+        if let Some(UnifiedType::Struct(us)) = registry.types.get_mut(type_name)
+        {
             for field in &mut us.ir.fields {
                 if field.name == *field_name {
                     field.meta.attributes.push(Attribute::new("boxed"));
@@ -983,13 +1040,16 @@ fn same_on_the_wire(
     if left == right {
         return true;
     }
-    let (Some(UnifiedType::Struct(left_type)), Some(UnifiedType::Struct(right_type))) =
-        (registry.types.get(left), registry.types.get(right))
+    let (
+        Some(UnifiedType::Struct(left_type)),
+        Some(UnifiedType::Struct(right_type)),
+    ) = (registry.types.get(left), registry.types.get(right))
     else {
         return false;
     };
     let plain = |value: &UnifiedStruct| {
-        classify_type(&UnifiedType::Struct(value.clone())) == TypeCategory::DataType
+        classify_type(&UnifiedType::Struct(value.clone()))
+            == TypeCategory::DataType
             && value.attr_versions.is_empty()
             && !value.ir.fields.iter().any(flattened)
     };
@@ -1001,14 +1061,18 @@ fn same_on_the_wire(
     {
         return false;
     }
-    fn members(value: &UnifiedStruct, at: Version) -> BTreeMap<String, &StructField> {
+    fn members(
+        value: &UnifiedStruct,
+        at: Version,
+    ) -> BTreeMap<String, &StructField> {
         value
             .ir
             .fields
             .iter()
             .filter(|field| {
                 value.field_versions.get(&field.name).is_some_and(|range| {
-                    range.since <= at && range.until.is_none_or(|until| at < until)
+                    range.since <= at
+                        && range.until.is_none_or(|until| at < until)
                 })
             })
             .map(|field| {
@@ -1017,7 +1081,9 @@ fn same_on_the_wire(
                     .attributes
                     .iter()
                     .find_map(|attr| match attr {
-                        Attribute::Item { name, value } if name == "name" => Some(value.clone()),
+                        Attribute::Item { name, value } if name == "name" => {
+                            Some(value.clone())
+                        }
                         _ => None,
                     })
                     .unwrap_or_else(|| field.name.clone());
@@ -1032,7 +1098,8 @@ fn same_on_the_wire(
             right_members.get(wire).is_some_and(|right| {
                 left.optional == right.optional
                     && left.array == right.array
-                    && condition(&left.meta).is_some() == condition(&right.meta).is_some()
+                    && condition(&left.meta).is_some()
+                        == condition(&right.meta).is_some()
                     && same_on_the_wire(
                         registry,
                         (&rustify_type(&left.r#type), left_at),
@@ -1076,19 +1143,30 @@ pub(super) fn coalesce_returns(
             let [(a, before), (b, after)] = pair else {
                 unreachable!("windows of two")
             };
-            let (before, before_array) = crate::metadata_emit::returns_element(before);
-            let (after, after_array) = crate::metadata_emit::returns_element(after);
-            let Some(UnifiedType::Struct(successor)) = registry.types.get(after) else {
+            let (before, before_array) =
+                crate::metadata_emit::returns_element(before);
+            let (after, after_array) =
+                crate::metadata_emit::returns_element(after);
+            let Some(UnifiedType::Struct(successor)) =
+                registry.types.get(after)
+            else {
                 continue;
             };
-            let Some(UnifiedType::Struct(predecessor)) = registry.types.get(before) else {
+            let Some(UnifiedType::Struct(predecessor)) =
+                registry.types.get(before)
+            else {
                 continue;
             };
             if before_array != after_array || successor.versions.since != *b {
                 continue;
             }
             let same = |at: Version, other: Version| {
-                same_on_the_wire(registry, (before, at), (after, other), WIRE_DEPTH)
+                same_on_the_wire(
+                    registry,
+                    (before, at),
+                    (after, other),
+                    WIRE_DEPTH,
+                )
             };
             // After `b`, the alias stands for `B` until `A`'s removal.
             let later = releases.iter().filter(|release| {
@@ -1123,20 +1201,24 @@ pub(super) fn coalesce_returns(
             }
         }
     }
-    let describe = |(_, _, before, after, from): &(String, usize, String, String, Version)| {
+    let describe = |(_, _, before, after, from): &(
+        String,
+        usize,
+        String,
+        String,
+        Version,
+    )| {
         format!("{before} -> {after} from {}", version_str(*from))
     };
     for (index, plan) in plans.iter().enumerate() {
         for other in &plans[..index] {
             let (moves, aliases) = (plan.3 == other.3, plan.2 == other.2);
-            if (moves || aliases) && (&plan.2, &plan.3, plan.4) != (&other.2, &other.3, other.4) {
+            if (moves || aliases)
+                && (&plan.2, &plan.3, plan.4) != (&other.2, &other.3, other.4)
+            {
                 return Err(RegistryError::CoalesceAmbiguous {
                     protocol,
-                    name: if moves {
-                        plan.3.clone()
-                    } else {
-                        plan.2.clone()
-                    },
+                    name: if moves { plan.3.clone() } else { plan.2.clone() },
                     first: describe(other),
                     second: describe(plan),
                 });
@@ -1144,7 +1226,9 @@ pub(super) fn coalesce_returns(
         }
     }
     for (command, index, before, after, from) in plans {
-        if let Some(UnifiedType::Struct(value)) = registry.types.get_mut(&command) {
+        if let Some(UnifiedType::Struct(value)) =
+            registry.types.get_mut(&command)
+        {
             value.returns_history[index].0 = from;
             if value.returns_history[index - 1].0 == from {
                 value.returns_history.remove(index - 1);
@@ -1153,10 +1237,13 @@ pub(super) fn coalesce_returns(
                 .returns_history
                 .dedup_by(|later, earlier| later.1 == earlier.1);
         }
-        if let Some(UnifiedType::Struct(value)) = registry.types.get_mut(&after) {
+        if let Some(UnifiedType::Struct(value)) = registry.types.get_mut(&after)
+        {
             value.rust_since = Some(from);
         }
-        if let Some(UnifiedType::Struct(value)) = registry.types.get_mut(&before) {
+        if let Some(UnifiedType::Struct(value)) =
+            registry.types.get_mut(&before)
+        {
             value.alias = Some((from, after.clone()));
         }
         registry.coalesced.push((command, before, after, from));

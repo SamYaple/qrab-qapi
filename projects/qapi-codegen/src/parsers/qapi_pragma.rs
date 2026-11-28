@@ -1,9 +1,8 @@
-use super::common::QapiString;
-use super::common::{qbool, qstring, take_dict, take_kv, take_list};
-use super::parser_version;
-use nom::IResult;
-use nom::Parser;
-use nom::branch::alt;
+use super::{
+    common::{QapiString, qbool, qstring, take_dict, take_kv, take_list},
+    parser_version,
+};
+use nom::{IResult, Parser, branch::alt};
 
 enum ParserToken<'i> {
     DocRequired(&'i str),
@@ -64,12 +63,15 @@ impl<'i> QapiPragma<'i> {
         let documentation = parser_version() >= (9, 0, 0);
         let entry = move |input: &'i str| -> IResult<&'i str, ParserToken<'i>> {
             let list = |key| take_kv(key, take_list(qstring));
-            let mut doc_required = take_kv("doc-required", qbool).map(ParserToken::DocRequired);
+            let mut doc_required =
+                take_kv("doc-required", qbool).map(ParserToken::DocRequired);
             if old_keys {
                 alt((
                     doc_required,
-                    list("returns-whitelist").map(ParserToken::CommandReturnsExceptions),
-                    list("name-case-whitelist").map(ParserToken::MemberNameExceptions),
+                    list("returns-whitelist")
+                        .map(ParserToken::CommandReturnsExceptions),
+                    list("name-case-whitelist")
+                        .map(ParserToken::MemberNameExceptions),
                 ))
                 .parse(input)
             } else if let Ok(parsed) = doc_required.parse(input) {
@@ -82,9 +84,12 @@ impl<'i> QapiPragma<'i> {
                 Ok(parsed)
             } else {
                 alt((
-                    list("command-name-exceptions").map(ParserToken::CommandNameExceptions),
-                    list("command-returns-exceptions").map(ParserToken::CommandReturnsExceptions),
-                    list("member-name-exceptions").map(ParserToken::MemberNameExceptions),
+                    list("command-name-exceptions")
+                        .map(ParserToken::CommandNameExceptions),
+                    list("command-returns-exceptions")
+                        .map(ParserToken::CommandReturnsExceptions),
+                    list("member-name-exceptions")
+                        .map(ParserToken::MemberNameExceptions),
                 ))
                 .parse(input)
             }
@@ -98,15 +103,21 @@ impl<'i> QapiPragma<'i> {
         let mut pragma = Self::default();
         for token in tokens {
             match token {
-                ParserToken::DocRequired(v) => pragma.doc_required = Some(v == "true"),
+                ParserToken::DocRequired(v) => {
+                    pragma.doc_required = Some(v == "true")
+                }
                 ParserToken::CommandReturnsExceptions(v) => {
                     pragma.command_returns_exceptions = Some(v)
                 }
-                ParserToken::CommandNameExceptions(v) => pragma.command_name_exceptions = Some(v),
+                ParserToken::CommandNameExceptions(v) => {
+                    pragma.command_name_exceptions = Some(v)
+                }
                 ParserToken::DocumentationExceptions(v) => {
                     pragma.documentation_exceptions = Some(v)
                 }
-                ParserToken::MemberNameExceptions(v) => pragma.member_name_exceptions = Some(v),
+                ParserToken::MemberNameExceptions(v) => {
+                    pragma.member_name_exceptions = Some(v)
+                }
             }
         }
         pragma

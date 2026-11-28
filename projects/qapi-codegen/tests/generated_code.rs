@@ -6,16 +6,22 @@
 //! them. Set `QAPI_CODEGEN_BLESS=1` to rewrite the expected output after a
 //! deliberate change, and review the difference.
 
-use qapi_codegen::unified::Docs::{Reference, Schema};
-use qapi_codegen::unified::Protocol::{Qga, Qmp};
-use qapi_codegen::unified::{
-    Construct, Docs, GenerateError, GeneratedOutput, Protocol, RegistryError, Releases,
-    SchemaErrorKind, build_qga_registry, build_qmp_registry, emit_registry, generate,
+use qapi_codegen::{
+    unified::{
+        Construct, Docs,
+        Docs::{Reference, Schema},
+        GenerateError, GeneratedOutput, Protocol,
+        Protocol::{Qga, Qmp},
+        RegistryError, Releases, SchemaErrorKind, build_qga_registry,
+        build_qmp_registry, emit_registry, generate,
+    },
+    versions::PINNED_VERSIONS,
 };
-use qapi_codegen::versions::PINNED_VERSIONS;
-use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::sync::OnceLock;
+use std::{
+    path::{Path, PathBuf},
+    process::Command,
+    sync::OnceLock,
+};
 
 fn workspace() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -27,7 +33,8 @@ fn emitted() -> PathBuf {
 
 /// The generated modules of the pinned releases, generated once per test run.
 fn pinned(protocol: Protocol, docs: Docs) -> &'static GeneratedOutput {
-    static OUTPUTS: [OnceLock<GeneratedOutput>; 4] = [const { OnceLock::new() }; 4];
+    static OUTPUTS: [OnceLock<GeneratedOutput>; 4] =
+        [const { OnceLock::new() }; 4];
     let index = usize::from(protocol == Qga) * 2 + usize::from(docs == Schema);
     OUTPUTS[index].get_or_init(|| {
         generate(
@@ -84,10 +91,13 @@ fn history_releases(name: &str) -> Vec<(String, String)> {
         .filter_map(|entry| {
             let path = entry.unwrap().path();
             let tag = path.file_stem()?.to_str()?.to_owned();
-            (path.extension()? == "json").then(|| (tag, std::fs::read_to_string(&path).unwrap()))
+            (path.extension()? == "json")
+                .then(|| (tag, std::fs::read_to_string(&path).unwrap()))
         })
         .collect();
-    releases.sort_by_key(|(tag, _)| qapi_codegen::versions::parse_version_tag(tag).unwrap());
+    releases.sort_by_key(|(tag, _)| {
+        qapi_codegen::versions::parse_version_tag(tag).unwrap()
+    });
     releases
 }
 
@@ -113,14 +123,16 @@ fn expect_file(path: &Path, actual: &str) {
         std::fs::write(path, actual).unwrap();
         return;
     }
-    let expected =
-        std::fs::read_to_string(path).unwrap_or_else(|error| panic!("{}: {error}", path.display()));
+    let expected = std::fs::read_to_string(path)
+        .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
     if expected != actual {
         let line = expected
             .lines()
             .zip(actual.lines())
             .position(|(expected, actual)| expected != actual)
-            .unwrap_or_else(|| expected.lines().count().min(actual.lines().count()));
+            .unwrap_or_else(|| {
+                expected.lines().count().min(actual.lines().count())
+            });
         panic!(
             "{} differs from the output from line {}:\n  expected: {:?}\n  actual:   {:?}\n\
              Set QAPI_CODEGEN_BLESS=1 to accept the output.",
@@ -134,9 +146,8 @@ fn expect_file(path: &Path, actual: &str) {
 
 /// The metadata after the type definitions that start every metadata file.
 fn tables(metadata: &str) -> &str {
-    let start = metadata
-        .find("/// Every type that a field")
-        .expect("metadata tables");
+    let start =
+        metadata.find("/// Every type that a field").expect("metadata tables");
     &metadata[start..]
 }
 
@@ -159,7 +170,9 @@ fn emit_registry_emits_a_registry_of_the_public_builders() {
         };
         for docs in [Reference, Schema] {
             let emitted = emit_registry(&registry, protocol, docs).unwrap();
-            let generated = generate(repo.path(), Releases::Tags(&tags), protocol, docs).unwrap();
+            let generated =
+                generate(repo.path(), Releases::Tags(&tags), protocol, docs)
+                    .unwrap();
             assert_eq!(emitted.types, generated.types, "{name}");
             assert_eq!(emitted.commands, generated.commands, "{name}");
             assert_eq!(emitted.events, generated.events, "{name}");
@@ -229,10 +242,7 @@ fn without_qapi_attributes(source: &str, unindented: bool) -> String {
     }
     assert!(
         removed > 0
-            || file
-                .items
-                .iter()
-                .all(|item| matches!(item, syn::Item::Mod(_))),
+            || file.items.iter().all(|item| matches!(item, syn::Item::Mod(_))),
         "no #[qapi] attributes in {source:.200}"
     );
     prettyplease::unparse(&file)
@@ -241,9 +251,7 @@ fn without_qapi_attributes(source: &str, unindented: bool) -> String {
 /// Run cargo on the fixture crate; arguments after `--` go to the tool.
 fn cargo(fixture: &Path, args: &[&str], rustdocflags: Option<&str>) -> String {
     let (args, tool) = args.split_at(
-        args.iter()
-            .position(|arg| *arg == "--")
-            .unwrap_or(args.len()),
+        args.iter().position(|arg| *arg == "--").unwrap_or(args.len()),
     );
     let mut command = Command::new(env!("CARGO"));
     command
@@ -290,7 +298,8 @@ fn cargo(fixture: &Path, args: &[&str], rustdocflags: Option<&str>) -> String {
 /// installed.
 #[test]
 fn generated_code_compiles_and_its_metadata_is_true() {
-    let fixture = Path::new(env!("CARGO_TARGET_TMPDIR")).join("generated-code-crate");
+    let fixture =
+        Path::new(env!("CARGO_TARGET_TMPDIR")).join("generated-code-crate");
     let _ = std::fs::remove_dir_all(&fixture);
     std::fs::create_dir_all(fixture.join("serde_json/src")).unwrap();
     std::fs::write(
@@ -345,7 +354,11 @@ fn generated_code_compiles_and_its_metadata_is_true() {
             ("events.rs", &output.events),
         ] {
             let unindented = name.ends_with("_unindented");
-            std::fs::write(dir.join(file), without_qapi_attributes(source, unindented)).unwrap();
+            std::fs::write(
+                dir.join(file),
+                without_qapi_attributes(source, unindented),
+            )
+            .unwrap();
         }
         std::fs::write(dir.join("metadata.rs"), &output.metadata).unwrap();
         lib.push_str(&format!("pub mod {name};\n"));
@@ -365,7 +378,8 @@ fn generated_code_compiles_and_its_metadata_is_true() {
         }
     }
     std::fs::write(fixture.join("src/lib.rs"), lib).unwrap();
-    std::fs::copy(emitted().join("check.rs"), fixture.join("src/main.rs")).unwrap();
+    std::fs::copy(emitted().join("check.rs"), fixture.join("src/main.rs"))
+        .unwrap();
 
     cargo(&fixture, &["run", "--quiet"], None);
     cargo(
@@ -374,10 +388,7 @@ fn generated_code_compiles_and_its_metadata_is_true() {
         Some("-D warnings -W rustdoc::all"),
     );
     let doctests = cargo(&fixture, &["test", "--quiet", "--doc"], None);
-    assert!(
-        doctests.contains("0 passed; 0 failed; 0 ignored"),
-        "{doctests}"
-    );
+    assert!(doctests.contains("0 passed; 0 failed; 0 ignored"), "{doctests}");
     // Clippy's documentation lints, such as `doc_lazy_continuation`, read
     // the rendered prose of the schema-docs modules.
     let clippy = Command::new(env!("CARGO"))
@@ -413,10 +424,7 @@ fn schema_docs_mode_changes_only_documentation() {
             Qmp,
             "/// Allow client connections for VNC, Spice and socket based character",
         ),
-        (
-            Qga,
-            "/// Ping the guest agent, a non-error return implies success",
-        ),
+        (Qga, "/// Ping the guest agent, a non-error return implies success"),
     ] {
         let plain = pinned(protocol, Reference);
         let docs = pinned(protocol, Schema);
@@ -453,8 +461,12 @@ fn item_docs(source: &str) -> std::collections::BTreeMap<String, Vec<String>> {
         .items
         .iter()
         .filter_map(|item| match item {
-            syn::Item::Struct(item) => Some((item.ident.to_string(), docs(&item.attrs))),
-            syn::Item::Enum(item) => Some((item.ident.to_string(), docs(&item.attrs))),
+            syn::Item::Struct(item) => {
+                Some((item.ident.to_string(), docs(&item.attrs)))
+            }
+            syn::Item::Enum(item) => {
+                Some((item.ident.to_string(), docs(&item.attrs)))
+            }
             _ => None,
         })
         .collect()
@@ -509,20 +521,31 @@ fn default_output_carries_no_schema_prose() {
         let mut item_docs = 0;
         for code in [&output.types, &output.commands, &output.events] {
             assert!(!code.contains("/**"), "{protocol}: block doc comment");
-            for line in code
-                .lines()
-                .filter_map(|line| line.trim().strip_prefix("///"))
+            for line in
+                code.lines().filter_map(|line| line.trim().strip_prefix("///"))
             {
-                if line == " Additional command arguments not modeled by this schema." {
+                if line
+                    == " Additional command arguments not modeled by this schema."
+                {
                     continue;
                 }
                 let (kind, rest) = line
                     .strip_prefix(&format!(" {protocol} "))
                     .and_then(|rest| rest.split_once(" `"))
-                    .unwrap_or_else(|| panic!("{protocol}: unexpected doc line {line:?}"));
+                    .unwrap_or_else(|| {
+                        panic!("{protocol}: unexpected doc line {line:?}")
+                    });
                 let (name, tail) = rest.split_once('`').unwrap();
                 assert!(
-                    ["command", "event", "struct", "enum", "union", "alternate"].contains(&kind)
+                    [
+                        "command",
+                        "event",
+                        "struct",
+                        "enum",
+                        "union",
+                        "alternate"
+                    ]
+                    .contains(&kind)
                         && !name.is_empty()
                         && !name.contains(char::is_whitespace)
                         && tail == format!("; see the {reference}."),
@@ -580,15 +603,14 @@ fn spice_types_arrive_in_2_1() {
 
 #[test]
 fn netdev_add_is_a_current_command() {
-    let attributes = struct_attributes(&pinned(Qmp, Reference).commands, "NetdevAdd");
+    let attributes =
+        struct_attributes(&pinned(Qmp, Reference).commands, "NetdevAdd");
     assert!(
         attributes.contains(&"# [qapi (command)]".to_owned()),
         "{attributes:?}"
     );
     assert!(
-        !attributes
-            .iter()
-            .any(|attribute| attribute.contains("removed")),
+        !attributes.iter().any(|attribute| attribute.contains("removed")),
         "{attributes:?}"
     );
 }
@@ -716,8 +738,12 @@ fn command_and_event_structs(
             };
             for attr in &item.attrs {
                 match quote::quote!(#attr).to_string().as_str() {
-                    "# [qapi (command)]" => found.push((module, item.ident.to_string(), "command")),
-                    "# [qapi (event)]" => found.push((module, item.ident.to_string(), "event")),
+                    "# [qapi (command)]" => {
+                        found.push((module, item.ident.to_string(), "command"))
+                    }
+                    "# [qapi (event)]" => {
+                        found.push((module, item.ident.to_string(), "event"))
+                    }
                     _ => {}
                 }
             }
@@ -750,11 +776,8 @@ fn modules_separate_types_commands_and_events() {
     for (name, output) in outputs {
         let structs = command_and_event_structs(output);
         for (module, item, kind) in &structs {
-            let expected = if *kind == "command" {
-                "commands.rs"
-            } else {
-                "events.rs"
-            };
+            let expected =
+                if *kind == "command" { "commands.rs" } else { "events.rs" };
             assert_eq!(module, &expected, "{name}: {kind} {item}");
         }
         let mut commands: Vec<_> = structs
@@ -772,7 +795,9 @@ fn modules_separate_types_commands_and_events() {
             .items
             .iter()
             .filter_map(|item| match item {
-                syn::Item::Mod(item) if item.content.is_none() => Some(item.ident.to_string()),
+                syn::Item::Mod(item) if item.content.is_none() => {
+                    Some(item.ident.to_string())
+                }
                 _ => None,
             })
             .collect();
@@ -809,7 +834,8 @@ fn modules_separate_types_commands_and_events() {
         "DriveBackup",
     ] {
         assert!(
-            struct_attributes(&output.commands, command).contains(&"# [qapi (command)]".to_owned()),
+            struct_attributes(&output.commands, command)
+                .contains(&"# [qapi (command)]".to_owned()),
             "{command}"
         );
         assert!(
@@ -817,17 +843,24 @@ fn modules_separate_types_commands_and_events() {
             "{command}"
         );
     }
-    assert!(structs.contains(&("events.rs", "ShutdownEvent".to_owned(), "event")));
+    assert!(structs.contains(&(
+        "events.rs",
+        "ShutdownEvent".to_owned(),
+        "event"
+    )));
 }
 
 #[test]
 fn generation_reports_invalid_pins_trees_and_schemas() {
     let repo = repository(false, &[("v9.0.0", "{ 'command': 'ping' }")]);
-    let error = generate(repo.path(), Releases::Pinned("not a pin\n"), Qmp, Reference).unwrap_err();
+    let error =
+        generate(repo.path(), Releases::Pinned("not a pin\n"), Qmp, Reference)
+            .unwrap_err();
     assert!(matches!(error, GenerateError::Pins(_)), "{error:?}");
 
     let pin = format!("v9.0.0 {}\n", "0".repeat(40));
-    let error = generate(repo.path(), Releases::Pinned(&pin), Qmp, Reference).unwrap_err();
+    let error = generate(repo.path(), Releases::Pinned(&pin), Qmp, Reference)
+        .unwrap_err();
     assert!(
         matches!(&error, GenerateError::Tree(source) if source.to_string().contains("moved")),
         "{error:?}"
@@ -837,7 +870,9 @@ fn generation_reports_invalid_pins_trees_and_schemas() {
         false,
         &[("v9.0.0", "{ 'command': 'ping' }\n{ 'command': 'ping' }")],
     );
-    let error = generate(repo.path(), Releases::Tags(&["v9.0.0"]), Qmp, Reference).unwrap_err();
+    let error =
+        generate(repo.path(), Releases::Tags(&["v9.0.0"]), Qmp, Reference)
+            .unwrap_err();
     assert!(matches!(error, GenerateError::Registry(_)), "{error:?}");
 
     // QEMU 1.0 does not check the types that a schema refers to; the
@@ -846,7 +881,9 @@ fn generation_reports_invalid_pins_trees_and_schemas() {
         false,
         &[("v1.0.0", "{ 'command': 'c', 'data': { 'x': 'Missing' } }")],
     );
-    let error = generate(repo.path(), Releases::Tags(&["v1.0.0"]), Qmp, Reference).unwrap_err();
+    let error =
+        generate(repo.path(), Releases::Tags(&["v1.0.0"]), Qmp, Reference)
+            .unwrap_err();
     assert!(
         matches!(&error, GenerateError::Registry(RegistryError::Schema { source, .. })
             if matches!(source.kind(), SchemaErrorKind::Unsupported {
@@ -860,8 +897,12 @@ fn generation_reports_invalid_pins_trees_and_schemas() {
 fn generated_output_keeps_the_registry_warnings() {
     let schema = "##\n# @Wrong:\n#\n# Since: 2.8\n##\n{ 'struct': 'Right', 'data': {} }\n";
     let repo = repository(false, &[("v2.8.0", schema)]);
-    let output = generate(repo.path(), Releases::Tags(&["v2.8.0"]), Qmp, Reference).unwrap();
-    let registry = qapi_codegen::unified::build_qmp_registry(repo.path(), &["v2.8.0"]).unwrap();
+    let output =
+        generate(repo.path(), Releases::Tags(&["v2.8.0"]), Qmp, Reference)
+            .unwrap();
+    let registry =
+        qapi_codegen::unified::build_qmp_registry(repo.path(), &["v2.8.0"])
+            .unwrap();
     assert!(!output.warnings.is_empty());
     assert_eq!(output.warnings, registry.warnings);
 }

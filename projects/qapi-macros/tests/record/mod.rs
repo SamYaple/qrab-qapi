@@ -80,7 +80,10 @@ impl ser::Serializer for Recorder {
         Ok("none".into())
     }
 
-    fn serialize_some<T: Serialize + ?Sized>(self, value: &T) -> Result<String, Error> {
+    fn serialize_some<T: Serialize + ?Sized>(
+        self,
+        value: &T,
+    ) -> Result<String, Error> {
         value.serialize(self)
     }
 
@@ -88,7 +91,10 @@ impl ser::Serializer for Recorder {
         Ok("unit".into())
     }
 
-    fn serialize_unit_struct(self, name: &'static str) -> Result<String, Error> {
+    fn serialize_unit_struct(
+        self,
+        name: &'static str,
+    ) -> Result<String, Error> {
         Ok(format!("unit_struct({name})"))
     }
 
@@ -119,11 +125,17 @@ impl ser::Serializer for Recorder {
         Ok(format!("newtype_variant({name}, {index}, {variant})"))
     }
 
-    fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq, Error> {
+    fn serialize_seq(
+        self,
+        _len: Option<usize>,
+    ) -> Result<Self::SerializeSeq, Error> {
         Err(Error("seq".into()))
     }
 
-    fn serialize_tuple(self, _len: usize) -> Result<Self::SerializeTuple, Error> {
+    fn serialize_tuple(
+        self,
+        _len: usize,
+    ) -> Result<Self::SerializeTuple, Error> {
         Err(Error("tuple".into()))
     }
 
@@ -145,11 +157,18 @@ impl ser::Serializer for Recorder {
         Err(Error("tuple_variant".into()))
     }
 
-    fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap, Error> {
+    fn serialize_map(
+        self,
+        _len: Option<usize>,
+    ) -> Result<Self::SerializeMap, Error> {
         Err(Error("map".into()))
     }
 
-    fn serialize_struct(self, name: &'static str, len: usize) -> Result<Struct, Error> {
+    fn serialize_struct(
+        self,
+        name: &'static str,
+        len: usize,
+    ) -> Result<Struct, Error> {
         Ok(Struct(format!("struct({name}, {len})")))
     }
 

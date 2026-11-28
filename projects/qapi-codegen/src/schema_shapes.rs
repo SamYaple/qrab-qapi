@@ -7,14 +7,20 @@
 //! [`Crash::UncheckedValue`]; one that it takes without checking it is
 //! [`Construct::Value`] once nothing else is wrong.
 
-use crate::parsers::common::{Malformed, Raw, RawValue};
-use crate::schema_validation::since;
-use crate::unified::{
-    Construct, Crash, SchemaError, SchemaErrorKind, SchemaResult, Shape, require,
+use crate::{
+    parsers::common::{Malformed, Raw, RawValue},
+    schema_validation::since,
+    unified::{
+        Construct, Crash, SchemaError, SchemaErrorKind, SchemaResult, Shape,
+        require,
+    },
 };
 
 /// The value of `key` that the grammar refused.
-pub(crate) fn bad<'t, 'i>(malformed: &'t Malformed<'i>, key: &str) -> Option<&'t RawValue<'i>> {
+pub(crate) fn bad<'t, 'i>(
+    malformed: &'t Malformed<'i>,
+    key: &str,
+) -> Option<&'t RawValue<'i>> {
     crate::parsers::common::malformed(malformed, key)
 }
 
@@ -25,9 +31,7 @@ fn shape(expected: Shape) -> SchemaError {
 /// QEMU's failure on the value of `key`, which it uses without checking.
 pub(crate) fn unchecked(key: &str) -> SchemaError {
     SchemaErrorKind::Crash {
-        crash: Crash::UncheckedValue {
-            key: key.to_owned(),
-        },
+        crash: Crash::UncheckedValue { key: key.to_owned() },
     }
     .into()
 }
@@ -36,9 +40,7 @@ pub(crate) fn unchecked(key: &str) -> SchemaError {
 /// represent.
 pub(crate) fn unsupported(key: &str) -> SchemaError {
     SchemaErrorKind::Unsupported {
-        construct: Construct::Value {
-            key: key.to_owned(),
-        },
+        construct: Construct::Value { key: key.to_owned() },
     }
     .into()
 }
@@ -48,7 +50,11 @@ pub(crate) fn unsupported(key: &str) -> SchemaError {
 /// `check_type` until 8.1, then `check_type_name`, `check_type_name_or_array`
 /// and `check_type_implicit`. `null`, which QEMU reads until 4.1, is no
 /// type to check.
-pub(crate) fn type_value(value: &RawValue<'_>, array: bool, object: bool) -> SchemaResult {
+pub(crate) fn type_value(
+    value: &RawValue<'_>,
+    array: bool,
+    object: bool,
+) -> SchemaResult {
     let modern = since((8, 1, 0));
     Err(match value.value {
         Raw::Null => return Ok(()),
@@ -72,18 +78,14 @@ pub(crate) fn name(_: &RawValue<'_>) -> SchemaResult {
 /// A value of a key that must be an array, an enum's values or features.
 pub(crate) fn array(value: &RawValue<'_>) -> SchemaResult {
     require(matches!(value.value, Raw::Array(_)), || {
-        SchemaErrorKind::ValueShape {
-            expected: Shape::Array,
-        }
+        SchemaErrorKind::ValueShape { expected: Shape::Array }
     })
 }
 
 /// An enum's prefix, which must be a string from 2.5.
 pub(crate) fn string(value: &RawValue<'_>) -> SchemaResult {
     require(matches!(value.value, Raw::String(_)), || {
-        SchemaErrorKind::ValueShape {
-            expected: Shape::String,
-        }
+        SchemaErrorKind::ValueShape { expected: Shape::String }
     })
 }
 
@@ -135,9 +137,11 @@ fn expression(value: &RawValue<'_>) -> SchemaResult {
             let bytes = name.as_bytes();
             require(
                 bytes.first().is_some_and(u8::is_ascii_uppercase)
-                    && bytes
-                        .iter()
-                        .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || *b == b'_'),
+                    && bytes.iter().all(|b| {
+                        b.is_ascii_uppercase()
+                            || b.is_ascii_digit()
+                            || *b == b'_'
+                    }),
                 || SchemaErrorKind::InvalidCondition {
                     condition: format!("'{name}'"),
                 },
@@ -165,8 +169,8 @@ fn expression(value: &RawValue<'_>) -> SchemaResult {
             let Raw::Array(operands) = &operand.value else {
                 return Err(shape(Shape::Array));
             };
-            require(!operands.is_empty(), || SchemaErrorKind::EmptyCondition {
-                condition: "[]".into(),
+            require(!operands.is_empty(), || {
+                SchemaErrorKind::EmptyCondition { condition: "[]".into() }
             })?;
             operands.iter().try_for_each(expression)
         }
@@ -179,7 +183,10 @@ fn expression(value: &RawValue<'_>) -> SchemaResult {
 /// (`minimum`) or a union's emptiness, which Python takes from the length
 /// of a string or array, from 5.0 an alternate's from its truth; from 6.1
 /// QEMU refuses it.
-pub(crate) fn branches(value: &RawValue<'_>, minimum: Option<usize>) -> SchemaResult {
+pub(crate) fn branches(
+    value: &RawValue<'_>,
+    minimum: Option<usize>,
+) -> SchemaResult {
     if since((6, 1, 0)) {
         // An alternate's emptiness first.
         return Err(match minimum {
@@ -220,17 +227,12 @@ mod tests {
 
     #[test]
     fn types_follow_the_checks_of_each_release() {
-        let expected = |expected| Some(SchemaErrorKind::ValueShape { expected });
+        let expected =
+            |expected| Some(SchemaErrorKind::ValueShape { expected });
         for (version, text, array, object, outcome) in [
             ((2, 4, 0), "true", false, false, expected(Shape::Object)),
             ((2, 5, 0), "true", false, false, expected(Shape::TypeName)),
-            (
-                (2, 5, 0),
-                "true",
-                false,
-                true,
-                expected(Shape::ObjectOrTypeName),
-            ),
+            ((2, 5, 0), "true", false, true, expected(Shape::ObjectOrTypeName)),
             ((4, 1, 0), "null", false, false, None),
             (
                 (4, 1, 0),
@@ -247,20 +249,8 @@ mod tests {
                 Some(SchemaErrorKind::ArrayNotAllowed),
             ),
             ((8, 1, 0), "[]", false, false, expected(Shape::TypeName)),
-            (
-                (8, 1, 0),
-                "[]",
-                false,
-                true,
-                expected(Shape::ObjectOrTypeName),
-            ),
-            (
-                (8, 1, 0),
-                "{}",
-                true,
-                false,
-                expected(Shape::TypeNameOrArray),
-            ),
+            ((8, 1, 0), "[]", false, true, expected(Shape::ObjectOrTypeName)),
+            ((8, 1, 0), "{}", true, false, expected(Shape::TypeNameOrArray)),
             (
                 (8, 0, 0),
                 "{}",
@@ -268,13 +258,7 @@ mod tests {
                 false,
                 Some(SchemaErrorKind::AnonymousStruct),
             ),
-            (
-                (8, 1, 0),
-                "false",
-                true,
-                false,
-                expected(Shape::TypeNameOrArray),
-            ),
+            ((8, 1, 0), "false", true, false, expected(Shape::TypeNameOrArray)),
         ] {
             crate::set_parser_version(version);
             assert_eq!(
@@ -329,14 +313,16 @@ mod tests {
             (
                 (6, 2, 0),
                 "{ 'not': { 'all': 'X' } }",
-                Some(SchemaErrorKind::ValueShape {
-                    expected: Shape::Array,
-                }),
+                Some(SchemaErrorKind::ValueShape { expected: Shape::Array }),
             ),
             ((6, 2, 0), "{ 'not': { 'all': ['X', 'Y_1'] } }", None),
         ] {
             crate::set_parser_version(version);
-            assert_eq!(kind(condition(&value(text))), outcome, "{version:?} {text}");
+            assert_eq!(
+                kind(condition(&value(text))),
+                outcome,
+                "{version:?} {text}"
+            );
         }
     }
 
@@ -367,9 +353,7 @@ mod tests {
                 (6, 1, 0),
                 "'x'",
                 None,
-                Some(SchemaErrorKind::ValueShape {
-                    expected: Shape::Object,
-                }),
+                Some(SchemaErrorKind::ValueShape { expected: Shape::Object }),
             ),
         ] {
             crate::set_parser_version(version);

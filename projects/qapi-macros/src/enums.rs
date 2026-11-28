@@ -1,16 +1,19 @@
 //! Expansion of string enums, alternates and union branch enums.
 
-use crate::attrs::{ItemAttrs, TypeAttrs};
-use crate::support::{
-    HelperNames, active_check, annotate_item, check_disjoint_wires, decoding_selects,
-    deprecation_warning, newest_first, type_deserialization_guard, type_serialization_guard,
-    unavailable_decode_error, unavailable_error, version_range_check, wire_name,
+use crate::{
+    attrs::{ItemAttrs, TypeAttrs},
+    support::{
+        HelperNames, active_check, annotate_item, check_disjoint_wires,
+        decoding_selects, deprecation_warning, newest_first,
+        type_deserialization_guard, type_serialization_guard,
+        unavailable_decode_error, unavailable_error, version_range_check,
+        wire_name,
+    },
 };
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use std::collections::BTreeMap;
-use syn::ext::IdentExt;
-use syn::{DeriveInput, Fields, Type};
+use syn::{DeriveInput, Fields, Type, ext::IdentExt};
 
 struct VariantInfo {
     ident: syn::Ident,
@@ -35,7 +38,10 @@ impl VariantInfo {
 }
 
 /// The implementations of an enum, whose variants this checks.
-pub(crate) fn gen_enum(input_ast: &mut DeriveInput, ta: &TypeAttrs) -> syn::Result<TokenStream2> {
+pub(crate) fn gen_enum(
+    input_ast: &mut DeriveInput,
+    ta: &TypeAttrs,
+) -> syn::Result<TokenStream2> {
     let enum_name = input_ast.ident.clone();
     if let Some((span, key)) = ta.struct_key() {
         return Err(syn::Error::new(
@@ -88,17 +94,11 @@ pub(crate) fn gen_enum(input_ast: &mut DeriveInput, ta: &TypeAttrs) -> syn::Resu
                 ));
             }
         };
-        let info = VariantInfo {
-            ident: variant.ident.clone(),
-            attrs,
-            kind,
-        };
+        let info = VariantInfo { ident: variant.ident.clone(), attrs, kind };
         parsed.push((variant, info));
     }
     check_disjoint_wires(
-        parsed
-            .iter()
-            .map(|(_, info)| (info.wire(), &info.attrs, &info.ident)),
+        parsed.iter().map(|(_, info)| (info.wire(), &info.attrs, &info.ident)),
     )?;
 
     let is_string_enum = ta.union_branch.is_none()
@@ -121,9 +121,7 @@ pub(crate) fn gen_enum(input_ast: &mut DeriveInput, ta: &TypeAttrs) -> syn::Resu
         if let VariantKind::Tuple(_) = info.kind {
             // The payload's type may be Rust `#[deprecated]`; declaring the
             // variant is no use of it, so it warns only where code names it.
-            variant
-                .attrs
-                .push(syn::parse_quote! { #[allow(deprecated)] });
+            variant.attrs.push(syn::parse_quote! { #[allow(deprecated)] });
         }
         variants.push(info);
         kept.push(variant);
@@ -152,7 +150,9 @@ pub(crate) fn gen_enum(input_ast: &mut DeriveInput, ta: &TypeAttrs) -> syn::Resu
         let display = expansion.display();
         quote! { #ser #de #display }
     } else {
-        let ser = expansion.alternate_ser(ta.union_branch.is_none().then_some(qapi_name.as_str()));
+        let ser = expansion.alternate_ser(
+            ta.union_branch.is_none().then_some(qapi_name.as_str()),
+        );
         let de = expansion.alternate_de();
         let flat_union = if ta.union_branch.is_some() {
             expansion.flat_union()
@@ -175,17 +175,22 @@ struct EnumExpansion<'a> {
 impl EnumExpansion<'_> {
     /// Refuse a variant outside its lifetime, and warn once where the peer's
     /// version deprecates it.
-    fn variant_serialization_guard(&self, variant: &VariantInfo) -> TokenStream2 {
+    fn variant_serialization_guard(
+        &self,
+        variant: &VariantInfo,
+    ) -> TokenStream2 {
         let path = variant.path(self.name);
         let check =
-            version_range_check(variant.attrs.since, variant.attrs.until).map(|available| {
-                let unavailable = unavailable_error(&path);
-                quote! {
-                    if !#available {
-                        return ::core::result::Result::Err(#unavailable);
+            version_range_check(variant.attrs.since, variant.attrs.until).map(
+                |available| {
+                    let unavailable = unavailable_error(&path);
+                    quote! {
+                        if !#available {
+                            return ::core::result::Result::Err(#unavailable);
+                        }
                     }
-                }
-            });
+                },
+            );
         let warning = deprecation_warning(&path, &variant.attrs.deprecated);
         quote! { #check #warning }
     }
@@ -298,10 +303,11 @@ impl EnumExpansion<'_> {
             quote! { #wire if #selected => ::core::result::Result::Ok(#name::#ident), }
         });
         // In a scope, a wire name whose variants are all outside it.
-        let unavailable = self.wire_groups().into_iter().map(|(wire, group)| {
-            let error = unavailable_decode_error(&group[0].path(name));
-            quote! { #wire => ::core::result::Result::Err(#error), }
-        });
+        let unavailable =
+            self.wire_groups().into_iter().map(|(wire, group)| {
+                let error = unavailable_decode_error(&group[0].path(name));
+                quote! { #wire => ::core::result::Result::Err(#error), }
+            });
         let unknown = self.unknown_error("variant", &other, bindings);
         quote! {
             #[allow(deprecated)]
@@ -403,7 +409,9 @@ impl EnumExpansion<'_> {
         ordered.sort_by_key(|variant| alternate_shape(&variant.kind));
         let integer_selected: Vec<_> = ordered
             .iter()
-            .filter(|variant| alternate_shape(&variant.kind) == AlternateShape::Integer)
+            .filter(|variant| {
+                alternate_shape(&variant.kind) == AlternateShape::Integer
+            })
             .map(|variant| self.selected(variant))
             .collect();
         let mut tries = Vec::new();
@@ -417,7 +425,8 @@ impl EnumExpansion<'_> {
             // scope the range error of an integer variant does not fall
             // through to a float. Unscoped decoding stays lenient and takes
             // the float, so that recorded values remain readable.
-            let eligible = if alternate_shape(&variant.kind) == AlternateShape::Float
+            let eligible = if alternate_shape(&variant.kind)
+                == AlternateShape::Float
                 && !integer_selected.is_empty()
             {
                 quote! {
@@ -589,8 +598,8 @@ fn alternate_shape(kind: &VariantKind) -> AlternateShape {
             };
             match name.as_str() {
                 // Rust primitives that map to JSON scalars
-                "i8" | "i16" | "i32" | "i64" | "i128" | "isize" | "u8" | "u16" | "u32" | "u64"
-                | "u128" | "usize" => Integer,
+                "i8" | "i16" | "i32" | "i64" | "i128" | "isize" | "u8"
+                | "u16" | "u32" | "u64" | "u128" | "usize" => Integer,
                 "bool" | "char" | "String" | "str" => Scalar,
                 "f32" | "f64" => Float,
                 // Array-like

@@ -44,12 +44,18 @@ no QEMU source, Python, KVM, root privileges or network access. From the
 repository root, these are the checks CI runs:
 
 ```sh
-cargo fmt --all --check
+cargo xfmt --check
 cargo clippy --locked --workspace --all-targets --no-deps -- -D warnings
 cargo test --locked
 cargo deny --locked check licenses
 bash contrib/check-qapi.sh
 ```
+
+Format with `cargo xfmt`, an alias in `.cargo/config.toml` for `cargo fmt`
+with the repository's import style: the imports of each crate merged into
+one `use`, and all of them sorted as one group. `rustfmt.toml` sets 80
+columns, with rustfmt's widest heuristics for what fits them. CI checks the
+formatting with `cargo xfmt --check`.
 
 `contrib/check-qapi.sh` runs the checks that need the QEMU source:
 

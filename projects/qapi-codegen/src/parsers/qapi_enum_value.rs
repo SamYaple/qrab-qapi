@@ -1,15 +1,16 @@
-use super::common::QapiString;
-use super::common::{
-    Malformed, keep, malformed_key, other_key, qstring, raw_value, take_keyed_dict, take_kv,
+use super::{
+    common::{
+        Malformed, QapiString, keep, malformed_key, other_key, qstring,
+        raw_value, take_keyed_dict, take_kv,
+    },
+    qapi_cond::{QapiCond, take_cond},
+    qapi_features::{QapiFeatures, take_features},
 };
-use super::qapi_cond::QapiCond;
-use super::qapi_cond::take_cond;
-use super::qapi_features::QapiFeatures;
-use super::qapi_features::take_features;
-use nom::IResult;
-use nom::Parser;
-use nom::branch::alt;
-use nom::error::{Error, ErrorKind};
+use nom::{
+    IResult, Parser,
+    branch::alt,
+    error::{Error, ErrorKind},
+};
 
 pub(crate) fn take_enum_value(input: &str) -> IResult<&str, QapiEnumValue<'_>> {
     QapiEnumValue::parse(input)
@@ -50,7 +51,10 @@ impl<'i> QapiEnumValue<'i> {
         // From 2.4 the validation refuses a dictionary without 'name', and
         // from 2.6 an empty name, on which QEMU fails.
         let unnamed = !simple && super::parser_version() < (2, 4, 0);
-        if enumvalue.name.is_empty() && unnamed && enumvalue.malformed.is_empty() {
+        if enumvalue.name.is_empty()
+            && unnamed
+            && enumvalue.malformed.is_empty()
+        {
             return Err(nom::Err::Error(Error::new(start, ErrorKind::Tag)));
         }
         Ok((input, enumvalue))
@@ -167,7 +171,8 @@ mod tests {
         let (_, value) = QapiEnumValue::parse("{ 'if': 'CONFIG_X' }").unwrap();
         assert_eq!(value.name, "");
         assert_eq!(value.keys, ["if"]);
-        let (_, value) = QapiEnumValue::parse("{ 'name': 'val', 'unknown': 'x' }").unwrap();
+        let (_, value) =
+            QapiEnumValue::parse("{ 'name': 'val', 'unknown': 'x' }").unwrap();
         assert_eq!(value.keys, ["name", "unknown"]);
     }
 

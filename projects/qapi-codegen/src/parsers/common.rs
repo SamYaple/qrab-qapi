@@ -1,15 +1,16 @@
 //! Shared nom parser helpers used across all parser versions.
 
 use crate::ParseErrorKind;
-use nom::IResult;
-use nom::Parser;
-use nom::branch::alt;
-use nom::bytes::complete::{tag, take_till, take_while, take_while1};
-use nom::character::complete::space0;
-use nom::combinator::{eof, not, opt, peek, recognize};
-use nom::error::{Error, ErrorKind};
-use nom::multi::{many1, separated_list0};
-use nom::sequence::{delimited, preceded};
+use nom::{
+    IResult, Parser,
+    branch::alt,
+    bytes::complete::{tag, take_till, take_while, take_while1},
+    character::complete::space0,
+    combinator::{eof, not, opt, peek, recognize},
+    error::{Error, ErrorKind},
+    multi::{many1, separated_list0},
+    sequence::{delimited, preceded},
+};
 use std::{borrow::Cow, collections::HashSet};
 
 /// Decoded schema text; ordinary literals borrow their source.
@@ -25,7 +26,8 @@ pub(crate) fn qcomment(input: &str) -> IResult<&str, &str> {
 }
 
 pub(crate) fn any_comment(input: &str) -> IResult<&str, &str> {
-    delimited((tag("#"), space0), not_line_ending, alt((line_ending, eof))).parse(input)
+    delimited((tag("#"), space0), not_line_ending, alt((line_ending, eof)))
+        .parse(input)
 }
 
 // QEMU's Python lexer uses str.isspace(), including the four C0 separators.
@@ -78,11 +80,8 @@ pub(crate) fn clean_lines(input: &str) -> IResult<&str, &str> {
     } else {
         qcomment
     };
-    recognize((
-        whitespace0,
-        opt((many1((whitespace0, comment)), whitespace0)),
-    ))
-    .parse(input)
+    recognize((whitespace0, opt((many1((whitespace0, comment)), whitespace0))))
+        .parse(input)
 }
 
 /// The text of an expression parsed from `start` up to `rest`, without the
@@ -125,14 +124,18 @@ pub fn qstring(input: &str) -> IResult<&str, QapiString<'_>> {
         if c == '\'' {
             return Ok((
                 &body[offset + 1..],
-                decoded.map_or_else(|| Cow::Borrowed(&body[..offset]), Cow::Owned),
+                decoded
+                    .map_or_else(|| Cow::Borrowed(&body[..offset]), Cow::Owned),
             ));
         }
-        if matches!(c, '\r' | '\n') || (modern && !c.is_ascii_graphic() && c != ' ') {
+        if matches!(c, '\r' | '\n')
+            || (modern && !c.is_ascii_graphic() && c != ' ')
+        {
             return Err(string_error(&body[offset..]));
         }
         if c == '\\' {
-            let value = decoded.get_or_insert_with(|| body[..offset].to_owned());
+            let value =
+                decoded.get_or_insert_with(|| body[..offset].to_owned());
             offset += 1;
             let Some(escape) = body[offset..].chars().next() else {
                 return Err(string_error(&body[offset..]));
@@ -166,7 +169,9 @@ pub fn qstring(input: &str) -> IResult<&str, QapiString<'_>> {
                         value as char
                     }
                     _ => {
-                        return Err(string_error(&body[offset - escape.len_utf8()..]));
+                        return Err(string_error(
+                            &body[offset - escape.len_utf8()..],
+                        ));
                     }
                 }
             } else if escape == '\\' {
@@ -221,7 +226,11 @@ where
 /// [`take_dict`], with the dict's keys in their order in the source.
 pub(crate) fn take_keyed_dict<'i, I, O>(
     mut item_parser: I,
-) -> impl Parser<&'i str, Output = (Vec<O>, Vec<QapiString<'i>>), Error = Error<&'i str>>
+) -> impl Parser<
+    &'i str,
+    Output = (Vec<O>, Vec<QapiString<'i>>),
+    Error = Error<&'i str>,
+>
 where
     I: Parser<&'i str, Output = O, Error = Error<&'i str>>,
 {
@@ -229,37 +238,38 @@ where
         let mut keys = HashSet::new();
         let mut entry = |input| {
             let (after_key, key) = qstring(input)?;
-            if !keys.insert(key.clone()) && super::parser_version() >= (2, 0, 0) {
+            if !keys.insert(key.clone()) && super::parser_version() >= (2, 0, 0)
+            {
                 // QEMU reports a duplicate key at its value. Without the
                 // colon before one, no item parses, and QEMU's parser
                 // reports the token after the key as for any other key.
                 if let Ok((value, _)) = qtag(":").parse(after_key) {
-                    return Err(nom::Err::Failure(Error::new(value, ErrorKind::Verify)));
+                    return Err(nom::Err::Failure(Error::new(
+                        value,
+                        ErrorKind::Verify,
+                    )));
                 }
             }
-            item_parser
-                .parse(input)
-                .map(|(rest, item)| (rest, (key, item)))
+            item_parser.parse(input).map(|(rest, item)| (rest, (key, item)))
         };
         let (rest, entries) =
-            delimited(qtag("{"), separated_items(&mut entry), qtag("}")).parse(input)?;
+            delimited(qtag("{"), separated_items(&mut entry), qtag("}"))
+                .parse(input)?;
         if super::parser_version() >= (2, 0, 0) {
             return Ok((
                 rest,
                 entries.into_iter().map(|(key, item)| (item, key)).unzip(),
             ));
         }
-        let mut items: Vec<(QapiString<'i>, O)> = Vec::with_capacity(entries.len());
+        let mut items: Vec<(QapiString<'i>, O)> =
+            Vec::with_capacity(entries.len());
         for (key, item) in entries {
             match items.iter_mut().find(|(earlier, _)| *earlier == key) {
                 Some(earlier) => earlier.1 = item,
                 None => items.push((key, item)),
             }
         }
-        Ok((
-            rest,
-            items.into_iter().map(|(key, item)| (item, key)).unzip(),
-        ))
+        Ok((rest, items.into_iter().map(|(key, item)| (item, key)).unzip()))
     }
 }
 
@@ -292,7 +302,8 @@ where
     move |mut input: &'i str| {
         let mut items = Vec::new();
         // Try to parse the first item (with optional leading whitespace via clean_lines)
-        let first_input = clean_lines.parse(input).map(|(i, _)| i).unwrap_or(input);
+        let first_input =
+            clean_lines.parse(input).map(|(i, _)| i).unwrap_or(input);
         match item_parser.parse(first_input) {
             Ok((remaining, item)) => {
                 items.push(item);
@@ -317,7 +328,10 @@ where
             match item_parser.parse(after_ws) {
                 Ok((remaining, item)) => {
                     if remaining.len() == after_ws.len() {
-                        return Err(nom::Err::Error(Error::new(after_ws, ErrorKind::Many0)));
+                        return Err(nom::Err::Error(Error::new(
+                            after_ws,
+                            ErrorKind::Many0,
+                        )));
                     }
                     items.push(item);
                     input = remaining;
@@ -341,7 +355,9 @@ where
 {
     delimited(
         (
-            nom::combinator::verify(qstring, move |name: &QapiString<'i>| name.as_ref() == key),
+            nom::combinator::verify(qstring, move |name: &QapiString<'i>| {
+                name.as_ref() == key
+            }),
             qtag(":"),
         ),
         value_parser,
@@ -358,15 +374,16 @@ pub(crate) fn other_key<'i>(
     read: &'static [&'static str],
 ) -> impl Parser<&'i str, Output = (), Error = Error<&'i str>> {
     move |input: &'i str| {
-        let (value, key) = (qstring, qtag(":")).map(|(key, _)| key).parse(input)?;
-        if super::parser_version() >= (2, 4, 0) && read.contains(&key.as_ref()) {
+        let (value, key) =
+            (qstring, qtag(":")).map(|(key, _)| key).parse(input)?;
+        if super::parser_version() >= (2, 4, 0) && read.contains(&key.as_ref())
+        {
             return Err(nom::Err::Error(Error::new(input, ErrorKind::Tag)));
         }
         let mut lexer = Lexer::new(value);
-        lexer
-            .advance()
-            .and_then(|()| lexer.value())
-            .map_err(|(at, _)| nom::Err::Error(Error::new(at, ErrorKind::Fail)))?;
+        lexer.advance().and_then(|()| lexer.value()).map_err(|(at, _)| {
+            nom::Err::Error(Error::new(at, ErrorKind::Fail))
+        })?;
         clean_lines.map(|_| ()).parse(lexer.token.1)
     }
 }
@@ -394,10 +411,10 @@ where
 
 /// Before 1.6, where QEMU's parser fails ([`crate::ParserCrash`]) on
 /// `input`, as [`legacy_schema`] reads it.
-pub(crate) fn unreadable_line(input: &str) -> Option<(&str, crate::ParserCrash)> {
-    legacy_schema(input)
-        .err()
-        .map(|(offset, crash)| (&input[offset..], crash))
+pub(crate) fn unreadable_line(
+    input: &str,
+) -> Option<(&str, crate::ParserCrash)> {
+    legacy_schema(input).err().map(|(offset, crash)| (&input[offset..], crash))
 }
 
 /// From 1.2 to 1.5, `input` with each expression whose characters QEMU's
@@ -414,7 +431,8 @@ pub(crate) fn legacy_text(input: &str) -> Option<String> {
     let expressions = legacy_schema(input).ok()?;
     let mut text = String::with_capacity(input.len());
     let mut copied = 0;
-    for expression in expressions.iter().filter(|expression| expression.dropped) {
+    for expression in expressions.iter().filter(|expression| expression.dropped)
+    {
         text.push_str(&input[copied..expression.start]);
         expression.value.write(&mut text);
         let lines = &input[expression.start..expression.end];
@@ -490,7 +508,9 @@ struct LegacyExpression {
 /// it drops them, letters such as those of `true` and `false` included.
 /// The object parser takes every token as a value, so a missing one makes
 /// it run out of tokens.
-fn legacy_schema(input: &str) -> Result<Vec<LegacyExpression>, (usize, crate::ParserCrash)> {
+fn legacy_schema(
+    input: &str,
+) -> Result<Vec<LegacyExpression>, (usize, crate::ParserCrash)> {
     use crate::ParserCrash;
     let version = super::parser_version();
     if version >= (1, 6, 0) {
@@ -501,17 +521,24 @@ fn legacy_schema(input: &str) -> Result<Vec<LegacyExpression>, (usize, crate::Pa
     let mut start = 0;
     let mut end = 0;
     let mut expressions = Vec::new();
-    let mut evaluate = |expression: &[(usize, char)], start, end, next: Option<usize>| {
+    let mut evaluate = |expression: &[(usize, char)],
+                        start,
+                        end,
+                        next: Option<usize>| {
         let (tokens, dropped) = legacy_tokens(expression, version)?;
         let fail = || {
             // An open expression that a line at the first column cut.
-            let depth = tokens.iter().fold(0isize, |depth, (token, punctuation)| {
-                match (punctuation, token.as_str()) {
+            let depth = tokens.iter().fold(
+                0isize,
+                |depth, (token, punctuation)| match (
+                    punctuation,
+                    token.as_str(),
+                ) {
                     (true, "{" | "[") => depth + 1,
                     (true, "}" | "]") => depth - 1,
                     _ => depth,
-                }
-            });
+                },
+            );
             match next {
                 Some(next) if depth > 0 => (next, ParserCrash::UnindentedLine),
                 _ => (start, ParserCrash::IncompleteExpression),
@@ -522,12 +549,7 @@ fn legacy_schema(input: &str) -> Result<Vec<LegacyExpression>, (usize, crate::Pa
         if !matches!(value, LegacyValue::Object(_)) {
             return Err((start, ParserCrash::NotAnObject));
         }
-        expressions.push(LegacyExpression {
-            start,
-            end,
-            value,
-            dropped,
-        });
+        expressions.push(LegacyExpression { start, end, value, dropped });
         Ok(())
     };
     let mut offset = 0;
@@ -551,8 +573,9 @@ fn legacy_schema(input: &str) -> Result<Vec<LegacyExpression>, (usize, crate::Pa
             start = at;
         }
         expression.extend(
-            line.char_indices()
-                .map(|(index, c)| (at + index, if c == '\r' { '\n' } else { c })),
+            line.char_indices().map(|(index, c)| {
+                (at + index, if c == '\r' { '\n' } else { c })
+            }),
         );
         end = offset;
     }
@@ -595,14 +618,21 @@ fn legacy_tokens(
                         '\'' => break,
                         '\\' if version >= (1, 2, 0) => match chars.next() {
                             Some((_, c)) => value.push(c),
-                            None => return Err((at, ParserCrash::UnterminatedString)),
+                            None => {
+                                return Err((
+                                    at,
+                                    ParserCrash::UnterminatedString,
+                                ));
+                            }
                         },
                         c => value.push(c),
                     }
                 }
                 tokens.push((value, false));
             }
-            _ if version < (1, 2, 0) => return Err((at, ParserCrash::StrayCharacter)),
+            _ if version < (1, 2, 0) => {
+                return Err((at, ParserCrash::StrayCharacter));
+            }
             '#' => comment = true,
             c => dropped |= !comment && !is_whitespace(c),
         }
@@ -612,8 +642,12 @@ fn legacy_tokens(
 
 /// QEMU's object parser before 1.6 at `tokens[*position]`: `None` where it
 /// runs out of tokens.
-fn legacy_value(tokens: &[(String, bool)], position: &mut usize) -> Option<LegacyValue> {
-    let token = |position: usize| tokens.get(position).map(|(token, _)| token.as_str());
+fn legacy_value(
+    tokens: &[(String, bool)],
+    position: &mut usize,
+) -> Option<LegacyValue> {
+    let token =
+        |position: usize| tokens.get(position).map(|(token, _)| token.as_str());
     let (first, _) = tokens.get(*position)?;
     *position += 1;
     let close = match first.as_str() {
@@ -635,10 +669,12 @@ fn legacy_value(tokens: &[(String, bool)], position: &mut usize) -> Option<Legac
         }
         match key {
             // A later value of a key replaces the earlier one in place.
-            Some(key) => match object.iter_mut().find(|(earlier, _)| *earlier == key) {
-                Some(earlier) => earlier.1 = value,
-                None => object.push((key, value)),
-            },
+            Some(key) => {
+                match object.iter_mut().find(|(earlier, _)| *earlier == key) {
+                    Some(earlier) => earlier.1 = value,
+                    None => object.push((key, value)),
+                }
+            }
             None => array.push(value),
         }
     }
@@ -674,7 +710,9 @@ pub(crate) fn top_level_expression(
     lexer.advance()?;
     let value = lexer.value()?;
     let keys = match value.value {
-        Raw::Object(entries) => Some(entries.into_iter().map(|(key, _)| key).collect()),
+        Raw::Object(entries) => {
+            Some(entries.into_iter().map(|(key, _)| key).collect())
+        }
         _ => None,
     };
     Ok((keys, lexer.token.1))
@@ -803,9 +841,14 @@ pub(crate) fn keep<'i>(
 /// with that value, which the validation refuses where QEMU does.
 pub(crate) fn malformed_key<'i>(
     read: &'static [&'static str],
-) -> impl Parser<&'i str, Output = (QapiString<'i>, RawValue<'i>), Error = Error<&'i str>> {
+) -> impl Parser<
+    &'i str,
+    Output = (QapiString<'i>, RawValue<'i>),
+    Error = Error<&'i str>,
+> {
     move |input: &'i str| {
-        let (value, key) = (qstring, qtag(":")).map(|(key, _)| key).parse(input)?;
+        let (value, key) =
+            (qstring, qtag(":")).map(|(key, _)| key).parse(input)?;
         if !read.contains(&key.as_ref()) {
             return Err(nom::Err::Error(Error::new(input, ErrorKind::Tag)));
         }
@@ -828,10 +871,7 @@ pub(crate) type Fault<'i> = (&'i str, ParseErrorKind);
 
 impl<'i> Lexer<'i> {
     fn new(input: &'i str) -> Self {
-        Self {
-            rest: input,
-            token: (Token::End, input),
-        }
+        Self { rest: input, token: (Token::End, input) }
     }
 
     fn advance(&mut self) -> Result<(), Fault<'i>> {
@@ -846,9 +886,12 @@ impl<'i> Lexer<'i> {
                 return Ok(());
             };
             if c == '#' {
-                self.rest = start.trim_start_matches(|c| c != '\r' && c != '\n');
+                self.rest =
+                    start.trim_start_matches(|c| c != '\r' && c != '\n');
                 // From 2.9 a documentation comment ends the expression.
-                if start.starts_with("##") && super::parser_version() >= (2, 9, 0) {
+                if start.starts_with("##")
+                    && super::parser_version() >= (2, 9, 0)
+                {
                     self.token = (Token::Comment, start);
                     return Ok(());
                 }
@@ -857,13 +900,16 @@ impl<'i> Lexer<'i> {
             let (rest, token) = if "{}:,[]".contains(c) {
                 (&start[1..], Token::Punct(c))
             } else if c == '\'' {
-                let (rest, value) =
-                    qstring(start).map_err(|_| (start, ParseErrorKind::MalformedString))?;
+                let (rest, value) = qstring(start)
+                    .map_err(|_| (start, ParseErrorKind::MalformedString))?;
                 (rest, Token::String(value))
             } else if let Some((word, value)) =
                 [("true", Raw::Bool(true)), ("false", Raw::Bool(false))]
                     .into_iter()
-                    .chain((super::parser_version() < (4, 2, 0)).then_some(("null", Raw::Null)))
+                    .chain(
+                        (super::parser_version() < (4, 2, 0))
+                            .then_some(("null", Raw::Null)),
+                    )
                     .filter(|_| super::parser_version() >= (2, 4, 0))
                     .find(|(word, _)| start.starts_with(word))
             {
@@ -912,13 +958,12 @@ impl<'i> Lexer<'i> {
             }
         };
         let text = &start[..start.len() - self.token.1.len()];
-        Ok(RawValue {
-            text: text.trim_end_matches(is_whitespace),
-            value,
-        })
+        Ok(RawValue { text: text.trim_end_matches(is_whitespace), value })
     }
 
-    fn members(&mut self) -> Result<Vec<(QapiString<'i>, RawValue<'i>)>, Fault<'i>> {
+    fn members(
+        &mut self,
+    ) -> Result<Vec<(QapiString<'i>, RawValue<'i>)>, Fault<'i>> {
         let mut entries = Vec::new();
         if self.token.0 == Token::Punct('}') {
             self.advance()?;
@@ -938,7 +983,8 @@ impl<'i> Lexer<'i> {
                 return self.fault();
             }
             self.advance()?;
-            if !keys.insert(key.clone()) && super::parser_version() >= (2, 0, 0) {
+            if !keys.insert(key.clone()) && super::parser_version() >= (2, 0, 0)
+            {
                 return Err((self.token.1, ParseErrorKind::DuplicateKey));
             }
             entries.push((key, self.value()?));
@@ -975,8 +1021,10 @@ impl<'i> Lexer<'i> {
 
 #[cfg(test)]
 mod tests {
-    use crate::set_parser_version;
-    use crate::{ParseError, ParseErrorKind, ParserCrash, parse_schema};
+    use crate::{
+        ParseError, ParseErrorKind, ParserCrash, parse_schema,
+        set_parser_version,
+    };
 
     /// What the release's parser fails on, if the error is its crash.
     fn crash(error: ParseError) -> Option<ParserCrash> {
@@ -1026,7 +1074,9 @@ mod tests {
     #[test]
     fn dictionary_keywords_are_exact_strings() {
         set_parser_version((11, 1, 3));
-        assert!(parse_schema("{ 'enum# comment\n': 'E', 'data': ['a'] }").is_err());
+        assert!(
+            parse_schema("{ 'enum# comment\n': 'E', 'data': ['a'] }").is_err()
+        );
         // An expression without a metatype is kept for the validation.
         let schema = parse_schema("{ 'enum ': 'E', 'data': ['a'] }").unwrap();
         assert!(matches!(schema.0[0], crate::QapiSchemaToken::NoMetatype(_)));
@@ -1096,12 +1146,7 @@ mod tests {
                 (1, 26),
                 UnexpectedCharacter,
             ),
-            (
-                (1, 5, 0),
-                "{ 'enum': 'E', 'data': [ 1 ] }",
-                (1, 1),
-                NoDefinition,
-            ),
+            ((1, 5, 0), "{ 'enum': 'E', 'data': [ 1 ] }", (1, 1), NoDefinition),
         ] {
             set_parser_version(version);
             let error = parse_schema(input).unwrap_err();
@@ -1144,17 +1189,9 @@ mod tests {
             ((1, 1, 0), trailing, true),
             ((1, 2, 0), indented, true),
             ((1, 5, 0), "{ 'type': 'Foo', 'data': {} } # see: Bar", false),
-            (
-                (1, 5, 0),
-                "{ 'type': 'Foo',\n  # see: Bar\n  'data': {} }",
-                true,
-            ),
+            ((1, 5, 0), "{ 'type': 'Foo',\n  # see: Bar\n  'data': {} }", true),
             ((1, 5, 0), trailing, false),
-            (
-                (1, 5, 0),
-                "{ 'type': 'Foo', 'data': { 'a': 'x#y' } }",
-                false,
-            ),
+            ((1, 5, 0), "{ 'type': 'Foo', 'data': { 'a': 'x#y' } }", false),
             ((1, 6, 0), indented, false),
         ] {
             set_parser_version(version);
@@ -1251,7 +1288,11 @@ mod tests {
             parse_schema(input).unwrap();
             set_parser_version((2, 0, 0));
             let error = parse_schema(input).unwrap_err();
-            assert_eq!(error.kind, crate::ParseErrorKind::DuplicateKey, "{input}");
+            assert_eq!(
+                error.kind,
+                crate::ParseErrorKind::DuplicateKey,
+                "{input}"
+            );
         }
         set_parser_version((11, 1, 3));
     }
@@ -1279,7 +1320,11 @@ mod tests {
             ((4, 2, 0), r"'a\\b'", "a\\b"),
         ] {
             set_parser_version(version);
-            assert_eq!(qstring(input).unwrap().1, expected, "{version:?} {input}");
+            assert_eq!(
+                qstring(input).unwrap().1,
+                expected,
+                "{version:?} {input}"
+            );
         }
         set_parser_version((4, 1, 0));
         for input in [r"'\u0000'", r"'\u0080'", r"'\u+041'", r"'\z'"] {
@@ -1290,9 +1335,6 @@ mod tests {
             qstring("'ordinary'").unwrap().1,
             QapiString::Borrowed("ordinary")
         ));
-        assert!(matches!(
-            qstring(r"'a\\b'").unwrap().1,
-            QapiString::Owned(_)
-        ));
+        assert!(matches!(qstring(r"'a\\b'").unwrap().1, QapiString::Owned(_)));
     }
 }

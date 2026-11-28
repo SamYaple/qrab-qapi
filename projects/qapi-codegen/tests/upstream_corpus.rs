@@ -2,13 +2,15 @@
 //! documentation attached to definitions as QEMU's parser attaches it, in the
 //! fixtures and in the production schemas, and the diagnostics of invalid
 //! input.
-use qapi_codegen::versions::{PINNED_VERSIONS, parse_pinned_versions, parse_version_tag};
 use qapi_codegen::{
     DocumentationError, ParseErrorKind, ReadError, parse_schema_with_version,
     read_schema_with_version,
+    versions::{PINNED_VERSIONS, parse_pinned_versions, parse_version_tag},
 };
-use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::{
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 /// The grammar of the newest pin, which vendor/qemu must be checked out at:
 /// the QEMU parser and fixtures used here come from its working tree.
@@ -61,8 +63,10 @@ fn freeform_documentation_cannot_replace_definition_documentation() {
             format!("{section}##\n# @Example:\n# Summary.\n##\n{{'struct':'Example','data':{{}}}}")
                 .replace('\n', ending);
         parse_schema_with_version(&input, CURRENT).unwrap();
-        let input = format!("{section}{{'pragma':{{}}}}\n{{'struct':'Example','data':{{}}}}")
-            .replace('\n', ending);
+        let input = format!(
+            "{section}{{'pragma':{{}}}}\n{{'struct':'Example','data':{{}}}}"
+        )
+        .replace('\n', ending);
         parse_schema_with_version(&input, CURRENT).unwrap();
     }
     for version in [(2, 7, 0), (2, 8, 0)] {
@@ -79,9 +83,10 @@ fn pre_formal_docs_remain_comments_and_keep_recognized_sections() {
     let input = "# ordinary\n##\n# = Section\n##\n## @Example\n# Description.\n##\n{'struct':'Example','data':{### inline comment\n'value':'str'}}\n### trailing comment";
     let schema = parse_schema_with_version(input, (2, 8, 0)).unwrap();
     assert!(
-        schema
-            .iter()
-            .any(|token| matches!(token, qapi_codegen::QapiSchemaToken::Doc(_)))
+        schema.iter().any(|token| matches!(
+            token,
+            qapi_codegen::QapiSchemaToken::Doc(_)
+        ))
     );
     assert!(schema.iter().any(
         |token| matches!(token, qapi_codegen::QapiSchemaToken::Struct(value) if value.doc.is_some())
@@ -102,9 +107,12 @@ fn malformed_schema_diagnostics_locate_later_definitions() {
             ("{'pragma':{'doc-required':'str'}}", 5),
             ("unexpected", 5),
         ] {
-            let error = parse_schema_with_version(&format!("{prefix}{invalid}"), CURRENT)
-                .unwrap_err()
-                .to_string();
+            let error = parse_schema_with_version(
+                &format!("{prefix}{invalid}"),
+                CURRENT,
+            )
+            .unwrap_err()
+            .to_string();
             assert!(
                 error.contains(&format!("line 4, column {column}")),
                 "{error}"
@@ -113,7 +121,9 @@ fn malformed_schema_diagnostics_locate_later_definitions() {
         }
     }
     let error = parse_schema_with_version(
-        &format!("{prefix}{{'struct':'Bad','data':{{'value':'str','value':'int'}}}}"),
+        &format!(
+            "{prefix}{{'struct':'Bad','data':{{'value':'str','value':'int'}}}}"
+        ),
         CURRENT,
     )
     .unwrap_err()
@@ -127,13 +137,17 @@ fn malformed_schema_diagnostics_locate_later_definitions() {
 fn duplicate_doc_sections_report_the_original_source_location() {
     let input = "##\n# @example:\n# Since: 1.0\n#\n# Since: 2.0\n##\n{'command':'example'}\n";
     for ending in ["\n", "\r\n", "\r"] {
-        let error = parse_schema_with_version(&input.replace('\n', ending), CURRENT).unwrap_err();
+        let error =
+            parse_schema_with_version(&input.replace('\n', ending), CURRENT)
+                .unwrap_err();
         assert_eq!((error.line, error.column), (5, 1), "{error}");
         assert_eq!(
             error.kind,
-            ParseErrorKind::Documentation(Box::new(DocumentationError::DuplicateSection {
-                section: "Since".into()
-            }))
+            ParseErrorKind::Documentation(Box::new(
+                DocumentationError::DuplicateSection {
+                    section: "Since".into()
+                }
+            ))
         );
     }
 }
@@ -174,7 +188,9 @@ for expr in QAPISchemaParser(sys.argv[2]).exprs:
         .map(str::to_owned)
         .collect();
     let mut actual = BTreeSet::new();
-    for (_, content) in read_schema_with_version(&schema, Some(version)).unwrap() {
+    for (_, content) in
+        read_schema_with_version(&schema, Some(version)).unwrap()
+    {
         for token in parse_schema_with_version(&content, version).unwrap() {
             let doc = match token {
                 QapiSchemaToken::Enum(value) => value.doc,
@@ -187,20 +203,29 @@ for expr in QAPISchemaParser(sys.argv[2]).exprs:
             };
             if let Some(doc) = doc {
                 actual.insert(doc.name.to_string());
-                for (kind, fields) in [("MEMBER", &doc.fields), ("FEATURE", &doc.features)] {
+                for (kind, fields) in
+                    [("MEMBER", &doc.fields), ("FEATURE", &doc.features)]
+                {
                     for (name, lines) in fields {
                         let text = lines
                             .join(" ")
                             .split_whitespace()
                             .collect::<Vec<_>>()
                             .join(" ");
-                        actual.insert(format!("{}\t{kind}\t{name}\t{text}", doc.name));
+                        actual.insert(format!(
+                            "{}\t{kind}\t{name}\t{text}",
+                            doc.name
+                        ));
                     }
                 }
                 if doc.name == "cmd" {
                     assert_eq!(doc.returns, ["@Object"]);
                     assert_eq!(doc.errors, ["some"]);
-                    assert!(doc.body.iter().any(|line| line.starts_with("Returns:")));
+                    assert!(
+                        doc.body
+                            .iter()
+                            .any(|line| line.starts_with("Returns:"))
+                    );
                     assert!(
                         doc.body
                             .iter()
@@ -231,14 +256,10 @@ fn parse_errors_report_a_location_and_a_bounded_excerpt() {
         "# ☃\n{{ 'struct': 'Example', 'data': {{\n  'name': 'str',\n  'name': 'int' }} }}\n{}",
         "☃".repeat(1000)
     );
-    let message = parse_schema_with_version(&input, CURRENT)
-        .unwrap_err()
-        .to_string();
+    let message =
+        parse_schema_with_version(&input, CURRENT).unwrap_err().to_string();
     assert!(message.contains("line 4, column 11"), "{message}");
-    assert!(
-        message.chars().count() < 240,
-        "error excerpt is not bounded"
-    );
+    assert!(message.chars().count() < 240, "error excerpt is not bounded");
 }
 
 #[test]
@@ -247,21 +268,11 @@ fn include_errors_name_the_directive_qemu_names() {
     let root = qemu_root().join("tests/qapi-schema");
     for (fixture, file, line, looped) in [
         ("include-cycle.json", "include-cycle-c.json", 1, true),
-        (
-            "include-self-cycle.json",
-            "include-self-cycle.json",
-            1,
-            true,
-        ),
+        ("include-self-cycle.json", "include-self-cycle.json", 1, true),
         ("include-no-file.json", "include-no-file.json", 1, false),
     ] {
         match read_schema_with_version(&root.join(fixture), Some(version)) {
-            Err(ReadError::Include {
-                from,
-                line: at,
-                column,
-                kind,
-            }) => {
+            Err(ReadError::Include { from, line: at, column, kind }) => {
                 assert_eq!(from.file_name().unwrap(), file, "{fixture}");
                 assert_eq!((at, column), (line, 1), "{fixture}");
                 assert_eq!(
@@ -275,7 +286,8 @@ fn include_errors_name_the_directive_qemu_names() {
     }
     // A name with an escape, and a target that is no file, are located at
     // their directive too.
-    let dir = std::env::temp_dir().join(format!("qapi-include-{}", std::process::id()));
+    let dir = std::env::temp_dir()
+        .join(format!("qapi-include-{}", std::process::id()));
     std::fs::create_dir_all(dir.join("adir")).unwrap();
     let main = dir.join("main.json");
     std::fs::write(
@@ -324,10 +336,7 @@ fn upstream_positive_schema_fixtures_parse() {
         }
     }
     fixtures.sort();
-    assert!(
-        !fixtures.is_empty(),
-        "QEMU positive fixture corpus is missing"
-    );
+    assert!(!fixtures.is_empty(), "QEMU positive fixture corpus is missing");
     let mut failures = Vec::new();
     for path in fixtures {
         if let Err(error) = read_schema_with_version(&path, Some(version)) {
@@ -350,14 +359,19 @@ fn invalid_definition_documentation_cannot_fall_back_to_plain_comments() {
         "doc-empty-symbol.json",
     ] {
         // QEMU's expected error, `<file>:<line>[:<column>]: <message>`.
-        let expected = std::fs::read_to_string(root.join(fixture).with_extension("err")).unwrap();
+        let expected =
+            std::fs::read_to_string(root.join(fixture).with_extension("err"))
+                .unwrap();
         let line: usize = expected.split(':').nth(1).unwrap().parse().unwrap();
         // A documentation fault, at the line QEMU names.
         match read_schema_with_version(&root.join(fixture), Some(version)) {
             Err(ReadError::Parse { source, .. })
                 if matches!(source.kind, ParseErrorKind::Documentation(_)) =>
             {
-                assert_eq!(source.line, line, "{fixture}: {source} (QEMU: {expected})");
+                assert_eq!(
+                    source.line, line,
+                    "{fixture}: {source} (QEMU: {expected})"
+                );
             }
             other => panic!("{fixture}: {other:?} (QEMU: {expected})"),
         }

@@ -6,9 +6,11 @@
 #![allow(deprecated)]
 
 mod support;
-use qapi_protocol::qga::Qga;
-use qapi_protocol::server::QgaSession;
-use qapi_protocol::{ClientOptions, Error, Qmp, server::QmpSession};
+use qapi_protocol::{
+    ClientOptions, Error, Qmp,
+    qga::Qga,
+    server::{QgaSession, QmpSession},
+};
 use tokio::net::UnixListener;
 
 #[qapi::qapi(command, name = "test-version", added = "1.0.0", returns = "bool")]
@@ -131,7 +133,9 @@ async fn typed_guest_file_read_decodes_response_not_request() {
         assert_eq!(name, "guest-file-read");
         assert_eq!(args, serde_json::json!({"handle": 7, "count": 3}));
         session
-            .send_return(serde_json::json!({"count": 3, "buf-b64": "YWJj", "eof": true}))
+            .send_return(
+                serde_json::json!({"count": 3, "buf-b64": "YWJj", "eof": true}),
+            )
             .await
             .unwrap();
     });
@@ -145,7 +149,12 @@ async fn typed_guest_file_read_decodes_response_not_request() {
     server.await.unwrap();
 }
 
-#[qapi::qapi(command, name = "test-new-command", added = "11.0.0", returns = "bool")]
+#[qapi::qapi(
+    command,
+    name = "test-new-command",
+    added = "11.0.0",
+    returns = "bool"
+)]
 struct TestNewCommand {}
 
 #[qapi::qapi(
@@ -192,7 +201,8 @@ struct TestNestedCommand {
 
 #[tokio::test]
 async fn commands_types_variants_and_fields_the_peer_lacks_are_unavailable() {
-    let (client, _, mut peer) = support::qmp_version(ClientOptions::default(), (10, 1, 0)).await;
+    let (client, _, mut peer) =
+        support::qmp_version(ClientOptions::default(), (10, 1, 0)).await;
     match client.execute(&TestNewCommand::default()).await {
         Err(Error::Unavailable { name, version, .. }) => {
             assert_eq!(name, "test-new-command");
@@ -207,12 +217,7 @@ async fn commands_types_variants_and_fields_the_peer_lacks_are_unavailable() {
         }
         other => panic!("{other:?}"),
     }
-    match client
-        .execute(&TestModeCommand {
-            mode: TestMode::New,
-        })
-        .await
-    {
+    match client.execute(&TestModeCommand { mode: TestMode::New }).await {
         Err(Error::Unavailable { name, version, .. }) => {
             assert_eq!(name, "TestMode::New");
             assert_eq!(version, (10, 1, 0));
@@ -250,9 +255,7 @@ async fn commands_types_variants_and_fields_the_peer_lacks_are_unavailable() {
     assert!(!client.is_closed());
     // Nothing was sent: the next request the peer sees is the next call.
     let (result, ()) = tokio::join!(
-        client.execute(&TestModeCommand {
-            mode: TestMode::Old
-        }),
+        client.execute(&TestModeCommand { mode: TestMode::Old }),
         async {
             let (name, args) = peer.recv_command().await.unwrap();
             assert_eq!(name, "test-mode");
@@ -274,7 +277,8 @@ async fn replies_decode_into_the_return_type_of_the_peers_release() {
         ((9, 2, 0), serde_json::json!({"arch": "x86_64"})),
         ((10, 1, 0), serde_json::json!({"arch": "aarch64"})),
     ] {
-        let (client, _, mut peer) = support::qmp_version(ClientOptions::default(), version).await;
+        let (client, _, mut peer) =
+            support::qmp_version(ClientOptions::default(), version).await;
         let query_target = QueryTarget::default();
         let (result, ()) = tokio::join!(client.execute(&query_target), async {
             assert_eq!(peer.recv_command().await.unwrap().0, "query-target");
@@ -284,9 +288,9 @@ async fn replies_decode_into_the_return_type_of_the_peers_release() {
             QueryTargetReturns::V1_2_0(info) if version < (3, 0, 0) => {
                 assert_eq!(info.arch_legacy2.as_deref(), Some("x86_64"));
             }
-            QueryTargetReturns::V3_0_0(qapi::QemuTargetInfo { arch, .. })
-                if version >= (3, 0, 0) =>
-            {
+            QueryTargetReturns::V3_0_0(qapi::QemuTargetInfo {
+                arch, ..
+            }) if version >= (3, 0, 0) => {
                 let expected = if version < (10, 1, 0) {
                     qapi::SysEmuTarget::X8664
                 } else {
@@ -315,9 +319,7 @@ async fn qmp_reply_layout_uses_each_peer_version_in_band_and_oob() {
         let (client, server) = tokio::net::UnixStream::pair().unwrap();
         let mut peer = QmpSession::from_stream(server);
         let (client, ()) = tokio::join!(Qmp::from_stream(client), async {
-            peer.send_greeting(version.0, version.1, version.2)
-                .await
-                .unwrap();
+            peer.send_greeting(version.0, version.1, version.2).await.unwrap();
             peer.negotiate().await.unwrap();
         });
         let (client, _) = client.unwrap();
@@ -329,14 +331,18 @@ async fn qmp_reply_layout_uses_each_peer_version_in_band_and_oob() {
         let server_reply = reply.clone();
         let server = tokio::spawn(async move {
             for _ in 0..if version < (2, 12, 0) { 1 } else { 2 } {
-                assert_eq!(peer.recv_command().await.unwrap().0, "test-address");
+                assert_eq!(
+                    peer.recv_command().await.unwrap().0,
+                    "test-address"
+                );
                 peer.send_return(server_reply.clone()).await.unwrap();
             }
         });
         let value = client.execute(&TestAddress::default()).await.unwrap();
         assert_eq!(qapi::to_value(version, &value).unwrap(), reply);
         if version >= (2, 12, 0) {
-            let value = client.execute_oob(&TestAddress::default()).await.unwrap();
+            let value =
+                client.execute_oob(&TestAddress::default()).await.unwrap();
             assert_eq!(qapi::to_value(version, &value).unwrap(), reply);
         }
         client.shutdown().await;
@@ -353,9 +359,11 @@ async fn qga_reply_layout_uses_guest_version() {
     let server = tokio::spawn(async move {
         peer.handle_sync().await.unwrap();
         assert_eq!(peer.recv_command().await.unwrap().0, "guest-info");
-        peer.send_return(serde_json::json!({"version":"2.9.0","supported_commands":[]}))
-            .await
-            .unwrap();
+        peer.send_return(
+            serde_json::json!({"version":"2.9.0","supported_commands":[]}),
+        )
+        .await
+        .unwrap();
         assert_eq!(peer.recv_command().await.unwrap().0, "test-address");
         peer.send_return(server_reply).await.unwrap();
     });
@@ -366,16 +374,19 @@ async fn qga_reply_layout_uses_guest_version() {
 }
 
 #[tokio::test]
-async fn guest_agent_four_component_versions_use_their_first_three_components() {
+async fn guest_agent_four_component_versions_use_their_first_three_components()
+{
     for version in ["2.4.0.1", "2.8.1.1", "3.1.1.1-package"] {
         let (client, server) = tokio::net::UnixStream::pair().unwrap();
         let mut peer = QgaSession::from_stream(server);
         let server = tokio::spawn(async move {
             peer.handle_sync().await.unwrap();
             assert_eq!(peer.recv_command().await.unwrap().0, "guest-info");
-            peer.send_return(serde_json::json!({"version":version,"supported_commands":[]}))
-                .await
-                .unwrap();
+            peer.send_return(
+                serde_json::json!({"version":version,"supported_commands":[]}),
+            )
+            .await
+            .unwrap();
         });
         let client = Qga::from_stream(client).await.unwrap();
         let expected = match version {
@@ -389,19 +400,24 @@ async fn guest_agent_four_component_versions_use_their_first_three_components() 
 }
 
 #[tokio::test]
-async fn malformed_four_component_guest_versions_do_not_become_a_different_peer_version() {
+async fn malformed_four_component_guest_versions_do_not_become_a_different_peer_version()
+ {
     for version in ["2.8.1.x", "2.8.1.1.1", "2.8.1rc0.1", "2.8.1.4294967296"] {
         let (client, server) = tokio::net::UnixStream::pair().unwrap();
         let mut peer = QgaSession::from_stream(server);
         let server = tokio::spawn(async move {
             peer.handle_sync().await.unwrap();
             assert_eq!(peer.recv_command().await.unwrap().0, "guest-info");
-            peer.send_return(serde_json::json!({"version":version,"supported_commands":[]}))
-                .await
-                .unwrap();
+            peer.send_return(
+                serde_json::json!({"version":version,"supported_commands":[]}),
+            )
+            .await
+            .unwrap();
         });
         match Qga::from_stream(client).await {
-            Err(Error::AgentVersion(error)) => assert_eq!(error.input(), version),
+            Err(Error::AgentVersion(error)) => {
+                assert_eq!(error.input(), version)
+            }
             other => panic!("{version}: {other:?}"),
         }
         server.await.unwrap();
@@ -418,7 +434,8 @@ async fn guest_agent_replies_decode_into_the_return_type_of_its_release() {
             serde_json::json!({"paths": [{"path": "/", "trimmed": 4096}]}),
         ),
     ] {
-        let (mut client, mut peer) = support::qga_version(ClientOptions::default(), version).await;
+        let (mut client, mut peer) =
+            support::qga_version(ClientOptions::default(), version).await;
         let guest_fstrim = GuestFstrim::default();
         let (result, ()) = tokio::join!(client.execute(&guest_fstrim), async {
             assert_eq!(peer.recv_command().await.unwrap().0, "guest-fstrim");

@@ -9,22 +9,21 @@ mod inbound;
 pub(crate) mod qga;
 pub(crate) mod qmp;
 
+use crate::{Error, InvalidRequestKind, Result};
 pub use connection::QMP_QUEUE_CAPACITY;
 pub(crate) use inbound::{Inbound, SyncLine};
 pub use qmp::{Greeting, QemuVersion, VersionInfo};
-
-use crate::{Error, InvalidRequestKind, Result};
 use serde_json::Value;
 
 /// A request's bytes on the wire: its JSON, of at most `limit` bytes, and
 /// the line terminator.
 pub(crate) fn encode(value: &Value, limit: usize) -> Result<Vec<u8>> {
-    let mut bytes = serde_json::to_vec(value).map_err(|error| Error::Encode(error.into()))?;
+    let mut bytes = serde_json::to_vec(value)
+        .map_err(|error| Error::Encode(error.into()))?;
     if bytes.len() > limit {
-        return Err(Error::InvalidRequest(InvalidRequestKind::RequestTooLarge {
-            size: bytes.len(),
-            limit,
-        }));
+        return Err(Error::InvalidRequest(
+            InvalidRequestKind::RequestTooLarge { size: bytes.len(), limit },
+        ));
     }
     bytes.extend_from_slice(b"\r\n");
     Ok(bytes)

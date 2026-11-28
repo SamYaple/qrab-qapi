@@ -1,16 +1,18 @@
 //! Expansion of structs: records, the arguments of commands and the data of
 //! events, with their flattened bases and unions.
 
-use crate::attrs::{AttrRange, ItemAttrs, TypeAttrs};
-use crate::command::{check_command_keys, gen_command_impl, gen_event_impl};
-use crate::support::{
-    HelperNames, Version, active_check, annotate_item, check_disjoint_wires, decoding_selects,
-    flag_at_newest, newest_first, version_range_check, wire_name,
+use crate::{
+    attrs::{AttrRange, ItemAttrs, TypeAttrs},
+    command::{check_command_keys, gen_command_impl, gen_event_impl},
+    support::{
+        HelperNames, Version, active_check, annotate_item,
+        check_disjoint_wires, decoding_selects, flag_at_newest, newest_first,
+        version_range_check, wire_name,
+    },
 };
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::ext::IdentExt;
-use syn::{DeriveInput, Fields, Type};
+use syn::{DeriveInput, Fields, Type, ext::IdentExt};
 
 mod alias;
 mod construct;
@@ -52,7 +54,9 @@ impl FieldInfo {
     /// The runs of releases in which the field is its union's
     /// discriminator, from `added` (or the field's `added`) until `removed`
     /// (or the field's `removed`); `None` is a bound that neither gives.
-    pub(crate) fn discriminator_runs(&self) -> Vec<(Option<Version>, Option<Version>)> {
+    pub(crate) fn discriminator_runs(
+        &self,
+    ) -> Vec<(Option<Version>, Option<Version>)> {
         self.attrs
             .discriminator
             .iter()
@@ -83,7 +87,10 @@ impl FieldInfo {
 }
 
 /// The implementations of a struct, whose fields this checks.
-pub(crate) fn gen_struct(input_ast: &mut DeriveInput, ta: &TypeAttrs) -> syn::Result<TokenStream2> {
+pub(crate) fn gen_struct(
+    input_ast: &mut DeriveInput,
+    ta: &TypeAttrs,
+) -> syn::Result<TokenStream2> {
     let struct_name = input_ast.ident.clone();
     if let Some(span) = ta.union_branch {
         return Err(syn::Error::new(
@@ -152,10 +159,10 @@ pub(crate) fn gen_struct(input_ast: &mut DeriveInput, ta: &TypeAttrs) -> syn::Re
         ),
         name: &struct_name,
         name_str: struct_name.unraw().to_string(),
-        wire_name: ta
-            .name
-            .as_ref()
-            .map_or_else(|| struct_name.unraw().to_string(), |name| name.value()),
+        wire_name: ta.name.as_ref().map_or_else(
+            || struct_name.unraw().to_string(),
+            |name| name.value(),
+        ),
         ta,
         fields: &fields,
     };
@@ -171,7 +178,12 @@ pub(crate) fn gen_struct(input_ast: &mut DeriveInput, ta: &TypeAttrs) -> syn::Re
         expansion.de_plain()?
     };
     let command = if ta.command.is_some() {
-        gen_command_impl(&struct_name, &input_ast.vis, &expansion.wire_name, ta)?
+        gen_command_impl(
+            &struct_name,
+            &input_ast.vis,
+            &expansion.wire_name,
+            ta,
+        )?
     } else {
         TokenStream2::new()
     };
@@ -181,7 +193,8 @@ pub(crate) fn gen_struct(input_ast: &mut DeriveInput, ta: &TypeAttrs) -> syn::Re
         TokenStream2::new()
     };
     let display = expansion.display();
-    let construction = construct::construction(&struct_name, &input_ast.vis, &fields);
+    let construction =
+        construct::construction(&struct_name, &input_ast.vis, &fields);
     Ok(quote! {
         #ser
         #de
@@ -240,7 +253,9 @@ fn check_field(field: &FieldInfo) -> syn::Result<()> {
             (!attrs.features.is_empty(), "feature"),
             (attrs.condition.is_some(), "condition"),
         ];
-        if let Some((_, key)) = member_keys.into_iter().find(|(given, _)| *given) {
+        if let Some((_, key)) =
+            member_keys.into_iter().find(|(given, _)| *given)
+        {
             return Err(syn::Error::new(
                 span,
                 format!(
@@ -286,9 +301,13 @@ fn check_fields(ta: &TypeAttrs, fields: &[&FieldInfo]) -> syn::Result<()> {
         (Some((_, union)), Some(_)) => {
             check_discriminator_runs(ta, union, &discriminators)?;
             let why = if discriminators.len() > 1 {
-                Some("a union field with version-alternate discriminators must be `Option<T>`")
+                Some(
+                    "a union field with version-alternate discriminators must be `Option<T>`",
+                )
             } else if discriminators[0].is_option() {
-                Some("a union field with an optional discriminator must be `Option<T>`")
+                Some(
+                    "a union field with an optional discriminator must be `Option<T>`",
+                )
             } else {
                 None
             };
@@ -306,17 +325,12 @@ fn check_fields(ta: &TypeAttrs, fields: &[&FieldInfo]) -> syn::Result<()> {
             "qapi: `simple_union` describes the layout of a `union` field, which the struct lacks",
         ));
     }
-    let members: Vec<&FieldInfo> = fields
-        .iter()
-        .copied()
-        .filter(|field| !field.is_flattened())
-        .collect();
+    let members: Vec<&FieldInfo> =
+        fields.iter().copied().filter(|field| !field.is_flattened()).collect();
     // Fields that share a wire name thereby have lifetimes, and so are
     // options (see `check_field`).
     check_disjoint_wires(
-        members
-            .iter()
-            .map(|field| (field.wire(), &field.attrs, &field.ident)),
+        members.iter().map(|field| (field.wire(), &field.attrs, &field.ident)),
     )
 }
 
@@ -345,11 +359,15 @@ fn check_discriminator_runs(
     let mut runs = Vec::new();
     for (order, field) in discriminators.iter().copied().enumerate() {
         let attrs = &field.attrs;
-        let (since, until) = (attrs.since.or(ta.since), attrs.until.or(ta.until));
-        let owner = |own: Option<Version>| if own.is_some() { "field" } else { "type" };
-        let (added_owner, removed_owner) = (owner(attrs.since), owner(attrs.until));
+        let (since, until) =
+            (attrs.since.or(ta.since), attrs.until.or(ta.until));
+        let owner =
+            |own: Option<Version>| if own.is_some() { "field" } else { "type" };
+        let (added_owner, removed_owner) =
+            (owner(attrs.since), owner(attrs.until));
         for range in &attrs.discriminator {
-            let error = |message: String| Err(syn::Error::new(range.span, message));
+            let error =
+                |message: String| Err(syn::Error::new(range.span, message));
             if let Some(added) = range.added {
                 if since == Some(added) {
                     return error(format!(
@@ -402,11 +420,11 @@ fn check_discriminator_runs(
     // An open start sorts first, as `None` does.
     runs.sort_by_key(|run| run.start);
     let union_name = union.ident.unraw();
-    let (union_since, union_until) = (
-        union.attrs.since.or(ta.since),
-        union.attrs.until.or(ta.until),
-    );
-    let gap = |run: &DiscriminatorRun, from: Option<Version>, until: Option<Version>| {
+    let (union_since, union_until) =
+        (union.attrs.since.or(ta.since), union.attrs.until.or(ta.until));
+    let gap = |run: &DiscriminatorRun,
+               from: Option<Version>,
+               until: Option<Version>| {
         let releases = match (from, until) {
             (Some(from), Some(until)) => format!("from {from} until {until}"),
             (Some(from), None) => format!("from {from} on"),
@@ -415,14 +433,18 @@ fn check_discriminator_runs(
         };
         Err(syn::Error::new(
             run.range.span,
-            format!("qapi: no `discriminator` selects the branch of `{union_name}` {releases}"),
+            format!(
+                "qapi: no `discriminator` selects the branch of `{union_name}` {releases}"
+            ),
         ))
     };
     let mut covered = union_since;
     for (index, run) in runs.iter().enumerate() {
         match index.checked_sub(1).map(|previous| &runs[previous]) {
             None => {
-                if let Some(since) = union_since.filter(|_| run.start < union_since) {
+                if let Some(since) =
+                    union_since.filter(|_| run.start < union_since)
+                {
                     return Err(syn::Error::new(
                         run.range.span,
                         format!(
@@ -475,7 +497,9 @@ fn check_discriminator_runs(
     if let Some(until) = union_until.filter(|_| ends_after) {
         return Err(syn::Error::new(
             last.range.span,
-            format!("qapi: `discriminator` must end by the `union` field's `removed` ({until})"),
+            format!(
+                "qapi: `discriminator` must end by the `union` field's `removed` ({until})"
+            ),
         ));
     }
     if last.end != union_until {
@@ -510,8 +534,11 @@ impl StructExpansion<'_> {
     /// alternates of a member whose type changed, such as a discriminator
     /// (`NumaOptions.type` is `NumaOptionsKind` until 2.9 and
     /// `NumaOptionsType` after), newest first.
-    pub(crate) fn shared_wires(&self) -> std::collections::BTreeMap<String, Vec<&FieldInfo>> {
-        let mut groups = std::collections::BTreeMap::<String, Vec<&FieldInfo>>::new();
+    pub(crate) fn shared_wires(
+        &self,
+    ) -> std::collections::BTreeMap<String, Vec<&FieldInfo>> {
+        let mut groups =
+            std::collections::BTreeMap::<String, Vec<&FieldInfo>>::new();
         for field in self.members() {
             groups.entry(field.wire()).or_default().push(field);
         }
@@ -524,11 +551,16 @@ impl StructExpansion<'_> {
 
     /// Whether decoding takes a gated flattened field: in a scope, where it
     /// is active, and unscoped, unless it was removed.
-    pub(crate) fn flattened_selected(&self, field: &FieldInfo) -> Option<TokenStream2> {
-        version_range_check(field.attrs.since, field.attrs.until).map(|active| {
-            let latest = field.attrs.until.is_none();
-            decoding_selects(quote! { #latest }, active)
-        })
+    pub(crate) fn flattened_selected(
+        &self,
+        field: &FieldInfo,
+    ) -> Option<TokenStream2> {
+        version_range_check(field.attrs.since, field.attrs.until).map(
+            |active| {
+                let latest = field.attrs.until.is_none();
+                decoding_selects(quote! { #latest }, active)
+            },
+        )
     }
 
     /// Whether the historical simple-union layout, with the branch payload
@@ -539,9 +571,8 @@ impl StructExpansion<'_> {
         if ranges.is_empty() {
             return quote! { false };
         }
-        let checks = ranges
-            .iter()
-            .map(|range| active_check(range.added, range.removed));
+        let checks =
+            ranges.iter().map(|range| active_check(range.added, range.removed));
         let active = quote! { (false #(|| #checks)*) };
         if decoding {
             let latest = flag_at_newest(ranges);
@@ -614,8 +645,12 @@ pub(crate) fn discriminators(fields: &[FieldInfo]) -> Vec<&FieldInfo> {
 
 /// The `T` of `Option<T>`, or an error spanned at `ty` explaining `why` it
 /// must be an `Option`.
-pub(crate) fn option_inner<'a>(ty: &'a Type, why: &str) -> syn::Result<&'a Type> {
-    inner_option_type(ty).ok_or_else(|| syn::Error::new_spanned(ty, format!("qapi: {why}")))
+pub(crate) fn option_inner<'a>(
+    ty: &'a Type,
+    why: &str,
+) -> syn::Result<&'a Type> {
+    inner_option_type(ty)
+        .ok_or_else(|| syn::Error::new_spanned(ty, format!("qapi: {why}")))
 }
 
 /// Extract the inner type `T` from `Option<T>`. Returns `None` if the type

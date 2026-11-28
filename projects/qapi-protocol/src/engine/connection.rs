@@ -1,7 +1,8 @@
 //! The QMP connection after the handshake: admission, request IDs, one
 //! frame written at a time, reply routing, events, deadlines and closure.
 use crate::{
-    ClientOptions, Error, InvalidRequestKind, ProtocolViolation, QmpEvent, Result, TimeoutPhase,
+    ClientOptions, Error, InvalidRequestKind, ProtocolViolation, QmpEvent,
+    Result, TimeoutPhase,
     engine::{encode, qmp::event},
     wire,
 };
@@ -119,7 +120,11 @@ impl<W> QmpConnection<W> {
     /// The connection of a handshake that negotiated `oob`, with the events
     /// that arrived during the handshake (`None` for one dropped) as its
     /// first outputs.
-    pub fn new(options: &ClientOptions, oob: bool, events: Vec<Option<QmpEvent>>) -> Self {
+    pub fn new(
+        options: &ClientOptions,
+        oob: bool,
+        events: Vec<Option<QmpEvent>>,
+    ) -> Self {
         Self {
             limit: options.max_message_bytes,
             event_limit: options.max_event_bytes,
@@ -140,7 +145,11 @@ impl<W> QmpConnection<W> {
     /// Queue a request. It is refused, with its waiter back, when it cannot
     /// be sent: too large, OOB without the peer's consent, with too many
     /// descriptors, or on a closed connection.
-    pub fn submit(&mut self, request: Request, waiter: W) -> std::result::Result<(), (W, Error)> {
+    pub fn submit(
+        &mut self,
+        request: Request,
+        waiter: W,
+    ) -> std::result::Result<(), (W, Error)> {
         if let Err(error) = check(
             &request.json,
             request.fds.len(),
@@ -187,18 +196,13 @@ impl<W> QmpConnection<W> {
     fn start_next(&mut self, live: &mut impl FnMut(&W) -> bool) {
         self.queued.retain(|request| live(&request.waiter));
         while let Some(index) = self.next_queued() {
-            let Queued {
-                mut json,
-                fds,
-                oob,
-                deadline,
-                waiter,
-            } = self
+            let Queued { mut json, fds, oob, deadline, waiter } = self
                 .queued
                 .remove(index)
                 .expect("the position is in the queue");
             let Some(id) = self.last_id.checked_add(1) else {
-                let reason = Arc::new(Error::Protocol(ProtocolViolation::IdsExhausted));
+                let reason =
+                    Arc::new(Error::Protocol(ProtocolViolation::IdsExhausted));
                 self.outputs.push_back(Output::Reply(
                     waiter,
                     Err(Error::Disconnected(reason.clone())),
@@ -215,21 +219,9 @@ impl<W> QmpConnection<W> {
                     continue;
                 }
             };
-            self.pending.insert(
-                id,
-                Pending {
-                    deadline,
-                    oob,
-                    waiter,
-                },
-            );
+            self.pending.insert(id, Pending { deadline, oob, waiter });
             self.in_flight[usize::from(oob)] += 1;
-            self.writing = Some(Writing {
-                id,
-                bytes,
-                offset: 0,
-                fds,
-            });
+            self.writing = Some(Writing { id, bytes, offset: 0, fds });
             return;
         }
     }
@@ -305,8 +297,7 @@ impl<W> QmpConnection<W> {
         }
         let request = self.pending.remove(&id).expect("the ID is pending");
         self.in_flight[usize::from(request.oob)] -= 1;
-        self.outputs
-            .push_back(Output::Reply(request.waiter, response));
+        self.outputs.push_back(Output::Reply(request.waiter, response));
         Ok(())
     }
 
@@ -329,9 +320,7 @@ impl<W> QmpConnection<W> {
             if request.deadline <= now {
                 self.outputs.push_back(Output::Reply(
                     request.waiter,
-                    Err(Error::Timeout {
-                        phase: TimeoutPhase::BeforeDispatch,
-                    }),
+                    Err(Error::Timeout { phase: TimeoutPhase::BeforeDispatch }),
                 ));
             } else {
                 kept.push_back(request);
@@ -352,9 +341,7 @@ impl<W> QmpConnection<W> {
             let request = self.pending.remove(&id).expect("the ID is pending");
             self.outputs.push_back(Output::Reply(
                 request.waiter,
-                Err(Error::Timeout {
-                    phase: TimeoutPhase::AfterDispatch,
-                }),
+                Err(Error::Timeout { phase: TimeoutPhase::AfterDispatch }),
             ));
         }
         self.fail(Arc::new(Error::Timeout {
@@ -373,7 +360,8 @@ impl<W> QmpConnection<W> {
         if self.closed.is_some() {
             return;
         }
-        let mut pending: Vec<(u64, Pending<W>)> = self.pending.drain().collect();
+        let mut pending: Vec<(u64, Pending<W>)> =
+            self.pending.drain().collect();
         pending.sort_unstable_by_key(|(id, _)| *id);
         for (_, request) in pending {
             self.outputs.push_back(Output::Reply(
@@ -420,7 +408,9 @@ pub(crate) fn check(
 ) -> Result<()> {
     encode(json, limit)?;
     if oob && !negotiated {
-        return Err(Error::InvalidRequest(InvalidRequestKind::OobNotNegotiated));
+        return Err(Error::InvalidRequest(
+            InvalidRequestKind::OobNotNegotiated,
+        ));
     }
     if fds > MAX_FDS {
         return Err(Error::InvalidRequest(InvalidRequestKind::TooManyFds {
@@ -432,11 +422,7 @@ pub(crate) fn check(
 }
 
 fn capacity(oob: bool) -> usize {
-    if oob {
-        OOB_CAPACITY
-    } else {
-        QMP_QUEUE_CAPACITY
-    }
+    if oob { OOB_CAPACITY } else { QMP_QUEUE_CAPACITY }
 }
 
 #[cfg(test)]
@@ -450,27 +436,28 @@ mod tests {
 
     fn request(name: &str, oob: bool, deadline: Instant) -> Request {
         let verb = if oob { "exec-oob" } else { "execute" };
-        Request {
-            json: json!({verb: name}),
-            fds: Vec::new(),
-            oob,
-            deadline,
-        }
+        Request { json: json!({verb: name}), fds: Vec::new(), oob, deadline }
     }
 
     /// Write every frame that can go now, whole, and return their JSON.
-    fn write_all(connection: &mut QmpConnection<u32>, now: Instant) -> Vec<Value> {
+    fn write_all(
+        connection: &mut QmpConnection<u32>,
+        now: Instant,
+    ) -> Vec<Value> {
         let mut frames = Vec::new();
         while let Some(transmit) = connection.poll_transmit(now, |_| true) {
             let bytes = transmit.bytes.to_vec();
             connection.advance(bytes.len());
-            let json = bytes.strip_suffix(b"\r\n").expect("a CRLF ends a frame");
+            let json =
+                bytes.strip_suffix(b"\r\n").expect("a CRLF ends a frame");
             frames.push(serde_json::from_slice(json).unwrap());
         }
         frames
     }
 
-    fn outputs(connection: &mut QmpConnection<u32>) -> Vec<(u32, Result<String>)> {
+    fn outputs(
+        connection: &mut QmpConnection<u32>,
+    ) -> Vec<(u32, Result<String>)> {
         let mut replies = Vec::new();
         while let Some(output) = connection.poll_output() {
             if let Output::Reply(waiter, result) = output {
@@ -496,7 +483,8 @@ mod tests {
                 .unwrap();
         }
         let frames = write_all(&mut connection, now);
-        let ids: Vec<&Value> = frames.iter().map(|frame| &frame["id"]).collect();
+        let ids: Vec<&Value> =
+            frames.iter().map(|frame| &frame["id"]).collect();
         assert_eq!(ids, [&json!(1), &json!(2), &json!(3)]);
         assert_eq!(frames[0]["execute"], "query-status");
         assert_eq!(connection.queue_depth(), 3);
@@ -520,10 +508,7 @@ mod tests {
         let mut getfd = request("getfd", false, now + Duration::from_secs(5));
         getfd.json["arguments"] = json!({"fdname": "tap0"});
         getfd.fds = vec![read, write];
-        connection
-            .submit(getfd, 7)
-            .map_err(|(_, error)| error)
-            .unwrap();
+        connection.submit(getfd, 7).map_err(|(_, error)| error).unwrap();
         let transmit = connection.poll_transmit(now, |_| true).unwrap();
         let whole = transmit.bytes.to_vec();
         assert_eq!(transmit.fds.len(), 2);
@@ -585,7 +570,8 @@ mod tests {
         let names: Vec<String> = write_all(&mut connection, now)
             .iter()
             .map(|frame| {
-                let name = frame["exec-oob"].as_str().or(frame["execute"].as_str());
+                let name =
+                    frame["exec-oob"].as_str().or(frame["execute"].as_str());
                 name.unwrap().to_owned()
             })
             .collect();
@@ -631,10 +617,14 @@ mod tests {
                 .unwrap();
         }
         let mut ids = Vec::new();
-        while let Some(transmit) = connection.poll_transmit(now, |waiter| *waiter != 1) {
+        while let Some(transmit) =
+            connection.poll_transmit(now, |waiter| *waiter != 1)
+        {
             let bytes = transmit.bytes.to_vec();
             connection.advance(bytes.len());
-            ids.push(serde_json::from_slice::<Value>(&bytes).unwrap()["id"].clone());
+            ids.push(
+                serde_json::from_slice::<Value>(&bytes).unwrap()["id"].clone(),
+            );
         }
         assert_eq!(ids, [json!(1), json!(2)], "waiter 1 got no ID");
         assert!(outputs(&mut connection).is_empty(), "and no reply");
@@ -681,12 +671,7 @@ mod tests {
         connection.handle_timeout(soon);
         assert!(matches!(
             outputs(&mut connection)[..],
-            [(
-                8,
-                Err(Error::Timeout {
-                    phase: TimeoutPhase::BeforeDispatch
-                })
-            )]
+            [(8, Err(Error::Timeout { phase: TimeoutPhase::BeforeDispatch }))]
         ));
         assert!(connection.close_reason().is_none());
         assert_eq!(connection.poll_timeout(), Some(later));
@@ -713,12 +698,7 @@ mod tests {
         let replies = outputs(&mut connection);
         assert!(matches!(
             replies[0],
-            (
-                1,
-                Err(Error::Timeout {
-                    phase: TimeoutPhase::AfterDispatch
-                })
-            )
+            (1, Err(Error::Timeout { phase: TimeoutPhase::AfterDispatch }))
         ));
         let others: Vec<u32> = replies[1..]
             .iter()
@@ -757,10 +737,7 @@ mod tests {
         assert!(connection.poll_transmit(soon, |_| true).is_none());
         assert!(matches!(
             outputs(&mut connection)[..],
-            [
-                (0, Err(Error::Timeout { .. })),
-                (1, Err(Error::Disconnected(_)))
-            ]
+            [(0, Err(Error::Timeout { .. })), (1, Err(Error::Disconnected(_)))]
         ));
     }
 
@@ -817,7 +794,9 @@ mod tests {
                 .unwrap();
         }
         write_all(&mut connection, now);
-        connection.handle_frame(br#"{"error": {"class": "GenericError", "desc": "no"}, "id": 1}"#);
+        connection.handle_frame(
+            br#"{"error": {"class": "GenericError", "desc": "no"}, "id": 1}"#,
+        );
         assert!(matches!(
             &outputs(&mut connection)[..],
             [(0, Err(Error::Remote(error)))] if error.class == "GenericError"
@@ -880,14 +859,17 @@ mod tests {
     fn requests_that_cannot_be_sent_are_refused_with_their_waiter() {
         let deadline = Instant::now() + Duration::from_secs(5);
         let options = ClientOptions::default().with_max_message_bytes(64);
-        let mut connection: QmpConnection<u32> = QmpConnection::new(&options, false, Vec::new());
+        let mut connection: QmpConnection<u32> =
+            QmpConnection::new(&options, false, Vec::new());
         let mut large = request("query-status", false, deadline);
         large.json["arguments"] = json!({"padding": "x".repeat(64)});
         assert!(matches!(
             connection.submit(large, 1),
             Err((
                 1,
-                Error::InvalidRequest(InvalidRequestKind::RequestTooLarge { .. })
+                Error::InvalidRequest(
+                    InvalidRequestKind::RequestTooLarge { .. }
+                )
             ))
         ));
         assert!(matches!(
@@ -926,11 +908,9 @@ mod tests {
         tight.json["arguments"] = json!({"padding": ""});
         let size = serde_json::to_vec(&tight.json).unwrap().len();
         let options = ClientOptions::default().with_max_message_bytes(size);
-        let mut connection: QmpConnection<u32> = QmpConnection::new(&options, false, Vec::new());
-        connection
-            .submit(tight, 0)
-            .map_err(|(_, error)| error)
-            .unwrap();
+        let mut connection: QmpConnection<u32> =
+            QmpConnection::new(&options, false, Vec::new());
+        connection.submit(tight, 0).map_err(|(_, error)| error).unwrap();
         connection
             .submit(request("stop", false, deadline), 1)
             .map_err(|(_, error)| error)

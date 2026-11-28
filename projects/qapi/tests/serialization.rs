@@ -2,13 +2,13 @@
 // release no longer has and which are therefore deprecated.
 #![allow(deprecated)]
 
-use qapi::commands::*;
-use qapi::events::*;
-use qapi::*;
+use qapi::{commands::*, events::*, *};
 
 /// Serialize for a peer newer than every release, so that every
 /// since-gated field is included. Decoding stays unscoped (newest layout).
-fn to_json<T: serde::Serialize + ?Sized>(value: &T) -> serde_json::Result<String> {
+fn to_json<T: serde::Serialize + ?Sized>(
+    value: &T,
+) -> serde_json::Result<String> {
     with_version((99, 0, 0), || serde_json::to_string(value))
 }
 
@@ -237,7 +237,8 @@ fn data_types_at_crate_root() {
         serde_json::from_str(r#"{"running":true,"status":"running"}"#).unwrap();
 
     // ErrorClass is an enum data type
-    let _: qapi::ErrorClass = serde_json::from_str(r#""GenericError""#).unwrap();
+    let _: qapi::ErrorClass =
+        serde_json::from_str(r#""GenericError""#).unwrap();
 }
 
 /// QGA commands must live in qapi::qga::commands.
@@ -393,8 +394,10 @@ fn sev_info_unknown_discriminator_errors() {
 /// `file`, which QEMU 8.0+ reports for every file-posix node.
 #[test]
 fn shared_wire_discriminator_decodes_current_values() {
-    let file: ImageInfoSpecific =
-        serde_json::from_str(r#"{"type":"file","data":{"extent-size-hint":1048576}}"#).unwrap();
+    let file: ImageInfoSpecific = serde_json::from_str(
+        r#"{"type":"file","data":{"extent-size-hint":1048576}}"#,
+    )
+    .unwrap();
     assert!(file.r_type.is_none());
     assert!(matches!(file.r#type, Some(ImageInfoSpecificKind::File)));
     let Some(ImageInfoSpecificBranch::File(wrapper)) = file.u else {
@@ -407,12 +410,14 @@ fn shared_wire_discriminator_decodes_current_values() {
     .unwrap();
     assert!(matches!(qcow2.r#type, Some(ImageInfoSpecificKind::Qcow2)));
     assert!(matches!(qcow2.u, Some(ImageInfoSpecificBranch::Qcow2(_))));
-    let error = serde_json::from_str::<ImageInfoSpecific>(r#"{"type":"bogus","data":{}}"#)
-        .expect_err("an unknown discriminator is refused");
+    let error = serde_json::from_str::<ImageInfoSpecific>(
+        r#"{"type":"bogus","data":{}}"#,
+    )
+    .expect_err("an unknown discriminator is refused");
     assert!(
-        error
-            .to_string()
-            .starts_with("ImageInfoSpecific.type: unknown variant `bogus`, expected one of"),
+        error.to_string().starts_with(
+            "ImageInfoSpecific.type: unknown variant `bogus`, expected one of"
+        ),
         "{error}"
     );
 }

@@ -157,20 +157,15 @@ pub struct VersionAlreadySet {
 /// [`VersionAlreadySet`], even for an equal version. Protocol clients scope
 /// serialization to their own peer, and code that talks to more than one
 /// peer should do the same with [`with_version`] or [`to_value`].
-pub fn set_qemu_version(requested: (u32, u32, u32)) -> Result<(), VersionAlreadySet> {
+pub fn set_qemu_version(
+    requested: (u32, u32, u32),
+) -> Result<(), VersionAlreadySet> {
     let mut stored = false;
     let existing = *QEMU_VERSION.get_or_init(|| {
         stored = true;
         requested
     });
-    if stored {
-        Ok(())
-    } else {
-        Err(VersionAlreadySet {
-            existing,
-            requested,
-        })
-    }
+    if stored { Ok(()) } else { Err(VersionAlreadySet { existing, requested }) }
 }
 
 /// Serialize a QAPI value for a particular peer version.
@@ -237,10 +232,8 @@ pub fn to_value<T: serde::Serialize + ?Sized>(
         .find(|unavailable| carries(&text, &unavailable.message))
     {
         Some(Unavailable { name, version, .. }) => {
-            let error = EncodeError::Unavailable {
-                name: name.clone(),
-                version,
-            };
+            let error =
+                EncodeError::Unavailable { name: name.clone(), version };
             // An enclosing `to_value` reports it too, as the error that
             // carries it propagates there.
             record_unavailable(name, version, error.to_string());
@@ -256,8 +249,9 @@ fn carries(text: &str, message: &str) -> bool {
     text.match_indices(message).any(|(at, _)| {
         let before = text[..at].chars().next_back();
         let after = text[at + message.len()..].chars().next();
-        !before.is_some_and(|c| c.is_alphanumeric() || matches!(c, '_' | ':' | '.'))
-            && !after.is_some_and(|c| c.is_alphanumeric() || c == '_')
+        !before.is_some_and(|c| {
+            c.is_alphanumeric() || matches!(c, '_' | ':' | '.')
+        }) && !after.is_some_and(|c| c.is_alphanumeric() || c == '_')
     })
 }
 
@@ -297,11 +291,7 @@ thread_local! {
 fn record_unavailable(name: String, version: (u32, u32, u32), message: String) {
     UNAVAILABLE.with_borrow_mut(|slot| {
         if let Some(recorded) = slot {
-            recorded.push(Unavailable {
-                name,
-                version,
-                message,
-            });
+            recorded.push(Unavailable { name, version, message });
         }
     });
 }
@@ -314,7 +304,9 @@ fn unavailable_message(name: &str, version: (u32, u32, u32)) -> String {
             "{name} cannot be serialized without a QEMU version; \
              wrap serialization in qapi::with_version(peer_version, ..) or use qapi::to_value"
         ),
-        (major, minor, patch) => format!("{name} is not available in QEMU {major}.{minor}.{patch}"),
+        (major, minor, patch) => {
+            format!("{name} is not available in QEMU {major}.{minor}.{patch}")
+        }
     }
 }
 
@@ -373,25 +365,23 @@ pub fn qemu_version() -> (u32, u32, u32) {
 /// assert_eq!(qapi_core::parse_qga_version("9.1.0-rc0"), Ok((9, 1, 0)));
 /// assert!(qapi_core::parse_qga_version("9.1").is_err());
 /// ```
-pub fn parse_qga_version(version: &str) -> Result<(u32, u32, u32), VersionParseError> {
+pub fn parse_qga_version(
+    version: &str,
+) -> Result<(u32, u32, u32), VersionParseError> {
     let trimmed = version.trim().trim_start_matches(['v', 'V']);
     let parts: Vec<&str> = trimmed.split('.').collect();
-    let error = |kind| VersionParseError {
-        input: version.to_owned(),
-        kind,
-    };
+    let error = |kind| VersionParseError { input: version.to_owned(), kind };
     let component = |which, text: &str| {
         // `u32::from_str` takes a leading `+`, which no release has; parsed
         // alone, the sign is the invalid digit it is.
         let digits = if text.starts_with('+') { "+" } else { text };
-        digits
-            .parse::<u32>()
-            .map_err(|source| error(VersionParseErrorKind::Component { which, source }))
+        digits.parse::<u32>().map_err(|source| {
+            error(VersionParseErrorKind::Component { which, source })
+        })
     };
     fn leading_digits(text: &str) -> &str {
-        let end = text
-            .find(|c: char| !c.is_ascii_digit())
-            .unwrap_or(text.len());
+        let end =
+            text.find(|c: char| !c.is_ascii_digit()).unwrap_or(text.len());
         &text[..end]
     }
     let (major, minor, patch) = match parts[..] {

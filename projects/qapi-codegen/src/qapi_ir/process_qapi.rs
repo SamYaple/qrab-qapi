@@ -4,14 +4,14 @@
 //! so far, keyed by QAPI name.
 
 use super::{
-    ARGUMENTS_TYPE, Attribute, Enum, EnumVariant, EnumVariantKind, Metadata, SchemaItem, Struct,
-    StructField, builtin_type,
+    ARGUMENTS_TYPE, Attribute, Enum, EnumVariant, EnumVariantKind, Metadata,
+    SchemaItem, Struct, StructField, builtin_type,
 };
-use crate::qapi_ir::{rustify_field_name, rustify_name, rustify_variant};
 use crate::{
-    MembersOrRef, QapiAlternate, QapiAlternative, QapiAlternatives, QapiCommand, QapiEnum,
-    QapiEnumValue, QapiEvent, QapiMember, QapiStruct, QapiTypeRef, QapiUnion,
-    extract_since_from_comment,
+    MembersOrRef, QapiAlternate, QapiAlternative, QapiAlternatives,
+    QapiCommand, QapiEnum, QapiEnumValue, QapiEvent, QapiMember, QapiStruct,
+    QapiTypeRef, QapiUnion, extract_since_from_comment,
+    qapi_ir::{rustify_field_name, rustify_name, rustify_variant},
 };
 use std::collections::{HashMap, HashSet};
 
@@ -41,14 +41,15 @@ pub enum LowerError {
     #[error("QAPI {definition} references missing type {name}")]
     UnknownType { definition: String, name: String },
     /// A union discriminator that is not a member of the union's base.
-    #[error("QAPI union {union} has no discriminator field {discriminator} in its base")]
-    MissingDiscriminator {
-        union: String,
-        discriminator: String,
-    },
+    #[error(
+        "QAPI union {union} has no discriminator field {discriminator} in its base"
+    )]
+    MissingDiscriminator { union: String, discriminator: String },
     /// A simple union whose base has a member with the wire name, `type`,
     /// or the IR name, `r-type`, of the discriminator that the lowering adds.
-    #[error("QAPI union {union}: member '{member}' clashes with the discriminator 'type'")]
+    #[error(
+        "QAPI union {union}: member '{member}' clashes with the discriminator 'type'"
+    )]
     DiscriminatorClash { union: String, member: String },
     /// A legacy alternate (`'discriminator': {}`) lowered as a union, a
     /// generator bug: the lowering of a schema lowers it as an alternate.
@@ -98,9 +99,7 @@ macro_rules! add_feat {
 /// Remove the schema indentation used for member-description continuations.
 fn member_documentation(lines: &[&str]) -> String {
     let start = usize::from(
-        lines
-            .first()
-            .is_some_and(|line| !line.starts_with([' ', '\t'])),
+        lines.first().is_some_and(|line| !line.starts_with([' ', '\t'])),
     );
     let indent = lines
         .iter()
@@ -127,7 +126,9 @@ fn member_wire_name<'a>(name: &'a str, meta: &'a Metadata) -> &'a str {
     meta.attributes
         .iter()
         .find_map(|attr| match attr {
-            Attribute::Item { name, value } if name == "name" => Some(value.as_str()),
+            Attribute::Item { name, value } if name == "name" => {
+                Some(value.as_str())
+            }
             _ => None,
         })
         .unwrap_or(name)
@@ -139,11 +140,8 @@ macro_rules! add_schema_facts {
     ($meta:expr, $kind:expr, $docs:expr, $variants:expr) => {
         $meta.schema_item = Some($kind);
         if let Some(doc) = $docs {
-            let body = if doc.body.is_empty() {
-                &doc.description
-            } else {
-                &doc.body
-            };
+            let body =
+                if doc.body.is_empty() { &doc.description } else { &doc.body };
             if !body.is_empty() {
                 $meta.schema_doc = Some(body.join("\n"));
             }
@@ -152,10 +150,9 @@ macro_rules! add_schema_facts {
             }
             let mut members = Vec::new();
             for (name, desc) in &doc.fields {
-                if let Some(value) = $variants
-                    .iter_mut()
-                    .find(|value| member_wire_name(&value.name, &value.meta) == *name)
-                {
+                if let Some(value) = $variants.iter_mut().find(|value| {
+                    member_wire_name(&value.name, &value.meta) == *name
+                }) {
                     let since = extract_since_from_comment(desc)
                         .and_then(|since| normalize_since_version(&since));
                     value.meta.schema_doc = Some(member_documentation(desc));
@@ -176,7 +173,9 @@ macro_rules! add_schema_facts {
             for ((member, field), desc) in members {
                 if let Some(doc) = $variants
                     .iter_mut()
-                    .find(|value| member_wire_name(&value.name, &value.meta) == member)
+                    .find(|value| {
+                        member_wire_name(&value.name, &value.meta) == member
+                    })
                     .and_then(|value| value.meta.schema_doc.as_mut())
                 {
                     doc.push('\n');
@@ -230,7 +229,10 @@ fn process_type_ref<'a>(
     }
 }
 
-fn process_alternative(q: QapiAlternative, definition: &str) -> Result<EnumVariant, LowerError> {
+fn process_alternative(
+    q: QapiAlternative,
+    definition: &str,
+) -> Result<EnumVariant, LowerError> {
     let (r#type, array) = process_type_ref(&q.r#type, definition, &q.name)?;
 
     let mut meta = Metadata::default();
@@ -238,8 +240,7 @@ fn process_alternative(q: QapiAlternative, definition: &str) -> Result<EnumVaria
         meta.attributes.push(attr);
     }
     if let Some(condition) = q.r#if {
-        meta.attributes
-            .push(Attribute::with_value("condition", condition));
+        meta.attributes.push(Attribute::with_value("condition", condition));
     }
 
     Ok(EnumVariant {
@@ -262,23 +263,23 @@ pub(crate) fn process_alternate(q: QapiAlternate) -> Result<Enum, LowerError> {
         meta.attributes.push(attr);
     }
     if let Some(condition) = q.r#if {
-        meta.attributes
-            .push(Attribute::with_value("condition", condition));
+        meta.attributes.push(Attribute::with_value("condition", condition));
     }
     add_feat! {meta, q.features};
     add_schema_facts! {meta, SchemaItem::Alternate, q.doc, &mut variants};
 
-    Ok(Enum {
-        name: q.name.into(),
-        variants,
-        meta,
-    })
+    Ok(Enum { name: q.name.into(), variants, meta })
 }
 
 /// Lower a legacy alternate, the union with an empty discriminator
 /// (`'discriminator': {}`) of QEMU 1.7 to 2.3, as the alternate it is.
-pub(crate) fn process_legacy_alternate(q: QapiUnion) -> Result<Enum, LowerError> {
-    if !q.legacy_alternate || q.discriminator.is_some() || q.base != MembersOrRef::Unset {
+pub(crate) fn process_legacy_alternate(
+    q: QapiUnion,
+) -> Result<Enum, LowerError> {
+    if !q.legacy_alternate
+        || q.discriminator.is_some()
+        || q.base != MembersOrRef::Unset
+    {
         return Err(LowerError::NotLegacyAlternate {
             union: q.name.to_string(),
         });
@@ -301,8 +302,7 @@ fn process_enum_value(q: QapiEnumValue) -> EnumVariant {
         meta.attributes.push(attr);
     }
     if let Some(condition) = q.r#if {
-        meta.attributes
-            .push(Attribute::with_value("condition", condition));
+        meta.attributes.push(Attribute::with_value("condition", condition));
     }
     add_feat! {meta, q.r#features};
 
@@ -327,21 +327,19 @@ pub(crate) fn process_enum(q: QapiEnum) -> Enum {
         meta.attributes.push(attr);
     }
     if let Some(condition) = q.r#if {
-        meta.attributes
-            .push(Attribute::with_value("condition", condition));
+        meta.attributes.push(Attribute::with_value("condition", condition));
     }
     add_feat! {meta, q.r#features};
     add_schema_facts! {meta, SchemaItem::Enum, q.doc, &mut variants};
 
-    Enum {
-        name: q.name.into(),
-        variants,
-        meta,
-    }
+    Enum { name: q.name.into(), variants, meta }
 }
 
 /// Lower a member of `definition`, which must have a named or array type.
-pub(crate) fn process_member(q: QapiMember, definition: &str) -> Result<StructField, LowerError> {
+pub(crate) fn process_member(
+    q: QapiMember,
+    definition: &str,
+) -> Result<StructField, LowerError> {
     let (r#type, array) = process_type_ref(&q.r#type, definition, &q.name)?;
 
     let mut meta = Metadata::default();
@@ -349,8 +347,7 @@ pub(crate) fn process_member(q: QapiMember, definition: &str) -> Result<StructFi
         meta.attributes.push(attr);
     }
     if let Some(condition) = q.r#if {
-        meta.attributes
-            .push(Attribute::with_value("condition", condition));
+        meta.attributes.push(Attribute::with_value("condition", condition));
     }
     add_feat! {meta, q.features};
     Ok(StructField {
@@ -374,8 +371,11 @@ fn process_member_with_inline(
     names: &mut HashSet<String>,
 ) -> Result<(StructField, Vec<Struct>), LowerError> {
     if let QapiTypeRef::InlineStruct(members) = q.r#type {
-        let preferred =
-            super::escape_reserved(format!("{}{}", rustify_name(prefix), rustify_name(&q.name)));
+        let preferred = super::escape_reserved(format!(
+            "{}{}",
+            rustify_name(prefix),
+            rustify_name(&q.name)
+        ));
         let mut inline_name = preferred.clone();
         let mut suffix = 0;
         while !names.insert(inline_name.clone()) {
@@ -421,8 +421,7 @@ fn process_member_with_inline(
             meta.attributes.push(attr);
         }
         if let Some(condition) = member_condition {
-            meta.attributes
-                .push(Attribute::with_value("condition", condition));
+            meta.attributes.push(Attribute::with_value("condition", condition));
         }
         add_feat! {meta, q.features};
         let field = StructField {
@@ -459,12 +458,19 @@ pub(crate) fn process_struct(
     let mut fields = Vec::new();
     let mut extracted = Vec::new();
     if let Some(base) = q.base.as_ref() {
-        fields.extend(lookup_struct(structs_lookup, &q.name, base)?.fields.clone());
+        fields.extend(
+            lookup_struct(structs_lookup, &q.name, base)?.fields.clone(),
+        );
     }
     let condition = q.r#if.as_ref().map(ToString::to_string);
     for member in q.data {
-        let (field, inline) =
-            process_member_with_inline(member, &q.name, &q.name, condition.as_deref(), names)?;
+        let (field, inline) = process_member_with_inline(
+            member,
+            &q.name,
+            &q.name,
+            condition.as_deref(),
+            names,
+        )?;
         fields.push(field);
         extracted.extend(inline);
     }
@@ -473,20 +479,12 @@ pub(crate) fn process_struct(
         meta.attributes.push(attr);
     }
     if let Some(condition) = condition {
-        meta.attributes
-            .push(Attribute::with_value("condition", condition));
+        meta.attributes.push(Attribute::with_value("condition", condition));
     }
     add_feat! {meta, q.r#features};
     add_schema_facts! {meta, SchemaItem::Struct, q.doc, &mut fields};
 
-    Ok((
-        Struct {
-            name: q.name.into(),
-            fields,
-            meta,
-        },
-        extracted,
-    ))
+    Ok((Struct { name: q.name.into(), fields, meta }, extracted))
 }
 
 fn lookup_struct<'a>(
@@ -494,12 +492,10 @@ fn lookup_struct<'a>(
     definition: &str,
     name: &str,
 ) -> Result<&'a Struct, LowerError> {
-    structs_lookup
-        .get(name)
-        .ok_or_else(|| LowerError::UnknownType {
-            definition: definition.to_owned(),
-            name: name.to_owned(),
-        })
+    structs_lookup.get(name).ok_or_else(|| LowerError::UnknownType {
+        definition: definition.to_owned(),
+        name: name.to_owned(),
+    })
 }
 
 /// Lower a flat or simple union.
@@ -536,55 +532,58 @@ pub(crate) fn process_union(
 
     let mut fields = process_members_or_ref(q.base, &q_name, structs_lookup)?;
 
-    let discriminator_type = if let Some(discriminator) = q.discriminator.as_deref() {
-        let mut discriminator_type = None;
-        for field in &mut fields {
-            if field.name == discriminator {
-                field.meta.attributes.push(Attribute::new("discriminator"));
-                discriminator_type = Some(field.r#type.clone());
+    let discriminator_type =
+        if let Some(discriminator) = q.discriminator.as_deref() {
+            let mut discriminator_type = None;
+            for field in &mut fields {
+                if field.name == discriminator {
+                    field.meta.attributes.push(Attribute::new("discriminator"));
+                    discriminator_type = Some(field.r#type.clone());
+                }
             }
-        }
-        let discriminator_type =
-            discriminator_type.ok_or_else(|| LowerError::MissingDiscriminator {
-                union: q_name.clone(),
-                discriminator: discriminator.to_owned(),
+            let discriminator_type = discriminator_type.ok_or_else(|| {
+                LowerError::MissingDiscriminator {
+                    union: q_name.clone(),
+                    discriminator: discriminator.to_owned(),
+                }
             })?;
-        Some(discriminator_type)
-    } else {
-        if let Some(clash) = fields.iter().find(|field| {
-            field.name == "r-type" || member_wire_name(&field.name, &field.meta) == "type"
-        }) {
-            return Err(LowerError::DiscriminatorClash {
-                union: q_name,
-                member: clash.name.clone(),
+            Some(discriminator_type)
+        } else {
+            if let Some(clash) = fields.iter().find(|field| {
+                field.name == "r-type"
+                    || member_wire_name(&field.name, &field.meta) == "type"
+            }) {
+                return Err(LowerError::DiscriminatorClash {
+                    union: q_name,
+                    member: clash.name.clone(),
+                });
+            }
+            // Its wire name is QAPI's; its IR name keeps it apart from the `type`
+            // member that a later release of the union may declare.
+            let mut meta = Metadata::default();
+            meta.attributes.push(Attribute::new("discriminator"));
+            meta.attributes.push(Attribute::with_value("name", "type"));
+            fields.push(StructField {
+                name: "r-type".into(),
+                meta,
+                r#type: format!("{rust_name}Type"),
+                optional: false,
+                array: false,
             });
-        }
-        // Its wire name is QAPI's; its IR name keeps it apart from the `type`
-        // member that a later release of the union may declare.
-        let mut meta = Metadata::default();
-        meta.attributes.push(Attribute::new("discriminator"));
-        meta.attributes.push(Attribute::with_value("name", "type"));
-        fields.push(StructField {
-            name: "r-type".into(),
-            meta,
-            r#type: format!("{rust_name}Type"),
-            optional: false,
-            array: false,
-        });
-        None
-    };
+            None
+        };
     let is_simple = discriminator_type.is_none();
 
     let mut variants = Vec::new();
     for branch in q.data {
-        let (r#type, array) = process_type_ref(&branch.r#type, &q_name, &branch.name)?;
+        let (r#type, array) =
+            process_type_ref(&branch.r#type, &q_name, &branch.name)?;
         let mut meta = Metadata::default();
         if let Some(attr) = variant_name_attr(&branch.name) {
             meta.attributes.push(attr);
         }
         if let Some(condition) = branch.r#if {
-            meta.attributes
-                .push(Attribute::with_value("condition", condition));
+            meta.attributes.push(Attribute::with_value("condition", condition));
         }
         variants.push(EnumVariant {
             name: branch.name.into(),
@@ -624,11 +623,7 @@ pub(crate) fn process_union(
             .attributes
             .push(Attribute::with_value("condition", condition));
     }
-    let e = Enum {
-        name: branch_name.clone(),
-        variants,
-        meta: branch_meta,
-    };
+    let e = Enum { name: branch_name.clone(), variants, meta: branch_meta };
 
     let mut meta = Metadata::default();
     meta.attributes.push(Attribute::new("union"));
@@ -645,19 +640,14 @@ pub(crate) fn process_union(
         meta.attributes.push(attr);
     }
     if let Some(condition) = &q.r#if {
-        meta.attributes
-            .push(Attribute::with_value("condition", condition));
+        meta.attributes.push(Attribute::with_value("condition", condition));
     }
     add_feat! {meta, q.r#features};
     add_schema_facts! {meta, SchemaItem::Union, q.doc, &mut fields};
     if is_simple {
         meta.attributes.push(Attribute::new("simple_union"));
     }
-    let s = Struct {
-        name: q.name.into(),
-        fields,
-        meta,
-    };
+    let s = Struct { name: q.name.into(), fields, meta };
     let disc_enum = is_simple.then(|| {
         let variants = e
             .variants
@@ -672,14 +662,9 @@ pub(crate) fn process_union(
             .collect();
         let mut meta = Metadata::default();
         if let Some(condition) = &q.r#if {
-            meta.attributes
-                .push(Attribute::with_value("condition", condition));
+            meta.attributes.push(Attribute::with_value("condition", condition));
         }
-        Enum {
-            name: format!("{rust_name}Type"),
-            variants,
-            meta,
-        }
+        Enum { name: format!("{rust_name}Type"), variants, meta }
     });
 
     Ok((s, e, disc_enum))
@@ -699,9 +684,9 @@ fn process_members_or_ref(
             .into_iter()
             .map(|field| process_member(field, definition))
             .collect(),
-        MembersOrRef::Ref(v) => Ok(lookup_struct(structs_lookup, definition, &v)?
-            .fields
-            .clone()),
+        MembersOrRef::Ref(v) => {
+            Ok(lookup_struct(structs_lookup, definition, &v)?.fields.clone())
+        }
     }
 }
 
@@ -724,18 +709,13 @@ pub(crate) fn process_event(
     meta.attributes.push(Attribute::new("event"));
     meta.attributes.push(Attribute::with_value("name", &q.name));
     if let Some(condition) = q.r#if {
-        meta.attributes
-            .push(Attribute::with_value("condition", condition));
+        meta.attributes.push(Attribute::with_value("condition", condition));
     }
     add_feat! {meta, q.r#features};
     add_schema_facts! {meta, SchemaItem::Event, q.doc, &mut fields};
 
     let event_name = format!("{}Event", q.name);
-    Ok(Struct {
-        name: event_name,
-        fields,
-        meta,
-    })
+    Ok(Struct { name: event_name, fields, meta })
 }
 
 /// Lower a command into the struct of its arguments, with the `command`
@@ -762,8 +742,7 @@ pub(crate) fn process_command(
         meta.attributes.push(attr);
     }
     if let Some(condition) = q.r#if {
-        meta.attributes
-            .push(Attribute::with_value("condition", condition));
+        meta.attributes.push(Attribute::with_value("condition", condition));
     }
     add_feat! {meta, q.r#features};
     add_schema_facts! {meta, SchemaItem::Command, q.doc, &mut fields};
@@ -775,13 +754,9 @@ pub(crate) fn process_command(
             r#type.to_owned()
         });
         let rust_type = super::rustify_type(r#type);
-        let r#type = if array {
-            format!("Vec<{}>", rust_type)
-        } else {
-            rust_type
-        };
-        meta.attributes
-            .push(Attribute::with_value("returns", r#type));
+        let r#type =
+            if array { format!("Vec<{}>", rust_type) } else { rust_type };
+        meta.attributes.push(Attribute::with_value("returns", r#type));
     } else {
         meta.attributes.push(Attribute::with_value("returns", "()"));
     }
@@ -802,34 +777,30 @@ pub(crate) fn process_command(
             optional: true,
             array: false,
             meta: Metadata {
-                doc: Some("Additional command arguments not modeled by this schema.".into()),
+                doc: Some(
+                    "Additional command arguments not modeled by this schema."
+                        .into(),
+                ),
                 attributes: vec![Attribute::new("flatten")],
                 ..Metadata::default()
             },
         });
     }
 
-    Ok(Struct {
-        name: q.name.into(),
-        fields,
-        meta,
-    })
+    Ok(Struct { name: q.name.into(), fields, meta })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parsers::qapi_documentation::QapiDocumentation;
     use crate::{
-        QapiCond, QapiEnumValue, QapiFeature, QapiFeatures, QapiMembers, QapiSchemaToken,
-        QapiTypeRef,
+        QapiCond, QapiEnumValue, QapiFeature, QapiFeatures, QapiMembers,
+        QapiSchemaToken, QapiTypeRef,
+        parsers::qapi_documentation::QapiDocumentation,
     };
 
     fn make_enum_value(name: &str) -> QapiEnumValue<'_> {
-        QapiEnumValue {
-            name: name.into(),
-            ..Default::default()
-        }
+        QapiEnumValue { name: name.into(), ..Default::default() }
     }
 
     fn member<'a>(name: &'a str, r#type: QapiTypeRef<'a>) -> QapiMember<'a> {
@@ -863,7 +834,10 @@ mod tests {
         value
     }
 
-    fn lower_first(input: &str, version: (u32, u32, u32)) -> Result<(), LowerError> {
+    fn lower_first(
+        input: &str,
+        version: (u32, u32, u32),
+    ) -> Result<(), LowerError> {
         let lookup = HashMap::new();
         match token(input, version) {
             QapiSchemaToken::Struct(value) => {
@@ -872,16 +846,24 @@ mod tests {
             QapiSchemaToken::Union(value) => {
                 process_union(value, &lookup, &HashMap::new()).map(drop)
             }
-            QapiSchemaToken::Alternate(value) => process_alternate(value).map(drop),
-            QapiSchemaToken::Command(value) => process_command(value, &lookup).map(drop),
-            QapiSchemaToken::Event(value) => process_event(value, &lookup).map(drop),
+            QapiSchemaToken::Alternate(value) => {
+                process_alternate(value).map(drop)
+            }
+            QapiSchemaToken::Command(value) => {
+                process_command(value, &lookup).map(drop)
+            }
+            QapiSchemaToken::Event(value) => {
+                process_event(value, &lookup).map(drop)
+            }
             token => panic!("unexpected definition {token:?}"),
         }
     }
 
     fn condition(meta: &Metadata) -> Option<&str> {
         meta.attributes.iter().find_map(|attr| match attr {
-            Attribute::Item { name, value } if name == "condition" => Some(value.as_str()),
+            Attribute::Item { name, value } if name == "condition" => {
+                Some(value.as_str())
+            }
             _ => None,
         })
     }
@@ -892,12 +874,10 @@ mod tests {
             "{ 'union': 'Example', 'data': {'text': 'str', 'values': ['int']} }",
             (2, 0, 0),
         );
-        let (value, branches, _) = process_union(input, &HashMap::new(), &HashMap::new()).unwrap();
+        let (value, branches, _) =
+            process_union(input, &HashMap::new(), &HashMap::new()).unwrap();
         assert!(
-            value
-                .meta
-                .attributes
-                .contains(&Attribute::new("simple_union"))
+            value.meta.attributes.contains(&Attribute::new("simple_union"))
         );
         let array = branches
             .variants
@@ -910,14 +890,16 @@ mod tests {
     }
 
     #[test]
-    fn simple_unions_get_a_discriminator_and_its_enum_under_the_branch_conditions() {
+    fn simple_unions_get_a_discriminator_and_its_enum_under_the_branch_conditions()
+     {
         let input = union(
             "{ 'union': 'Backend', 'if': 'defined(CONFIG_CHARDEV)', 'data': { 'file': 'FileOptions', 'spicevmc': { 'type': 'SpiceOptions', 'if': 'defined(CONFIG_SPICE)' } } }",
             (6, 1, 0),
         );
         let (value, branches, types) =
             process_union(input, &HashMap::new(), &HashMap::new()).unwrap();
-        let condition_attr = |value: &str| Attribute::with_value("condition", value);
+        let condition_attr =
+            |value: &str| Attribute::with_value("condition", value);
 
         assert_eq!(value.name, "Backend");
         assert_eq!(
@@ -1006,26 +988,10 @@ mod tests {
     #[test]
     fn pre_2_4_anonymous_structs_outside_struct_members_are_errors() {
         for (input, definition, member) in [
-            (
-                "{ 'command': 'c', 'returns': { 'a': 'int' } }",
-                "c",
-                "returns",
-            ),
-            (
-                "{ 'command': 'c', 'data': { 'm': { 'a': 'int' } } }",
-                "c",
-                "m",
-            ),
-            (
-                "{ 'event': 'E', 'data': { 'm': { 'a': 'int' } } }",
-                "E",
-                "m",
-            ),
-            (
-                "{ 'union': 'U', 'data': { 'b': { 'a': 'int' } } }",
-                "U",
-                "b",
-            ),
+            ("{ 'command': 'c', 'returns': { 'a': 'int' } }", "c", "returns"),
+            ("{ 'command': 'c', 'data': { 'm': { 'a': 'int' } } }", "c", "m"),
+            ("{ 'event': 'E', 'data': { 'm': { 'a': 'int' } } }", "E", "m"),
+            ("{ 'union': 'U', 'data': { 'b': { 'a': 'int' } } }", "U", "b"),
         ] {
             assert_eq!(
                 lower_first(input, (2, 3, 0)),
@@ -1073,12 +1039,16 @@ mod tests {
             name: "T".into(),
             data: QapiMembers(vec![member(
                 "m",
-                QapiTypeRef::InlineStruct(QapiMembers(vec![member("n", QapiTypeRef::Unset)])),
+                QapiTypeRef::InlineStruct(QapiMembers(vec![member(
+                    "n",
+                    QapiTypeRef::Unset,
+                )])),
             )]),
             ..Default::default()
         };
         assert_eq!(
-            process_struct(inline, &HashMap::new(), &mut HashSet::new()).map(drop),
+            process_struct(inline, &HashMap::new(), &mut HashSet::new())
+                .map(drop),
             missing("T", "n")
         );
     }
@@ -1096,14 +1066,8 @@ mod tests {
                 "{ 'struct': 'S', 'base': 'Missing', 'data': {} }",
                 unknown("S", "Missing"),
             ),
-            (
-                "{ 'command': 'c', 'data': 'Missing' }",
-                unknown("c", "Missing"),
-            ),
-            (
-                "{ 'event': 'E', 'data': 'Missing' }",
-                unknown("E", "Missing"),
-            ),
+            ("{ 'command': 'c', 'data': 'Missing' }", unknown("c", "Missing")),
+            ("{ 'event': 'E', 'data': 'Missing' }", unknown("E", "Missing")),
             (
                 "{ 'union': 'U', 'base': 'Missing', 'discriminator': 'kind', 'data': {} }",
                 unknown("U", "Missing"),
@@ -1126,9 +1090,12 @@ mod tests {
 
     #[test]
     fn simple_union_bases_must_not_declare_the_discriminator() {
-        for (base, member) in [("'type': 'str'", "type"), ("'r-type': 'str'", "r-type")] {
-            let input =
-                format!("{{ 'union': 'U', 'base': {{ {base} }}, 'data': {{ 'a': 'int' }} }}");
+        for (base, member) in
+            [("'type': 'str'", "type"), ("'r-type': 'str'", "r-type")]
+        {
+            let input = format!(
+                "{{ 'union': 'U', 'base': {{ {base} }}, 'data': {{ 'a': 'int' }} }}"
+            );
             assert_eq!(
                 lower_first(&input, (2, 0, 0)),
                 Err(LowerError::DiscriminatorClash {
@@ -1160,7 +1127,8 @@ mod tests {
             [Attribute::new("discriminator")]
         );
         assert_eq!(value.fields[0].r#type, "str");
-        let names: Vec<_> = branches.variants.iter().map(|v| v.name.as_str()).collect();
+        let names: Vec<_> =
+            branches.variants.iter().map(|v| v.name.as_str()).collect();
         assert_eq!(names, ["file"]);
     }
 
@@ -1168,10 +1136,13 @@ mod tests {
     fn legacy_alternates_lower_only_as_alternates() {
         let input = "{ 'union': 'BlockdevRef', 'discriminator': {}, 'data': { 'definition': 'BlockdevOptions', 'reference': 'str' } }";
         assert_eq!(
-            process_union(union(input, (1, 7, 0)), &HashMap::new(), &HashMap::new()).map(drop),
-            Err(LowerError::LegacyAlternate {
-                union: "BlockdevRef".into()
-            })
+            process_union(
+                union(input, (1, 7, 0)),
+                &HashMap::new(),
+                &HashMap::new()
+            )
+            .map(drop),
+            Err(LowerError::LegacyAlternate { union: "BlockdevRef".into() })
         );
         let value = process_legacy_alternate(union(input, (1, 7, 0))).unwrap();
         assert_eq!(value.name, "BlockdevRef");
@@ -1191,7 +1162,8 @@ mod tests {
             ]
         );
 
-        let not_legacy = Err(LowerError::NotLegacyAlternate { union: "U".into() });
+        let not_legacy =
+            Err(LowerError::NotLegacyAlternate { union: "U".into() });
         let flat = union(
             "{ 'union': 'U', 'base': { 'kind': 'str' }, 'discriminator': 'kind', 'data': {} }",
             (6, 1, 0),
@@ -1229,7 +1201,9 @@ mod tests {
         let QapiSchemaToken::Struct(value) = token(input, (9, 1, 0)) else {
             panic!("struct token")
         };
-        let (value, _) = process_struct(value, &HashMap::new(), &mut HashSet::new()).unwrap();
+        let (value, _) =
+            process_struct(value, &HashMap::new(), &mut HashSet::new())
+                .unwrap();
         assert!(
             !value.fields[0]
                 .meta
@@ -1244,11 +1218,20 @@ mod tests {
     #[test]
     fn member_comments_remove_syntax_indent_but_keep_nested_literal_indent() {
         assert_eq!(
-            member_documentation(&["intro", "    continuation", "", "        code", "    after"]),
+            member_documentation(&[
+                "intro",
+                "    continuation",
+                "",
+                "        code",
+                "    after"
+            ]),
             "intro\ncontinuation\n\n    code\nafter"
         );
         assert_eq!(
-            member_documentation(&["    new-line description", "    continuation"]),
+            member_documentation(&[
+                "    new-line description",
+                "    continuation"
+            ]),
             "new-line description\ncontinuation"
         );
     }
@@ -1259,7 +1242,9 @@ mod tests {
         let QapiSchemaToken::Struct(value) = token(input, (9, 1, 0)) else {
             panic!("struct token")
         };
-        let (value, _) = process_struct(value, &HashMap::new(), &mut HashSet::new()).unwrap();
+        let (value, _) =
+            process_struct(value, &HashMap::new(), &mut HashSet::new())
+                .unwrap();
         assert_eq!(value.meta.doc, None);
         assert_eq!(value.meta.schema_doc.as_deref(), Some("Item prose."));
         assert_eq!(value.meta.schema_item, Some(SchemaItem::Struct));
@@ -1298,7 +1283,10 @@ mod tests {
         ] {
             let value = QapiStruct {
                 name: "Device".into(),
-                data: QapiMembers(vec![member("bus", QapiTypeRef::Ref("Bus".into()))]),
+                data: QapiMembers(vec![member(
+                    "bus",
+                    QapiTypeRef::Ref("Bus".into()),
+                )]),
                 doc: Some(QapiDocumentation {
                     name: "Device",
                     fields: fields.clone(),
@@ -1306,7 +1294,9 @@ mod tests {
                 }),
                 ..Default::default()
             };
-            let (value, _) = process_struct(value, &HashMap::new(), &mut HashSet::new()).unwrap();
+            let (value, _) =
+                process_struct(value, &HashMap::new(), &mut HashSet::new())
+                    .unwrap();
             assert_eq!(
                 value.fields[0].meta.schema_doc.as_deref(),
                 Some("The bus.\n  .number: Its number."),
@@ -1396,7 +1386,10 @@ mod tests {
             e.variants[0].meta.attributes,
             [
                 Attribute::with_value("name", "deprecated-val"),
-                Attribute::List(vec![Attribute::with_value("feature", "deprecated")]),
+                Attribute::List(vec![Attribute::with_value(
+                    "feature",
+                    "deprecated"
+                )]),
             ]
         );
     }
@@ -1405,7 +1398,10 @@ mod tests {
     fn test_process_struct_simple() {
         let q = QapiStruct {
             name: "MyStruct".into(),
-            data: QapiMembers(vec![member("field-name", QapiTypeRef::Ref("str".into()))]),
+            data: QapiMembers(vec![member(
+                "field-name",
+                QapiTypeRef::Ref("str".into()),
+            )]),
             base: None,
             r#if: None,
             features: None,
@@ -1415,7 +1411,8 @@ mod tests {
             text: "",
         };
         let mut names = HashSet::new();
-        let (s, extracted) = process_struct(q, &HashMap::new(), &mut names).unwrap();
+        let (s, extracted) =
+            process_struct(q, &HashMap::new(), &mut names).unwrap();
         assert_eq!(s.name, "MyStruct");
         assert!(extracted.is_empty());
         assert_eq!(names, HashSet::from(["MyStruct".to_owned()]));
@@ -1511,7 +1508,8 @@ mod tests {
             keys: Vec::new(),
             text: "",
         };
-        let (s, extracted) = process_struct(q, &HashMap::new(), &mut HashSet::new()).unwrap();
+        let (s, extracted) =
+            process_struct(q, &HashMap::new(), &mut HashSet::new()).unwrap();
         assert_eq!(s.name, "VersionInfo");
         assert_eq!(s.fields.len(), 2);
         // The inline struct field should now reference the extracted type
@@ -1530,7 +1528,8 @@ mod tests {
     }
 
     #[test]
-    fn nested_anonymous_structs_are_named_after_their_holders_and_avoid_taken_names() {
+    fn nested_anonymous_structs_are_named_after_their_holders_and_avoid_taken_names()
+     {
         let input = "{ 'type': 'Outer', 'data': { 'mid': { 'leaf': { 'a': 'int' } } } }";
         for (taken, outer, inner) in [
             (&[][..], "OuterMid", "OuterMidLeaf"),
@@ -1544,13 +1543,18 @@ mod tests {
             let QapiSchemaToken::Struct(value) = token(input, (2, 0, 0)) else {
                 panic!("struct token")
             };
-            let mut names: HashSet<String> = taken.iter().map(|name| name.to_string()).collect();
-            let (value, extracted) = process_struct(value, &HashMap::new(), &mut names).unwrap();
+            let mut names: HashSet<String> =
+                taken.iter().map(|name| name.to_string()).collect();
+            let (value, extracted) =
+                process_struct(value, &HashMap::new(), &mut names).unwrap();
             assert_eq!(value.fields[0].r#type, outer);
             let [first, second] = &extracted[..] else {
                 panic!("{extracted:?}")
             };
-            assert_eq!((first.name.as_str(), second.name.as_str()), (inner, outer));
+            assert_eq!(
+                (first.name.as_str(), second.name.as_str()),
+                (inner, outer)
+            );
             assert_eq!(second.fields[0].name, "leaf");
             assert_eq!(second.fields[0].r#type, inner);
             assert_eq!(first.fields[0].r#type, "int");
@@ -1562,7 +1566,8 @@ mod tests {
 
     #[test]
     fn anonymous_structs_take_their_holders_conditions() {
-        let config = |name: &'static str| Some(QapiCond::ConfigName(name.into()));
+        let config =
+            |name: &'static str| Some(QapiCond::ConfigName(name.into()));
         let q = QapiStruct {
             name: "Outer".into(),
             r#if: config("CONFIG_A"),
@@ -1575,25 +1580,24 @@ mod tests {
                             r#if: config("CONFIG_C"),
                             ..member(
                                 "n",
-                                QapiTypeRef::InlineStruct(QapiMembers(vec![member(
-                                    "a",
-                                    QapiTypeRef::Ref("int".into()),
-                                )])),
+                                QapiTypeRef::InlineStruct(QapiMembers(vec![
+                                    member("a", QapiTypeRef::Ref("int".into())),
+                                ])),
                             )
                         },
                         member(
                             "o",
-                            QapiTypeRef::InlineStruct(QapiMembers(vec![member(
-                                "a",
-                                QapiTypeRef::Ref("int".into()),
-                            )])),
+                            QapiTypeRef::InlineStruct(QapiMembers(vec![
+                                member("a", QapiTypeRef::Ref("int".into())),
+                            ])),
                         ),
                     ])),
                 )
             }]),
             ..Default::default()
         };
-        let (value, extracted) = process_struct(q, &HashMap::new(), &mut HashSet::new()).unwrap();
+        let (value, extracted) =
+            process_struct(q, &HashMap::new(), &mut HashSet::new()).unwrap();
         assert_eq!(condition(&value.meta), Some("CONFIG_A"));
         assert_eq!(condition(&value.fields[0].meta), Some("CONFIG_B"));
         let conditions: Vec<_> = extracted
@@ -1617,7 +1621,9 @@ mod tests {
             .attributes
             .iter()
             .filter_map(|attr| match attr {
-                Attribute::Item { name, value } if name == "returns" => Some(value.as_str()),
+                Attribute::Item { name, value } if name == "returns" => {
+                    Some(value.as_str())
+                }
                 _ => None,
             })
             .collect()
@@ -1656,15 +1662,14 @@ mod tests {
             ("'returns': 'visitor', ", (1, 1, 0), "serde_json::Value"),
             ("'returns': '**', ", (2, 4, 0), "serde_json::Value"),
             ("'returns': 'query-info', ", (11, 1, 3), "QueryInfo"),
-            (
-                "'returns': ['ChardevInfo'], ",
-                (11, 1, 3),
-                "Vec<ChardevInfo>",
-            ),
+            ("'returns': ['ChardevInfo'], ", (11, 1, 3), "Vec<ChardevInfo>"),
             ("'returns': ['int'], ", (11, 1, 3), "Vec<i64>"),
         ] {
-            let input = format!("{{ 'command': 'c', {returns_type}'data': {{}} }}");
-            let value = process_command(command(&input, version), &HashMap::new()).unwrap();
+            let input =
+                format!("{{ 'command': 'c', {returns_type}'data': {{}} }}");
+            let value =
+                process_command(command(&input, version), &HashMap::new())
+                    .unwrap();
             assert_eq!(returns(&value), [expected], "{input}");
         }
     }
@@ -1675,7 +1680,9 @@ mod tests {
             let input = format!(
                 "{{ 'command': 'device_add', 'data': {{ 'driver': 'str' }}, 'gen': {flag} }}"
             );
-            let value = process_command(command(&input, version), &HashMap::new()).unwrap();
+            let value =
+                process_command(command(&input, version), &HashMap::new())
+                    .unwrap();
             let [driver, arguments] = &value.fields[..] else {
                 panic!("{flag}: {:?}", value.fields)
             };
@@ -1719,8 +1726,11 @@ mod tests {
 
     #[test]
     fn historical_success_response_strings_keep_their_wire_behavior() {
-        for (flag, suppressed) in [("'no'", true), ("'yes'", false), ("false", true)] {
-            let input = format!("{{'command':'test','success-response':{flag}}}");
+        for (flag, suppressed) in
+            [("'no'", true), ("'yes'", false), ("false", true)]
+        {
+            let input =
+                format!("{{'command':'test','success-response':{flag}}}");
             let (_, command) = QapiCommand::parse_v1(&input).unwrap();
             let ir = process_command(command, &HashMap::new()).unwrap();
             assert_eq!(
@@ -1754,12 +1764,7 @@ mod tests {
             .collect();
         assert_eq!(
             attr_names,
-            [
-                "command",
-                "allow_oob",
-                "allow_preconfig",
-                "no_success_response"
-            ]
+            ["command", "allow_oob", "allow_preconfig", "no_success_response"]
         );
     }
 
@@ -1847,7 +1852,8 @@ mod tests {
     }
 
     #[test]
-    fn flat_union_synthesizes_only_known_implicit_empty_discriminator_branches() {
+    fn flat_union_synthesizes_only_known_implicit_empty_discriminator_branches()
+    {
         let q = union(
             "{'union':'Cpu','base':{'target':'Target'},'discriminator':'target','data':{'s390x':'S390Details'}}",
             (11, 1, 3),
@@ -1873,10 +1879,7 @@ mod tests {
         .unwrap();
         assert_eq!(types, None);
         assert!(
-            !value
-                .meta
-                .attributes
-                .contains(&Attribute::new("simple_union"))
+            !value.meta.attributes.contains(&Attribute::new("simple_union"))
         );
         let [target, branch] = &value.fields[..] else {
             panic!("{:?}", value.fields)

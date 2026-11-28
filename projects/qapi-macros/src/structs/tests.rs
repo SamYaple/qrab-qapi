@@ -1,11 +1,15 @@
 //! The compile errors of structs, commands and events, read with the source
 //! text they point at, and the struct keys on other items.
 
-use crate::tests::{assert_error, deprecated_note, docs, error, expand, expanded};
+use crate::tests::{
+    assert_error, deprecated_note, docs, error, expand, expanded,
+};
 
 fn field_attrs(item: &syn::DeriveInput, index: usize) -> &[syn::Attribute] {
     match &item.data {
-        syn::Data::Struct(data) => &data.fields.iter().nth(index).unwrap().attrs,
+        syn::Data::Struct(data) => {
+            &data.fields.iter().nth(index).unwrap().attrs
+        }
         _ => panic!("not a struct"),
     }
 }
@@ -92,18 +96,9 @@ fn unsupported_struct_shapes_are_errors() {
 #[test]
 fn fields_with_a_lifetime_or_requirement_are_options() {
     for (item, at) in [
-        (
-            r#"struct S { #[qapi(added = "9.0.0")] a: String }"#,
-            "String",
-        ),
-        (
-            r#"struct S { #[qapi(removed = "9.0.0")] a: String }"#,
-            "String",
-        ),
-        (
-            r#"struct S { #[qapi(flatten, added = "9.0.0")] a: Base }"#,
-            "Base",
-        ),
+        (r#"struct S { #[qapi(added = "9.0.0")] a: String }"#, "String"),
+        (r#"struct S { #[qapi(removed = "9.0.0")] a: String }"#, "String"),
+        (r#"struct S { #[qapi(flatten, added = "9.0.0")] a: Base }"#, "Base"),
     ] {
         assert_error(
             "",
@@ -208,22 +203,14 @@ fn command_keys_belong_to_commands_alone() {
     );
     for (args, key, at) in [
         ("allow_oob", "allow_oob", "allow_oob"),
-        (
-            "event, allow_preconfig",
-            "allow_preconfig",
-            "allow_preconfig",
-        ),
+        ("event, allow_preconfig", "allow_preconfig", "allow_preconfig"),
         (
             r#"no_success_response(added = "1.0.0")"#,
             "no_success_response",
             "no_success_response",
         ),
         (r#"returns = "bool""#, "returns", r#""bool""#),
-        (
-            r#"returns(added = "1.0.0", value = "bool")"#,
-            "returns",
-            r#""bool""#,
-        ),
+        (r#"returns(added = "1.0.0", value = "bool")"#, "returns", r#""bool""#),
     ] {
         assert_error(
             args,
@@ -238,7 +225,9 @@ fn command_keys_belong_to_commands_alone() {
 fn a_return_type_history_is_ordered_and_ends_at_returns() {
     let (message, at) = error(r#"command, returns = "Vec<""#, "struct S {}");
     assert!(
-        message.starts_with("qapi: `returns` is not a Rust type: unexpected end of input"),
+        message.starts_with(
+            "qapi: `returns` is not a Rust type: unexpected end of input"
+        ),
         "{message}"
     );
     assert_eq!(at, r#""Vec<""#);
@@ -330,8 +319,9 @@ fn a_return_type_history_is_ordered_and_ends_at_returns() {
         "qapi: `returns(...)` (added 2.0.0) must be earlier than the command's `removed` (2.0.0)",
         r#""B""#,
     );
-    let args =
-        format!(r#"command, added = "1.0.0", removed = "2.1.0", {history}, returns_enum = "R""#);
+    let args = format!(
+        r#"command, added = "1.0.0", removed = "2.1.0", {history}, returns_enum = "R""#
+    );
     assert!(expand(&args, "struct S {}").is_ok());
     // Without its `added`, the command has releases before the first type.
     assert_error(
@@ -368,7 +358,9 @@ fn deprecation_of_fields_follows_the_newest_release() {
     // it warns within its releases.
     let item = r#"struct Example { #[qapi(deprecated(added = "9.2.0"))] value: String }"#;
     let (item, rest) = expanded("", item);
-    assert!(rest.contains("qapi warning: Example.value is deprecated since QEMU 9.2.0"));
+    assert!(rest.contains(
+        "qapi warning: Example.value is deprecated since QEMU 9.2.0"
+    ));
     assert_eq!(
         deprecated_note(field_attrs(&item, 0)).as_deref(),
         Some("# [deprecated (note = \"deprecated since QEMU 9.2.0\")]")
@@ -390,7 +382,8 @@ fn deprecation_of_fields_follows_the_newest_release() {
         r#"#[qapi(feature = "deprecated", feature = "unstable")]"#,
         r#"#[qapi(feature = "deprecated")] #[qapi(feature = "unstable")]"#,
     ] {
-        let (item, _) = expanded("", &format!("struct S {{ {attrs} value: String }}"));
+        let (item, _) =
+            expanded("", &format!("struct S {{ {attrs} value: String }}"));
         let attrs = field_attrs(&item, 0);
         assert_eq!(
             deprecated_note(attrs).as_deref(),
@@ -447,11 +440,15 @@ fn a_struct_has_default_or_new() {
     };
     assert_eq!(construction("struct S {}"), (true, None));
     assert_eq!(
-        construction("pub struct S { a: Option<u8>, #[qapi(required)] b: Option<String> }"),
+        construction(
+            "pub struct S { a: Option<u8>, #[qapi(required)] b: Option<String> }"
+        ),
         (true, None)
     );
     assert_eq!(
-        construction("pub struct S { z: String, a: Option<u8>, r#type: Vec<u8> }"),
+        construction(
+            "pub struct S { z: String, a: Option<u8>, r#type: Vec<u8> }"
+        ),
         (false, Some("z : String , r#type : Vec < u8 >".to_owned()))
     );
     let (_, rest) = expanded("", "pub struct S { z: String, a: Option<u8> }");
@@ -469,10 +466,13 @@ fn a_struct_has_default_or_new() {
     );
     // A field with a lifetime is an `Option`, which `new` leaves `None` in
     // every build.
-    let gated = r#"struct S { z: String, #[qapi(removed = "2.0.0")] old: Option<u8> }"#;
+    let gated =
+        r#"struct S { z: String, #[qapi(removed = "2.0.0")] old: Option<u8> }"#;
     let (_, rest) = expanded("", gated);
     assert!(
-        rest.contains("Self { z , old : :: core :: option :: Option :: None , }"),
+        rest.contains(
+            "Self { z , old : :: core :: option :: Option :: None , }"
+        ),
         "{rest}"
     );
 }
@@ -530,8 +530,7 @@ fn a_return_type_history_names_its_enum() {
 /// before need.
 #[test]
 fn an_alias_documents_the_type_its_struct_is_the_same_as() {
-    let args =
-        r#"added = "1.2.0", removed = "10.1.0", alias(added = "3.0.0", value = "QemuTargetInfo")"#;
+    let args = r#"added = "1.2.0", removed = "10.1.0", alias(added = "3.0.0", value = "QemuTargetInfo")"#;
     let item = "/// The target.\npub struct TargetInfo { #[qapi(added = \"3.0.0\")] arch: Option<String> }";
     let (item, rest) = expanded(args, item);
     assert_eq!(
@@ -585,9 +584,12 @@ fn an_alias_lies_within_its_struct_s_lifetime_and_names_a_type() {
     ] {
         assert_error(args, "struct S {}", message, at);
     }
-    let (message, at) = error(r#"alias(added = "3.0.0", value = "Vec<")"#, "struct S {}");
+    let (message, at) =
+        error(r#"alias(added = "3.0.0", value = "Vec<")"#, "struct S {}");
     assert!(
-        message.starts_with("qapi: `alias` is not a Rust type: unexpected end of input"),
+        message.starts_with(
+            "qapi: `alias` is not a Rust type: unexpected end of input"
+        ),
         "{message}"
     );
     assert_eq!(at, r#""Vec<""#);
@@ -611,13 +613,16 @@ fn a_flattened_field_takes_no_keys_of_a_member() {
         let name = key.split(['(', ' ']).next().unwrap();
         assert_error(
             "",
-            &format!("struct S {{ #[qapi(flatten, {key})] base: Option<Base> }}"),
-            &format!("qapi: a `flatten`ed field has no member of its own, so it takes no `{name}`"),
+            &format!(
+                "struct S {{ #[qapi(flatten, {key})] base: Option<Base> }}"
+            ),
+            &format!(
+                "qapi: a `flatten`ed field has no member of its own, so it takes no `{name}`"
+            ),
             "flatten",
         );
     }
-    let item =
-        r#"struct S { #[qapi(flatten, added = "2.0.0", removed = "3.0.0")] base: Option<Base> }"#;
+    let item = r#"struct S { #[qapi(flatten, added = "2.0.0", removed = "3.0.0")] base: Option<Base> }"#;
     assert!(expand("", item).is_ok());
 }
 
@@ -900,11 +905,15 @@ fn the_ranges_of_a_structs_flags_lie_within_its_lifetime_and_do_not_overlap() {
         assert_error(
             &format!(r#"command, removed = "5.0.0", {key}(added = "6.0.0")"#),
             "struct S {}",
-            &format!("qapi: `{key}` (added 6.0.0) must start before the type's `removed` (5.0.0)"),
+            &format!(
+                "qapi: `{key}` (added 6.0.0) must start before the type's `removed` (5.0.0)"
+            ),
             key,
         );
         assert_error(
-            &format!(r#"command, {key}(removed = "4.0.0"), {key}(added = "3.0.0")"#),
+            &format!(
+                r#"command, {key}(removed = "4.0.0"), {key}(added = "3.0.0")"#
+            ),
             "struct S {}",
             &format!(
                 "qapi: `{key}` must not start before the `removed` (4.0.0) of the `{key}` before it"
@@ -945,7 +954,9 @@ fn the_flags_of_a_command_describe_the_newest_release() {
             rest.contains("PreconfigSafe"),
         )
     };
-    let since = |version: &str| format!(":: core :: option :: Option :: Some (({version}))");
+    let since = |version: &str| {
+        format!(":: core :: option :: Option :: Some (({version}))")
+    };
     let args = r#"command, allow_preconfig(added = "9.0.0")"#;
     assert_eq!(
         constants(args),
@@ -960,7 +971,8 @@ fn the_flags_of_a_command_describe_the_newest_release() {
         ("false".into(), since("3u32 , 0u32 , 0u32"), true)
     );
     // Without `added`, a run starts with the command.
-    let args = r#"command, added = "2.0.0", allow_preconfig(removed = "5.0.0")"#;
+    let args =
+        r#"command, added = "2.0.0", allow_preconfig(removed = "5.0.0")"#;
     assert_eq!(
         constants(args),
         ("false".into(), since("2u32 , 0u32 , 0u32"), true)
@@ -983,7 +995,8 @@ fn a_field_declares_no_use_of_a_deprecated_type() {
     assert!(
         attrs
             .iter()
-            .any(|attr| quote::quote!(#attr).to_string() == "# [allow (deprecated)]"),
+            .any(|attr| quote::quote!(#attr).to_string()
+                == "# [allow (deprecated)]"),
         "{}",
         attrs
             .iter()
@@ -995,27 +1008,32 @@ fn a_field_declares_no_use_of_a_deprecated_type() {
 
 #[test]
 fn unscoped_decoding_takes_the_discriminator_of_the_newest_release() {
-    use crate::attrs::{ItemAttrs, TypeAttrs};
-    use crate::structs::FieldInfo;
+    use crate::{
+        attrs::{ItemAttrs, TypeAttrs},
+        structs::FieldInfo,
+    };
     let field = |keys: &str| {
         let item: syn::DeriveInput = syn::parse_str(&format!(
             "struct S {{ #[qapi({keys})] arch: Option<Arch> }}"
         ))
         .unwrap();
-        let syn::Data::Struct(data) = item.data else {
-            unreachable!()
-        };
+        let syn::Data::Struct(data) = item.data else { unreachable!() };
         let field = data.fields.into_iter().next().unwrap();
         FieldInfo {
-            attrs: ItemAttrs::parse(&field.attrs, &TypeAttrs::default()).unwrap(),
+            attrs: ItemAttrs::parse(&field.attrs, &TypeAttrs::default())
+                .unwrap(),
             ident: field.ident.unwrap(),
             ty: field.ty,
         }
     };
     // A run without a removal holds in the newest release, one that ends
     // does not, and any run of the field may be the one.
-    assert!(field(r#"discriminator(added = "3.0.0")"#).discriminates_at_newest());
-    assert!(!field(r#"discriminator(removed = "3.0.0")"#).discriminates_at_newest());
+    assert!(
+        field(r#"discriminator(added = "3.0.0")"#).discriminates_at_newest()
+    );
+    assert!(
+        !field(r#"discriminator(removed = "3.0.0")"#).discriminates_at_newest()
+    );
     assert!(
         field(r#"discriminator(removed = "3.0.0"), discriminator(added = "5.0.0")"#)
             .discriminates_at_newest()

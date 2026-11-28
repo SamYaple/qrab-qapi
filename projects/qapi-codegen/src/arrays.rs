@@ -1,6 +1,11 @@
 //! Resolve QEMU's implicit `ElementList` names to ordinary array references.
-use crate::unified::{SchemaContext, SchemaErrorKind, SchemaResult, definition, require};
-use crate::{MembersOrRef, QapiMembers, QapiSchema, QapiSchemaToken, QapiString, QapiTypeRef};
+use crate::{
+    MembersOrRef, QapiMembers, QapiSchema, QapiSchemaToken, QapiString,
+    QapiTypeRef,
+    unified::{
+        SchemaContext, SchemaErrorKind, SchemaResult, definition, require,
+    },
+};
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
@@ -22,7 +27,8 @@ fn visit_members<'a>(
     visitor: &mut impl FnMut(&mut QapiTypeRef<'a>) -> SchemaResult,
 ) -> SchemaResult {
     for field in &mut fields.0 {
-        visit_type(&mut field.r#type, visitor).within(|| format!("member '{}'", field.name))?;
+        visit_type(&mut field.r#type, visitor)
+            .within(|| format!("member '{}'", field.name))?;
     }
     Ok(())
 }
@@ -47,7 +53,9 @@ fn visit<'a>(
         let text = token.definition_text();
         let mut visit_token = || -> SchemaResult {
             match token {
-                QapiSchemaToken::Struct(value) => visit_members(&mut value.data, &mut visitor)?,
+                QapiSchemaToken::Struct(value) => {
+                    visit_members(&mut value.data, &mut visitor)?
+                }
                 QapiSchemaToken::Union(value) => {
                     visit_object(&mut value.base, &mut visitor)?;
                     for branch in &mut value.data.0 {
@@ -66,7 +74,8 @@ fn visit<'a>(
                         visit_object(data, &mut visitor)?;
                     }
                     if let Some(returns) = &mut value.returns {
-                        visit_type(returns, &mut visitor).within(|| "return type".into())?;
+                        visit_type(returns, &mut visitor)
+                            .within(|| "return type".into())?;
                     }
                 }
                 QapiSchemaToken::Event(value) => {
@@ -118,11 +127,10 @@ pub(crate) fn normalize<'a>(
                 _ => return Ok(()),
             };
             if let Some(element) = aliases.get(name) {
-                require(!array && !aliases.contains_key(element.as_ref()), || {
-                    SchemaErrorKind::NestedArray {
-                        name: name.to_owned(),
-                    }
-                })?;
+                require(
+                    !array && !aliases.contains_key(element.as_ref()),
+                    || SchemaErrorKind::NestedArray { name: name.to_owned() },
+                )?;
                 *value = QapiTypeRef::ArrayRef(element.clone());
             }
             Ok(())
@@ -136,7 +144,10 @@ pub(crate) fn normalize<'a>(
 mod tests {
     use super::*;
 
-    fn members(version: (u32, u32, u32), text: &str) -> SchemaResult<Vec<(String, String)>> {
+    fn members(
+        version: (u32, u32, u32),
+        text: &str,
+    ) -> SchemaResult<Vec<(String, String)>> {
         crate::set_parser_version(version);
         let sources = [(PathBuf::from("a.json"), text.to_owned())];
         let mut schemas = vec![(
@@ -178,7 +189,8 @@ mod tests {
             shapes((4, 1, 0)),
             ["intList", "nullList", "ItemList", "[Item]"]
         );
-        let undeclared = members((4, 2, 0), "{'struct':'Holder','data':{'a':'ItemList'}}");
+        let undeclared =
+            members((4, 2, 0), "{'struct':'Holder','data':{'a':'ItemList'}}");
         assert_eq!(undeclared.unwrap(), [("a".into(), "ItemList".into())]);
     }
 
@@ -195,12 +207,12 @@ mod tests {
             );
             assert_eq!(error.file(), Some(Path::new("a.json")));
             assert_eq!(error.definition(), Some("struct 'Holder'"));
-            let (line, column) = if text.starts_with('\n') {
-                (2, 3)
-            } else {
-                (1, 1)
-            };
-            assert_eq!((error.line(), error.column()), (Some(line), Some(column)));
+            let (line, column) =
+                if text.starts_with('\n') { (2, 3) } else { (1, 1) };
+            assert_eq!(
+                (error.line(), error.column()),
+                (Some(line), Some(column))
+            );
         }
     }
 }

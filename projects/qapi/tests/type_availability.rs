@@ -36,12 +36,15 @@ enum Alternate {
 
 fn check<T: DeserializeOwned>(wire: Value) {
     for version in [(1, 9, 0), (3, 0, 0)] {
-        let error = qapi::with_version(version, || serde_json::from_value::<T>(wire.clone()))
-            .err()
-            .unwrap();
+        let error = qapi::with_version(version, || {
+            serde_json::from_value::<T>(wire.clone())
+        })
+        .err()
+        .unwrap();
         assert!(error.to_string().contains("not available"), "{error}");
     }
-    qapi::with_version((2, 0, 0), || serde_json::from_value::<T>(wire.clone())).unwrap();
+    qapi::with_version((2, 0, 0), || serde_json::from_value::<T>(wire.clone()))
+        .unwrap();
     // Recorded values can still be inspected without asserting a peer release.
     serde_json::from_value::<T>(wire).unwrap();
 }
@@ -87,12 +90,12 @@ struct Outer {
     since_two: Option<bool>,
 }
 
-fn unavailable<T: serde::Serialize>(version: (u32, u32, u32), value: &T) -> String {
+fn unavailable<T: serde::Serialize>(
+    version: (u32, u32, u32),
+    value: &T,
+) -> String {
     match qapi::to_value(version, value) {
-        Err(qapi::EncodeError::Unavailable {
-            name,
-            version: reported,
-        }) => {
+        Err(qapi::EncodeError::Unavailable { name, version: reported }) => {
             assert_eq!(reported, version, "{name}");
             name
         }
@@ -112,50 +115,29 @@ fn outer() -> Outer {
 
 #[test]
 fn encoding_names_the_unavailable_type_variant_or_field_wherever_it_is() {
-    let record = Record {
-        value: "record".into(),
-    };
+    let record = Record { value: "record".into() };
     assert_eq!(unavailable((3, 0, 0), &record), "Record");
     assert_eq!(unavailable((1, 0, 0), &Mode::New), "Mode::New");
-    let shared = Shared {
-        value: Some("new".into()),
-        value_legacy: None,
-    };
+    let shared = Shared { value: Some("new".into()), value_legacy: None };
     assert_eq!(unavailable((1, 0, 0), &shared), "Shared.value");
 
     // Nested: in a field, in a list and in a flattened payload.
-    let nested = Outer {
-        record: Some(record.clone()),
-        ..outer()
-    };
+    let nested = Outer { record: Some(record.clone()), ..outer() };
     assert_eq!(unavailable((1, 9, 0), &nested), "Record");
-    let nested = vec![Outer {
-        mode: Some(Mode::New),
-        ..outer()
-    }];
+    let nested = vec![Outer { mode: Some(Mode::New), ..outer() }];
     assert_eq!(unavailable((1, 5, 0), &nested), "Mode::New");
-    let nested = Outer {
-        shared: Some(shared),
-        ..outer()
-    };
+    let nested = Outer { shared: Some(shared), ..outer() };
     assert_eq!(unavailable((1, 5, 0), &nested), "Shared.value");
-    let nested = Outer {
-        extra: Some(Extra { extra: true }),
-        ..outer()
-    };
+    let nested = Outer { extra: Some(Extra { extra: true }), ..outer() };
     assert_eq!(unavailable((1, 5, 0), &nested), "Outer.extra");
 
     // The error reads the same with and without `to_value`.
     let error = qapi::to_value((1, 0, 0), &Mode::New).unwrap_err();
-    assert_eq!(
-        error.to_string(),
-        "Mode::New is not available in QEMU 1.0.0"
-    );
-    let error = qapi::with_version((1, 0, 0), || serde_json::to_value(Mode::New)).unwrap_err();
-    assert_eq!(
-        error.to_string(),
-        "Mode::New is not available in QEMU 1.0.0"
-    );
+    assert_eq!(error.to_string(), "Mode::New is not available in QEMU 1.0.0");
+    let error =
+        qapi::with_version((1, 0, 0), || serde_json::to_value(Mode::New))
+            .unwrap_err();
+    assert_eq!(error.to_string(), "Mode::New is not available in QEMU 1.0.0");
 
     assert_eq!(qapi::to_value((2, 0, 0), &Mode::New).unwrap(), "new");
     assert_eq!(qapi::to_value((1, 0, 0), &Mode::Old).unwrap(), "old");
@@ -171,7 +153,8 @@ fn other_encoding_failures_are_serde_errors() {
         other => panic!("{other:?}"),
     }
     // A failure outside `to_value` leaves nothing behind for the next call.
-    qapi::with_version((1, 0, 0), || serde_json::to_value(Mode::New)).unwrap_err();
+    qapi::with_version((1, 0, 0), || serde_json::to_value(Mode::New))
+        .unwrap_err();
     assert!(matches!(
         qapi::to_value((2, 0, 0), &outer()),
         Err(qapi::EncodeError::Serde(_))
@@ -182,8 +165,12 @@ fn other_encoding_failures_are_serde_errors() {
 struct ForPeer<T>((u32, u32, u32), T);
 
 impl<T: serde::Serialize> serde::Serialize for ForPeer<T> {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let value = qapi::to_value(self.0, &self.1).map_err(serde::ser::Error::custom)?;
+    fn serialize<S: serde::Serializer>(
+        &self,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        let value = qapi::to_value(self.0, &self.1)
+            .map_err(serde::ser::Error::custom)?;
         serde::Serialize::serialize(&value, serializer)
     }
 }
@@ -207,7 +194,10 @@ fn an_enclosing_encoding_reports_what_a_nested_one_found() {
 struct Fallback<T>(T);
 
 impl<T: serde::Serialize> serde::Serialize for Fallback<T> {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+    fn serialize<S: serde::Serializer>(
+        &self,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
         use serde::ser::SerializeTuple;
         let mode = qapi::to_value(qapi::qemu_version(), &Mode::New)
             .or_else(|_| serde_json::to_value(Mode::Old))
@@ -223,8 +213,13 @@ impl<T: serde::Serialize> serde::Serialize for Fallback<T> {
 /// on its way out of the failure of the first.
 struct Diagnosed<A, B>(A, B);
 
-impl<A: serde::Serialize, B: serde::Serialize> serde::Serialize for Diagnosed<A, B> {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+impl<A: serde::Serialize, B: serde::Serialize> serde::Serialize
+    for Diagnosed<A, B>
+{
+    fn serialize<S: serde::Serializer>(
+        &self,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
         let first = serde_json::to_value(&self.0).map_err(|error| {
             let _ = serde_json::to_value(&self.1);
             serde::ser::Error::custom(error)
@@ -237,11 +232,17 @@ impl<A: serde::Serialize, B: serde::Serialize> serde::Serialize for Diagnosed<A,
 /// failed, and fails with both errors, the second first.
 struct Retried<A, B>(A, B);
 
-impl<A: serde::Serialize, B: serde::Serialize> serde::Serialize for Retried<A, B> {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+impl<A: serde::Serialize, B: serde::Serialize> serde::Serialize
+    for Retried<A, B>
+{
+    fn serialize<S: serde::Serializer>(
+        &self,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
         let value = serde_json::to_value(&self.0).or_else(|first| {
-            serde_json::to_value(&self.1)
-                .map_err(|second| serde::ser::Error::custom(format!("{second}; first {first}")))
+            serde_json::to_value(&self.1).map_err(|second| {
+                serde::ser::Error::custom(format!("{second}; first {first}"))
+            })
         })?;
         serde::Serialize::serialize(&value, serializer)
     }
@@ -258,9 +259,7 @@ impl serde::Serialize for Refused {
 
 #[test]
 fn encoding_reports_the_failure_that_the_error_carries() {
-    let record = || Record {
-        value: "record".into(),
-    };
+    let record = || Record { value: "record".into() };
     assert_eq!(
         qapi::to_value((1, 9, 0), &Fallback(true)).unwrap(),
         json!(["old", true])
@@ -268,7 +267,9 @@ fn encoding_reports_the_failure_that_the_error_carries() {
     // A failure that a value recovered from is not the one reported.
     assert_eq!(unavailable((1, 9, 0), &Fallback(record())), "Record");
     match qapi::to_value((1, 9, 0), &Fallback(Refused)) {
-        Err(qapi::EncodeError::Serde(error)) => assert_eq!(error.to_string(), "refused"),
+        Err(qapi::EncodeError::Serde(error)) => {
+            assert_eq!(error.to_string(), "refused")
+        }
         other => panic!("{other:?}"),
     }
     // Nor is one that came after it, in a longer name or not.
@@ -276,15 +277,11 @@ fn encoding_reports_the_failure_that_the_error_carries() {
         unavailable((1, 9, 0), &Diagnosed(record(), Mode::New)),
         "Record"
     );
-    let old = OldRecord {
-        value: "old".into(),
-    };
-    assert_eq!(
-        unavailable((1, 9, 0), &Diagnosed(old, record())),
-        "OldRecord"
-    );
+    let old = OldRecord { value: "old".into() };
+    assert_eq!(unavailable((1, 9, 0), &Diagnosed(old, record())), "OldRecord");
     // Nor one whose version begins the version of the failure.
-    let later = Diagnosed(ForPeer((3, 0, 10), record()), ForPeer((3, 0, 1), record()));
+    let later =
+        Diagnosed(ForPeer((3, 0, 10), record()), ForPeer((3, 0, 1), record()));
     match qapi::to_value((2, 0, 0), &later) {
         Err(qapi::EncodeError::Unavailable { name, version }) => {
             assert_eq!((name.as_str(), version), ("Record", (3, 0, 10)));

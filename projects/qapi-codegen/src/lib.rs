@@ -33,11 +33,10 @@ pub mod unified;
 mod union_layout;
 pub mod versions;
 
-#[doc(hidden)]
-pub use parsers::{
-    parser_version, qapi_schema::QapiSchemaToken, set_parser_version, with_parser_version,
-};
+use nom::{Finish, Parser, combinator::all_consuming, error::ErrorKind};
+pub use parsers::doc_comment::DocumentationError;
 pub(crate) use parsers::{
+    common::QapiString,
     qapi_alternate::QapiAlternate,
     qapi_alternative::QapiAlternative,
     qapi_alternatives::QapiAlternatives,
@@ -59,11 +58,11 @@ pub(crate) use parsers::{
     qapi_union::QapiUnion,
     qapi_variant::QapiVariant,
 };
-
-pub(crate) use parsers::common::QapiString;
-pub use parsers::doc_comment::DocumentationError;
-
-use nom::{Finish, Parser, combinator::all_consuming, error::ErrorKind};
+#[doc(hidden)]
+pub use parsers::{
+    parser_version, qapi_schema::QapiSchemaToken, set_parser_version,
+    with_parser_version,
+};
 use std::path::{Path, PathBuf};
 
 /// Schema text that the QAPI grammar of its release rejects, in
@@ -168,10 +167,14 @@ fn describe(error: &ParseError) -> String {
     let (line, column) = (error.line, error.column);
     match &error.kind {
         ParseErrorKind::Crash(crash) => {
-            format!("QEMU's QAPI parser fails at line {line}, column {column} on {crash}")
+            format!(
+                "QEMU's QAPI parser fails at line {line}, column {column} on {crash}"
+            )
         }
         ParseErrorKind::Documentation(rule) => {
-            format!("QAPI documentation error at line {line}, column {column}: {rule}")
+            format!(
+                "QAPI documentation error at line {line}, column {column}: {rule}"
+            )
         }
         kind => format!(
             "QAPI parse error at line {line}, column {column}: {kind}{}",
@@ -195,7 +198,9 @@ impl ParseError {
     pub(crate) fn fault(&self) -> String {
         match &self.kind {
             ParseErrorKind::Crash(_) => self.kind.to_string(),
-            ParseErrorKind::Documentation(rule) => format!("QAPI documentation error: {rule}"),
+            ParseErrorKind::Documentation(rule) => {
+                format!("QAPI documentation error: {rule}")
+            }
             kind => format!("QAPI parse error: {kind}{}", quoted_near(self)),
         }
     }
@@ -297,12 +302,13 @@ pub fn parse_schema(input: &str) -> Result<QapiSchema<'_>, ParseError> {
     let failure = match parsed {
         Ok((_, schema)) => match documentation {
             None => return Ok(schema),
-            Some(fault) => return Err(parse_error(input, fault.at, fault.kind)),
+            Some(fault) => {
+                return Err(parse_error(input, fault.at, fault.kind));
+            }
         },
         Err(error) => {
-            let at = error
-                .input
-                .trim_start_matches(parsers::common::is_whitespace);
+            let at =
+                error.input.trim_start_matches(parsers::common::is_whitespace);
             match error.code {
                 // No definition parses here: report where QEMU's parser
                 // stops, if it finds the expression malformed.
@@ -314,7 +320,9 @@ pub fn parse_schema(input: &str) -> Result<QapiSchema<'_>, ParseError> {
                     parsers::common::next_token(error.input),
                     ParseErrorKind::DuplicateKey,
                 )),
-                ErrorKind::Char => Some((at, ParseErrorKind::UnexpectedCharacter)),
+                ErrorKind::Char => {
+                    Some((at, ParseErrorKind::UnexpectedCharacter))
+                }
                 _ => None,
             }
             .unwrap_or((at, ParseErrorKind::NoDefinition))
@@ -329,8 +337,13 @@ pub fn parse_schema(input: &str) -> Result<QapiSchema<'_>, ParseError> {
     })
 }
 
-fn parse_error(input: &str, remainder: &str, kind: ParseErrorKind) -> ParseError {
-    let (line, column) = position(input, input.len().saturating_sub(remainder.len()));
+fn parse_error(
+    input: &str,
+    remainder: &str,
+    kind: ParseErrorKind,
+) -> ParseError {
+    let (line, column) =
+        position(input, input.len().saturating_sub(remainder.len()));
     ParseError {
         line,
         column,
@@ -377,16 +390,11 @@ pub fn read_schema_with_version(
     version: Option<(u32, u32, u32)>,
 ) -> Result<Vec<(PathBuf, String)>, ReadError> {
     let read = || {
-        let path = schema_file
-            .canonicalize()
-            .map_err(|source| ReadError::Resolve {
-                path: schema_file.to_path_buf(),
-                source,
-            })?;
-        let content = std::fs::read_to_string(&path).map_err(|source| ReadError::Read {
-            path: path.clone(),
-            source,
+        let path = schema_file.canonicalize().map_err(|source| {
+            ReadError::Resolve { path: schema_file.to_path_buf(), source }
         })?;
+        let content = std::fs::read_to_string(&path)
+            .map_err(|source| ReadError::Read { path: path.clone(), source })?;
         let mut sources = Vec::new();
         read_schema_file(path, content, &mut sources, &mut Vec::new())?;
         if sources.len() > 1 {
@@ -410,11 +418,12 @@ fn read_schema_file(
     let content = parsers::common::legacy_text(&content).unwrap_or(content);
     active.push(schema_file.clone());
     sources.push((schema_file.clone(), content.clone()));
-    let schema_tokens = parse_schema(&content).map_err(|source| ReadError::Parse {
-        path: schema_file.clone(),
-        version: parser_version(),
-        source,
-    })?;
+    let schema_tokens =
+        parse_schema(&content).map_err(|source| ReadError::Parse {
+            path: schema_file.clone(),
+            version: parser_version(),
+            source,
+        })?;
     for token in schema_tokens.0 {
         let QapiSchemaToken::Include(QapiInclude(name, text)) = token else {
             continue;
@@ -428,10 +437,7 @@ fn read_schema_file(
             kind,
         };
         let unreadable = |source| {
-            fail(IncludeError::Unreadable {
-                name: name.to_string(),
-                source,
-            })
+            fail(IncludeError::Unreadable { name: name.to_string(), source })
         };
         let include_path = schema_file.parent().unwrap().join(name.as_ref());
         let target = include_path.canonicalize().map_err(unreadable)?;
@@ -444,10 +450,7 @@ fn read_schema_file(
         // A file that is not UTF-8 text is read, but not as a schema.
         let included = std::fs::read_to_string(&target).map_err(|source| {
             if source.kind() == std::io::ErrorKind::InvalidData {
-                ReadError::Read {
-                    path: target.clone(),
-                    source,
-                }
+                ReadError::Read { path: target.clone(), source }
             } else {
                 unreadable(source)
             }
@@ -466,7 +469,8 @@ mod tests {
     /// the input from there, which its message quotes.
     #[test]
     fn a_parse_error_locates_its_fault_and_quotes_the_input_there() {
-        let schema = "{ 'enum': 'E', 'data': ['a'] }\n  { 'enum': 'F' 'data': [] }";
+        let schema =
+            "{ 'enum': 'E', 'data': ['a'] }\n  { 'enum': 'F' 'data': [] }";
         let error = parse_schema_with_version(schema, (11, 1, 3)).unwrap_err();
         assert_eq!((error.line, error.column), (2, 17));
         assert_eq!(error.kind, ParseErrorKind::UnexpectedCharacter);
@@ -521,9 +525,11 @@ mod tests {
             (
                 (11, 1, 3),
                 documented,
-                ParseErrorKind::Documentation(Box::new(crate::DocumentationError::EmptySection {
-                    section: "Member".into(),
-                })),
+                ParseErrorKind::Documentation(Box::new(
+                    crate::DocumentationError::EmptySection {
+                        section: "Member".into(),
+                    },
+                )),
                 "QAPI documentation error at line 4, column 1: text required after 'Member:'",
             ),
             (
@@ -562,7 +568,8 @@ mod tests {
             ("{ 'alternate': 'A', 'data': { 'a': 'int', 'a'", (1, 46)),
             ("{ 'enum': 'E', 'data': [ { 'name': 'a', 'name'", (1, 47)),
         ] {
-            let error = parse_schema_with_version(input, (11, 1, 3)).unwrap_err();
+            let error =
+                parse_schema_with_version(input, (11, 1, 3)).unwrap_err();
             assert_eq!(error.kind, ParseErrorKind::UnexpectedEnd, "{input:?}");
             assert_eq!(
                 error.to_string(),
@@ -573,8 +580,11 @@ mod tests {
             );
         }
         // Before the colon of a duplicate key, a token is out of its place.
-        let error =
-            parse_schema_with_version("{ 'enum': 'E', 'enum' 'x' }", (11, 1, 3)).unwrap_err();
+        let error = parse_schema_with_version(
+            "{ 'enum': 'E', 'enum' 'x' }",
+            (11, 1, 3),
+        )
+        .unwrap_err();
         assert_eq!(
             error.to_string(),
             r#"QAPI parse error at line 1, column 23: unexpected character: "'x' }""#
@@ -596,7 +606,8 @@ mod tests {
                 r###": "##\n'F' }""###.to_owned(),
             ),
         ] {
-            let error = parse_schema_with_version(input, (11, 1, 3)).unwrap_err();
+            let error =
+                parse_schema_with_version(input, (11, 1, 3)).unwrap_err();
             assert_eq!(
                 (error.to_string(), error.kind),
                 (

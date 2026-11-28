@@ -24,16 +24,8 @@ fn generated_command_flags_preserve_a_removed_interval() {
             "{'command':'flip','allow-oob':true,'allow-preconfig':true,'success-response':false}",
         ),
     ] {
-        let feature = if tag == "v8.0.0" {
-            "[]"
-        } else {
-            "['unstable']"
-        };
-        let initial = if tag == "v6.1.0" {
-            "['unstable']"
-        } else {
-            "[]"
-        };
+        let feature = if tag == "v8.0.0" { "[]" } else { "['unstable']" };
+        let initial = if tag == "v6.1.0" { "['unstable']" } else { "[]" };
         let surface = if tag == "v8.0.0" {
             ""
         } else {

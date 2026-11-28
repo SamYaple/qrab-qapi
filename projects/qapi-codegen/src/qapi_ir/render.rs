@@ -1,8 +1,8 @@
 //! Rendering of the IR as Rust tokens, with rustdoc and `#[qapi(...)]` attributes.
 
 use super::{
-    Attribute, Enum, EnumVariantKind, Struct, rustify_field, rustify_name, rustify_type,
-    rustify_variant,
+    Attribute, Enum, EnumVariantKind, Struct, rustify_field, rustify_name,
+    rustify_type, rustify_variant,
 };
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
@@ -30,9 +30,11 @@ impl Enum {
             });
 
         let variants = self.variants.iter().map(|variant| {
-            let variant_name = format_ident!("{}", rustify_variant(&variant.name));
+            let variant_name =
+                format_ident!("{}", rustify_variant(&variant.name));
 
-            let variant_attrs = variant.meta.attributes.iter().map(generate_attribute);
+            let variant_attrs =
+                variant.meta.attributes.iter().map(generate_attribute);
             let variant_doc = variant.meta.doc.as_deref().map(doc_to_tokens);
 
             match &variant.kind {
@@ -44,7 +46,8 @@ impl Enum {
                     }
                 }
                 EnumVariantKind::Tuple(type_name) => {
-                    let inner: TokenStream = rustify_type(type_name).parse().unwrap();
+                    let inner: TokenStream =
+                        rustify_type(type_name).parse().unwrap();
                     let type_tokens = if variant.array {
                         quote! { Vec<#inner> }
                     } else {
@@ -134,10 +137,13 @@ fn generate_options(attribute: &Attribute) -> Vec<TokenStream> {
             let name = format_ident!("{}", name);
             vec![quote! { #name }]
         }
-        Attribute::List(attributes) => attributes.iter().flat_map(generate_options).collect(),
+        Attribute::List(attributes) => {
+            attributes.iter().flat_map(generate_options).collect()
+        }
         Attribute::Nested { name, inner } => {
             let name = format_ident!("{}", name);
-            let inner_opts: Vec<TokenStream> = inner.iter().flat_map(generate_options).collect();
+            let inner_opts: Vec<TokenStream> =
+                inner.iter().flat_map(generate_options).collect();
             vec![quote! { #name(#(#inner_opts),*) }]
         }
     }
@@ -171,7 +177,8 @@ fn fence(text: &str) -> Option<(char, usize)> {
     let count = text.chars().take_while(|next| *next == c).count();
     // A backtick fence's info string has no backticks; with one, the line
     // is ordinary text with code spans.
-    (count >= 3 && (c == '~' || !text[count..].contains('`'))).then_some((c, count))
+    (count >= 3 && (c == '~' || !text[count..].contains('`')))
+        .then_some((c, count))
 }
 
 /// Whether `line` closes a fence of `length` `c` characters.
@@ -188,7 +195,9 @@ fn list_item(text: &str) -> Option<usize> {
     let digits = text.bytes().take_while(u8::is_ascii_digit).count();
     let marker = if text.starts_with(['-', '*', '+']) {
         1
-    } else if (1..=9).contains(&digits) && text[digits..].starts_with(['.', ')']) {
+    } else if (1..=9).contains(&digits)
+        && text[digits..].starts_with(['.', ')'])
+    {
         digits + 1
     } else {
         return None;
@@ -213,7 +222,9 @@ fn starts_block(text: &str) -> bool {
         1
     } else if (1..=6).contains(&hashes) {
         hashes
-    } else if (1..=9).contains(&digits) && text[digits..].starts_with(['.', ')']) {
+    } else if (1..=9).contains(&digits)
+        && text[digits..].starts_with(['.', ')'])
+    {
         digits + 1
     } else {
         0
@@ -221,11 +232,10 @@ fn starts_block(text: &str) -> bool {
     let rule = |c: char| {
         let marks = text.chars().filter(|next| *next == c).count();
         marks >= if c == '=' || c == '-' { 1 } else { 3 }
-            && text
-                .chars()
-                .all(|next| next == c || next == ' ' || next == '\t')
+            && text.chars().all(|next| next == c || next == ' ' || next == '\t')
     };
-    (marker > 0 && (text.len() == marker || text[marker..].starts_with([' ', '\t'])))
+    (marker > 0
+        && (text.len() == marker || text[marker..].starts_with([' ', '\t'])))
         || ['=', '-', '*', '_'].into_iter().any(rule)
 }
 
@@ -240,11 +250,8 @@ fn longest_run(text: &str, c: char) -> usize {
 /// `text` as a Markdown code span.
 fn code_span(text: &str) -> String {
     let ticks = "`".repeat(longest_run(text, '`') + 1);
-    let pad = if text.starts_with('`') || text.ends_with('`') {
-        " "
-    } else {
-        ""
-    };
+    let pad =
+        if text.starts_with('`') || text.ends_with('`') { " " } else { "" };
     format!("{ticks}{pad}{text}{pad}{ticks}")
 }
 
@@ -294,7 +301,8 @@ fn render_doc(doc: &str) -> Vec<String> {
             let fence = &text[..length];
             out.push(format!("{fence}text"));
             index += 1;
-            while index < lines.len() && !closes_fence(lines[index], c, length) {
+            while index < lines.len() && !closes_fence(lines[index], c, length)
+            {
                 let (columns, content) = indentation(lines[index]);
                 out.push(format!(
                     "{}{content}",
@@ -347,8 +355,9 @@ fn render_doc(doc: &str) -> Vec<String> {
             // Markdown would otherwise read as a lazy continuation.
             format!("{}{text}", " ".repeat(item_content.unwrap_or(kept)))
         };
-        literal_after = (text.trim_end().ends_with("::") && !text.trim_start().starts_with(".."))
-            .then_some(paragraph_indent);
+        literal_after = (text.trim_end().ends_with("::")
+            && !text.trim_start().starts_with(".."))
+        .then_some(paragraph_indent);
         paragraph.push(text);
         index += 1;
     }
@@ -366,11 +375,8 @@ fn literal_block(lines: &[&str], out: &mut Vec<String>) {
         .map(|(indent, _)| *indent)
         .min()
         .unwrap_or(0);
-    let longest = lines
-        .iter()
-        .map(|(_, text)| longest_run(text, '`'))
-        .max()
-        .unwrap_or(0);
+    let longest =
+        lines.iter().map(|(_, text)| longest_run(text, '`')).max().unwrap_or(0);
     let fence = "`".repeat(longest.max(2) + 1);
     out.push(format!("{fence}text"));
     for (indent, text) in lines {
@@ -398,8 +404,9 @@ fn markdown_link(text: &str) -> Option<usize> {
         return None;
     }
     let destination = &text[label + 2..];
-    let end = destination
-        .find(|c: char| c.is_whitespace() || matches!(c, '(' | ')' | '<' | '>' | '`'))?;
+    let end = destination.find(|c: char| {
+        c.is_whitespace() || matches!(c, '(' | ')' | '<' | '>' | '`')
+    })?;
     (destination[end..].starts_with(')') && is_url(&destination[..end]))
         .then_some(label + 2 + end + 1)
 }
@@ -407,8 +414,9 @@ fn markdown_link(text: &str) -> Option<usize> {
 /// The length of a Markdown autolink, `<https://...>`, at the start of `text`.
 fn autolink(text: &str) -> Option<usize> {
     let inner = &text[1..];
-    let end = inner
-        .find(|c: char| c.is_whitespace() || c.is_control() || matches!(c, '<' | '>' | '`'))?;
+    let end = inner.find(|c: char| {
+        c.is_whitespace() || c.is_control() || matches!(c, '<' | '>' | '`')
+    })?;
     (inner[end..].starts_with('>') && is_url(&inner[..end])).then_some(end + 2)
 }
 
@@ -420,11 +428,13 @@ fn bare_url(text: &str) -> Option<&str> {
     }
     let mut url = &text[..text.find(char::is_whitespace).unwrap_or(text.len())];
     loop {
-        let mut trimmed =
-            url.trim_end_matches(['.', ',', ':', ';', '!', '?', '\'', '"', '*', '_', '~']);
+        let mut trimmed = url.trim_end_matches([
+            '.', ',', ':', ';', '!', '?', '\'', '"', '*', '_', '~',
+        ]);
         for (open, close) in [('(', ')'), ('[', ']')] {
             if trimmed.ends_with(close)
-                && trimmed.matches(open).count() < trimmed.matches(close).count()
+                && trimmed.matches(open).count()
+                    < trimmed.matches(close).count()
             {
                 trimmed = &trimmed[..trimmed.len() - 1];
             }
@@ -442,9 +452,8 @@ fn entity(text: &str) -> bool {
     let name = text.strip_prefix('#').map_or(text, |number| {
         number.strip_prefix(['x', 'X']).unwrap_or(number)
     });
-    let end = name
-        .find(|c: char| !c.is_ascii_alphanumeric())
-        .unwrap_or(name.len());
+    let end =
+        name.find(|c: char| !c.is_ascii_alphanumeric()).unwrap_or(name.len());
     end > 0 && name[end..].starts_with(';')
 }
 
@@ -465,12 +474,16 @@ fn prose(lines: &[String]) -> Vec<String> {
     let mut line_start = true;
     while let Some(c) = rest.chars().next() {
         let mut copy = 0;
-        if c == '\\' && rest[1..].starts_with(|next: char| next.is_ascii_punctuation()) {
+        if c == '\\'
+            && rest[1..].starts_with(|next: char| next.is_ascii_punctuation())
+        {
             copy = 2;
         } else if c == '`' {
             let run = rest.bytes().take_while(|byte| *byte == b'`').count();
             // A run of three at the start of a line would open a fence.
-            match closing_ticks(&rest[run..], run).filter(|_| !(line_start && run >= 3)) {
+            match closing_ticks(&rest[run..], run)
+                .filter(|_| !(line_start && run >= 3))
+            {
                 Some(end) => copy = 2 * run + end,
                 None => {
                     out.push_str(&"\\`".repeat(run));
@@ -520,10 +533,8 @@ fn closing_ticks(text: &str, run: usize) -> Option<usize> {
     let mut index = 0;
     while index < bytes.len() {
         if bytes[index] == b'`' {
-            let count = bytes[index..]
-                .iter()
-                .take_while(|byte| **byte == b'`')
-                .count();
+            let count =
+                bytes[index..].iter().take_while(|byte| **byte == b'`').count();
             if count == run {
                 return Some(index);
             }
@@ -538,13 +549,17 @@ fn closing_ticks(text: &str, run: usize) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::qapi_ir::{EnumVariant, Metadata, StructField, process_union};
-    use crate::{QapiUnion, with_parser_version};
+    use crate::{
+        QapiUnion,
+        qapi_ir::{EnumVariant, Metadata, StructField, process_union},
+        with_parser_version,
+    };
     use std::collections::HashMap;
 
     fn rendered(doc: &str) -> Vec<String> {
         let tokens = doc_to_tokens(doc);
-        let item: syn::ItemStruct = syn::parse2(quote! { #tokens struct Example; }).unwrap();
+        let item: syn::ItemStruct =
+            syn::parse2(quote! { #tokens struct Example; }).unwrap();
         item.attrs
             .iter()
             .map(|attr| {
@@ -578,10 +593,7 @@ mod tests {
 
     #[test]
     fn prose_stays_literal_text() {
-        renders(
-            r"Escaped \[4\] \<id\> \`text",
-            r"Escaped \[4\] \<id\> \`text",
-        );
+        renders(r"Escaped \[4\] \<id\> \`text", r"Escaped \[4\] \<id\> \`text");
         renders(
             "Bit[3:0] and child<subtype> &amp; R&D",
             r"Bit\[3:0\] and child&lt;subtype&gt; \&amp; R&D",
@@ -606,10 +618,7 @@ mod tests {
             "[link](https://example.test/) and <https://example.test/>",
         );
         // Each bracket pair is a label of its own.
-        renders(
-            "[a] b [c](https://d.test/)",
-            r"\[a\] b [c](https://d.test/)",
-        );
+        renders("[a] b [c](https://d.test/)", r"\[a\] b [c](https://d.test/)");
         // A link to anything else would be an intra-doc link.
         renders("[a](b) <c>", r"\[a\](b) &lt;c&gt;");
     }
@@ -738,7 +747,10 @@ mod tests {
                 },
                 EnumVariant {
                     name: "Self".into(),
-                    meta: meta(None, vec![Attribute::with_value("name", "Self")]),
+                    meta: meta(
+                        None,
+                        vec![Attribute::with_value("name", "Self")],
+                    ),
                     kind: EnumVariantKind::Unit,
                     array: false,
                 },
@@ -766,13 +778,16 @@ pub enum Choice {
 "#
         );
 
-        let field = |name: &str, r#type: &str, optional, array, doc, attributes| StructField {
-            name: name.into(),
-            meta: meta(doc, attributes),
-            r#type: r#type.into(),
-            optional,
-            array,
-        };
+        let field =
+            |name: &str, r#type: &str, optional, array, doc, attributes| {
+                StructField {
+                    name: name.into(),
+                    meta: meta(doc, attributes),
+                    r#type: r#type.into(),
+                    optional,
+                    array,
+                }
+            };
         let structure = Struct {
             name: "query-thing".into(),
             meta: meta(

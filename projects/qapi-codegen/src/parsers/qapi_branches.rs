@@ -1,8 +1,5 @@
-use super::common::take_dict;
-use super::qapi_branch::QapiBranch;
-use super::vec_newtype;
-use nom::IResult;
-use nom::Parser;
+use super::{common::take_dict, qapi_branch::QapiBranch, vec_newtype};
+use nom::{IResult, Parser};
 
 pub(crate) fn take_branches(input: &str) -> IResult<&str, QapiBranches<'_>> {
     QapiBranches::parse(input)

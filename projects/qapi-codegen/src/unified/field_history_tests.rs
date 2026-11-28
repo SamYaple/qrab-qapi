@@ -1,8 +1,10 @@
-use super::merge::{
-    TRACKED_BOOL_ATTRS, fix_recursive_types, has_feature, materialize_field_history, merge_enum,
-    merge_struct,
+use super::{
+    merge::{
+        TRACKED_BOOL_ATTRS, fix_recursive_types, has_feature,
+        materialize_field_history, merge_enum, merge_struct,
+    },
+    *,
 };
-use super::*;
 
 fn field(name: &str, ty: &str, array: bool) -> StructField {
     StructField {
@@ -15,17 +17,14 @@ fn field(name: &str, ty: &str, array: bool) -> StructField {
 }
 
 fn record(fields: Vec<StructField>) -> Struct {
-    Struct {
-        name: "Record".into(),
-        fields,
-        meta: Metadata::default(),
-    }
+    Struct { name: "Record".into(), fields, meta: Metadata::default() }
 }
 
 #[test]
 fn initially_deprecated_members_record_their_first_release() {
     let mut registry = UnifiedRegistry::default();
-    let feature = Attribute::List(vec![Attribute::with_value("feature", "deprecated")]);
+    let feature =
+        Attribute::List(vec![Attribute::with_value("feature", "deprecated")]);
     let mut member = field("value", "str", false);
     member.meta.attributes.push(feature.clone());
     let record = record(vec![member]);
@@ -35,10 +34,7 @@ fn initially_deprecated_members_record_their_first_release() {
             name: "value".into(),
             kind: EnumVariantKind::Unit,
             array: false,
-            meta: Metadata {
-                attributes: vec![feature],
-                ..Default::default()
-            },
+            meta: Metadata { attributes: vec![feature], ..Default::default() },
         }],
         meta: Metadata::default(),
     };
@@ -62,7 +58,9 @@ fn stabilization_clears_latest_type_and_field_feature_metadata() {
     for (major, unstable) in [(6, true), (8, false), (11, true), (12, false)] {
         let mut value = record(vec![field("value", "str", false)]);
         if unstable {
-            let feature = Attribute::List(vec![Attribute::with_value("feature", "unstable")]);
+            let feature = Attribute::List(vec![Attribute::with_value(
+                "feature", "unstable",
+            )]);
             value.meta.attributes.push(feature.clone());
             value.fields[0].meta.attributes.push(feature);
         }
@@ -73,7 +71,8 @@ fn stabilization_clears_latest_type_and_field_feature_metadata() {
     };
     assert!(!has_feature(&value.ir.meta, "unstable"));
     assert!(!has_feature(&value.ir.fields[0].meta, "unstable"));
-    let expected = vec![((6, 0, 0), Some((8, 0, 0))), ((11, 0, 0), Some((12, 0, 0)))];
+    let expected =
+        vec![((6, 0, 0), Some((8, 0, 0))), ((11, 0, 0), Some((12, 0, 0)))];
     assert_eq!(value.versions.unstable_ranges, expected);
     assert_eq!(value.field_versions["value"].unstable_ranges, expected);
 }
@@ -83,10 +82,7 @@ fn optional_fields_keep_one_lifetime_when_conditions_change() {
     let mut registry = UnifiedRegistry::default();
     let mut value = field("value", "str", false);
     value.optional = true;
-    value
-        .meta
-        .attributes
-        .push(Attribute::with_value("condition", "CONFIG_A"));
+    value.meta.attributes.push(Attribute::with_value("condition", "CONFIG_A"));
     merge_struct(
         &mut registry,
         "Record",
@@ -106,7 +102,9 @@ fn optional_fields_keep_one_lifetime_when_conditions_change() {
 #[test]
 fn conditional_field_presence_preserves_requiredness_and_latest_conditions() {
     let mut registry = UnifiedRegistry::default();
-    for (major, condition) in [(1, Some("CONFIG_A")), (2, None), (3, Some("CONFIG_B"))] {
+    for (major, condition) in
+        [(1, Some("CONFIG_A")), (2, None), (3, Some("CONFIG_B"))]
+    {
         let mut value = field("value", "str", false);
         if let Some(condition) = condition {
             value
@@ -114,7 +112,12 @@ fn conditional_field_presence_preserves_requiredness_and_latest_conditions() {
                 .attributes
                 .push(Attribute::with_value("condition", condition));
         }
-        merge_struct(&mut registry, "Record", &record(vec![value]), (major, 0, 0));
+        merge_struct(
+            &mut registry,
+            "Record",
+            &record(vec![value]),
+            (major, 0, 0),
+        );
     }
     materialize_field_history(&mut registry, "QMP").unwrap();
     let UnifiedType::Struct(value) = &registry.types["Record"] else {
@@ -127,14 +130,9 @@ fn conditional_field_presence_preserves_requiredness_and_latest_conditions() {
             .attributes
             .contains(&Attribute::with_value("condition", "CONFIG_B"))
     );
-    assert!(
-        !value.field_history[1]
-            .0
-            .meta
-            .attributes
-            .iter()
-            .any(|attr| matches!(attr, Attribute::Item {name,..} if name == "condition"))
-    );
+    assert!(!value.field_history[1].0.meta.attributes.iter().any(
+        |attr| matches!(attr, Attribute::Item {name,..} if name == "condition")
+    ));
 }
 
 #[test]
@@ -160,7 +158,12 @@ fn field_optionality_changes_preserve_each_wire_contract() {
     for (major, optional) in [(1, true), (2, false), (3, true)] {
         let mut value = field("value", "str", false);
         value.optional = optional;
-        merge_struct(&mut registry, "Record", &record(vec![value]), (major, 0, 0));
+        merge_struct(
+            &mut registry,
+            "Record",
+            &record(vec![value]),
+            (major, 0, 0),
+        );
     }
     materialize_field_history(&mut registry, "QMP").unwrap();
     let UnifiedType::Struct(value) = &registry.types["Record"] else {
@@ -225,10 +228,7 @@ fn the_earlier_shape_of_a_keyword_field_is_named_without_r_hash() {
     assert_eq!(legacy.name, "type_legacy");
     assert_eq!(legacy.r#type, "int");
     assert!(
-        legacy
-            .meta
-            .attributes
-            .contains(&Attribute::with_value("name", "type"))
+        legacy.meta.attributes.contains(&Attribute::with_value("name", "type"))
     );
     assert_eq!(value.field_versions["type_legacy"].until, Some((2, 0, 0)));
 }
@@ -260,9 +260,7 @@ fn field_wire_renames_preserve_original_keys() {
         .find(|field| field.name == "foo_bar_legacy")
         .unwrap();
     assert!(
-        old.meta
-            .attributes
-            .contains(&Attribute::with_value("name", "foo-bar"))
+        old.meta.attributes.contains(&Attribute::with_value("name", "foo-bar"))
     );
 }
 
@@ -311,18 +309,17 @@ fn recursive_vectors_break_size_cycles_but_inline_references_require_boxing() {
         (1, 0, 0),
     );
     fix_recursive_types(&mut registry);
-    let UnifiedType::Struct(value) = &registry.types["Node"] else {
-        panic!()
-    };
+    let UnifiedType::Struct(value) = &registry.types["Node"] else { panic!() };
     assert!(
-        !value.ir.fields[0]
-            .meta
-            .attributes
-            .contains(&Attribute::new("boxed"))
+        !value.ir.fields[0].meta.attributes.contains(&Attribute::new("boxed"))
     );
 }
 
-fn release(major: u32, structs: &[&str], enums: &[&str]) -> super::lower::VersionResult {
+fn release(
+    major: u32,
+    structs: &[&str],
+    enums: &[&str],
+) -> super::lower::VersionResult {
     super::lower::VersionResult {
         tag: format!("v{major}.0.0"),
         version: (major, 0, 0),
@@ -357,10 +354,7 @@ fn types_that_return_or_change_kind_are_errors() {
     let UnifiedType::Struct(value) = &registry.types["Record"] else {
         panic!("struct")
     };
-    assert_eq!(
-        (value.versions.since, value.versions.until),
-        ((1, 0, 0), None)
-    );
+    assert_eq!((value.versions.since, value.versions.until), ((1, 0, 0), None));
 
     let error = super::registry::merge_releases(
         "QGA",
@@ -445,7 +439,10 @@ fn reintroduced_flags_start_a_new_lifetime() {
             panic!("{flag}: {:?}", value.attr_history)
         };
         assert_eq!(name, flag);
-        assert_eq!((removed.since, removed.until), ((1, 0, 0), Some((2, 0, 0))));
+        assert_eq!(
+            (removed.since, removed.until),
+            ((1, 0, 0), Some((2, 0, 0)))
+        );
         assert!(value.flag_enabled(flag, (1, 0, 0)));
         assert!(!value.flag_enabled(flag, (2, 0, 0)));
         assert!(value.flag_enabled(flag, (3, 0, 0)));

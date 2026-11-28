@@ -1,6 +1,6 @@
 use qapi_codegen::{
-    ReadError, parse_schema, parse_schema_with_version, parser_version, read_schema_with_version,
-    with_parser_version,
+    ReadError, parse_schema, parse_schema_with_version, parser_version,
+    read_schema_with_version, with_parser_version,
 };
 use std::path::Path;
 
@@ -29,25 +29,20 @@ fn reading_schema_files_restores_the_caller_grammar() {
     std::fs::write(dir.join("legacy.json"), "{'command':'c\\'d'}\n").unwrap();
     with_parser_version((11, 1, 3), || {
         assert_eq!(
-            read_schema_with_version(&root, Some((2, 3, 0)))
-                .unwrap()
-                .len(),
+            read_schema_with_version(&root, Some((2, 3, 0))).unwrap().len(),
             2
         );
         assert_eq!(parser_version(), (11, 1, 3));
         let error = read_schema_with_version(&root, None).unwrap_err();
         assert!(
-            matches!(
-                error,
-                ReadError::Parse {
-                    version: (11, 1, 3),
-                    ..
-                }
-            ),
+            matches!(error, ReadError::Parse { version: (11, 1, 3), .. }),
             "{error}"
         );
         assert_eq!(parser_version(), (11, 1, 3));
-        let error = read_schema_with_version(&dir.join("missing.json"), Some((2, 3, 0)));
+        let error = read_schema_with_version(
+            &dir.join("missing.json"),
+            Some((2, 3, 0)),
+        );
         assert!(matches!(error, Err(ReadError::Resolve { .. })));
         assert_eq!(parser_version(), (11, 1, 3));
     });

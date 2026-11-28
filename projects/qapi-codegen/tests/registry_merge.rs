@@ -2,22 +2,20 @@
 //! version ranges, events, unions, recursion, return types and build
 //! conditions, and the errors that name the release that failed.
 
-use std::path::Path;
-use std::process::Command;
-use std::sync::OnceLock;
-
-use qapi_codegen::qapi_ir::{Attribute, Metadata, rustify_name};
-use qapi_codegen::unified::{
-    RegistryError, UnifiedRegistry, UnifiedStruct, UnifiedType, WarningKind, build_qga_registry,
-    build_qmp_registry,
-};
-use qapi_codegen::versions::{
-    PINNED_VERSIONS, extract_schema_from_tag, find_schema_entry, parse_pinned_versions,
-    parse_version_tag,
-};
 use qapi_codegen::{
-    IncludeError, QapiSchemaToken, ReadError, parse_schema_with_version, read_schema_with_version,
+    IncludeError, QapiSchemaToken, ReadError, parse_schema_with_version,
+    qapi_ir::{Attribute, Metadata, rustify_name},
+    read_schema_with_version,
+    unified::{
+        RegistryError, UnifiedRegistry, UnifiedStruct, UnifiedType,
+        WarningKind, build_qga_registry, build_qmp_registry,
+    },
+    versions::{
+        PINNED_VERSIONS, extract_schema_from_tag, find_schema_entry,
+        parse_pinned_versions, parse_version_tag,
+    },
 };
+use std::{path::Path, process::Command, sync::OnceLock};
 
 fn qemu_root() -> &'static Path {
     let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -30,18 +28,15 @@ fn qemu_root() -> &'static Path {
 
 /// The newest pinned release.
 fn newest_pin() -> String {
-    parse_pinned_versions(PINNED_VERSIONS)
-        .unwrap()
-        .pop()
-        .unwrap()
-        .tag
+    parse_pinned_versions(PINNED_VERSIONS).unwrap().pop().unwrap().tag
 }
 
 /// Representative version tags covering all parser eras, and the newest pin.
 fn representative_tags() -> Vec<String> {
     let mut tags: Vec<String> = [
-        "v1.0", "v1.1.0", "v1.7.0", "v2.0.0", "v2.1.0", "v2.5.0", "v2.8.0", "v2.12.0", "v3.0.0",
-        "v5.0.0", "v7.0.0", "v9.0.0", "v10.2.0", "v11.0.0",
+        "v1.0", "v1.1.0", "v1.7.0", "v2.0.0", "v2.1.0", "v2.5.0", "v2.8.0",
+        "v2.12.0", "v3.0.0", "v5.0.0", "v7.0.0", "v9.0.0", "v10.2.0",
+        "v11.0.0",
     ]
     .into_iter()
     .map(String::from)
@@ -56,7 +51,8 @@ fn qmp() -> &'static UnifiedRegistry {
     REGISTRY.get_or_init(|| {
         let tags = representative_tags();
         let tags: Vec<_> = tags.iter().map(String::as_str).collect();
-        build_qmp_registry(qemu_root(), &tags).expect("build_qmp_registry failed")
+        build_qmp_registry(qemu_root(), &tags)
+            .expect("build_qmp_registry failed")
     })
 }
 
@@ -64,21 +60,32 @@ fn qmp() -> &'static UnifiedRegistry {
 fn qga() -> &'static UnifiedRegistry {
     static REGISTRY: OnceLock<UnifiedRegistry> = OnceLock::new();
     REGISTRY.get_or_init(|| {
-        build_qga_registry(qemu_root(), &["v1.4.0", "v2.4.0", "v2.5.0", "v11.1.3"])
-            .expect("build_qga_registry failed")
+        build_qga_registry(
+            qemu_root(),
+            &["v1.4.0", "v2.4.0", "v2.5.0", "v11.1.3"],
+        )
+        .expect("build_qga_registry failed")
     })
 }
 
 /// Look up a type by its QAPI name: registry keys are Rust names.
-fn lookup<'r>(registry: &'r UnifiedRegistry, raw_name: &str) -> Option<&'r UnifiedType> {
+fn lookup<'r>(
+    registry: &'r UnifiedRegistry,
+    raw_name: &str,
+) -> Option<&'r UnifiedType> {
     registry.types.get(&rustify_name(raw_name))
 }
 
 /// The struct that a QAPI name stands for, which must exist.
-fn structure<'r>(registry: &'r UnifiedRegistry, raw_name: &str) -> &'r UnifiedStruct {
+fn structure<'r>(
+    registry: &'r UnifiedRegistry,
+    raw_name: &str,
+) -> &'r UnifiedStruct {
     match lookup(registry, raw_name) {
         Some(UnifiedType::Struct(value)) => value,
-        Some(UnifiedType::Enum(_)) => panic!("{raw_name} is an enum, not a struct"),
+        Some(UnifiedType::Enum(_)) => {
+            panic!("{raw_name} is an enum, not a struct")
+        }
         None => panic!("{raw_name} is missing from the registry"),
     }
 }
@@ -151,19 +158,14 @@ fn registry_errors_name_the_release() {
     let repo = repository(&[
         ("v0.15.0", &[]),
         ("v1.0", &[]),
-        (
-            "v2.1.0",
-            &[("qapi-schema.json", "{ 'include': 'missing.json' }")],
-        ),
-        (
-            "v2.2.0",
-            &[("qapi-schema.json", "{ 'enum': 'int', 'data': [] }")],
-        ),
+        ("v2.1.0", &[("qapi-schema.json", "{ 'include': 'missing.json' }")]),
+        ("v2.2.0", &[("qapi-schema.json", "{ 'enum': 'int', 'data': [] }")]),
     ]);
     // Before 1.0 a release has no QMP schema and is left out.
     let registry = build_qmp_registry(repo.path(), &["v0.15.0"]).unwrap();
     assert!(registry.types.is_empty());
-    let error = build_qmp_registry(repo.path(), &["v0.15.0", "v1.0"]).unwrap_err();
+    let error =
+        build_qmp_registry(repo.path(), &["v0.15.0", "v1.0"]).unwrap_err();
     assert!(
         matches!(&error, RegistryError::MissingEntry { tag, protocol: "QMP" } if tag == "v1.0"),
         "{error:?}"
@@ -188,17 +190,16 @@ fn registry_errors_name_the_release() {
 
 #[test]
 fn tolerated_schema_quirks_are_returned_as_warnings() {
-    let registry = build_qmp_registry(qemu_root(), &["v1.7.0", "v2.4.0"]).unwrap();
+    let registry =
+        build_qmp_registry(qemu_root(), &["v1.7.0", "v2.4.0"]).unwrap();
     let warning = |tag: &str, kind: &WarningKind| {
         registry
             .warnings
             .iter()
             .any(|warning| warning.tag == tag && &warning.kind == kind)
     };
-    let driver = registry
-        .warnings
-        .iter()
-        .find_map(|warning| match &warning.kind {
+    let driver =
+        registry.warnings.iter().find_map(|warning| match &warning.kind {
             WarningKind::NonEnumDiscriminator {
                 union,
                 discriminator,
@@ -254,7 +255,8 @@ fn test_boxed_command_different_name_not_lost() {
         );
         assert_eq!(command.versions.until, None, "{cmd_name} is current");
         assert_ne!(rustify_name(cmd_name), rustify_name(data_ref));
-        let data = lookup(qmp(), data_ref).unwrap_or_else(|| panic!("{data_ref} is missing"));
+        let data = lookup(qmp(), data_ref)
+            .unwrap_or_else(|| panic!("{data_ref} is missing"));
         assert!(
             !has_unit(attributes(data), "command"),
             "{data_ref}, the data of {cmd_name}, is no command"
@@ -394,7 +396,8 @@ fn test_data_types_no_command_leakage() {
         "NumaOptions",
         "BlockJobChangeOptions",
     ] {
-        let value = lookup(qmp(), type_name).unwrap_or_else(|| panic!("{type_name} is missing"));
+        let value = lookup(qmp(), type_name)
+            .unwrap_or_else(|| panic!("{type_name} is missing"));
         let attrs = attributes(value);
         assert!(!has_unit(attrs, "command"), "{type_name}");
         assert!(
@@ -418,7 +421,8 @@ fn test_enum_version_tracking() {
             UnifiedType::Struct(_) => None,
         })
         .collect();
-    let added_later = enums.iter().filter(|range| range.since > (1, 0, 0)).count();
+    let added_later =
+        enums.iter().filter(|range| range.since > (1, 0, 0)).count();
     assert!(added_later > 50, "{added_later} enums added after 1.0");
     assert!(enums.iter().any(|range| range.until.is_some()));
 }
@@ -471,7 +475,8 @@ fn test_all_latest_commands_in_registry() {
                 return false;
             };
             let wire = item(&value.ir.meta, "name").unwrap_or(&value.ir.name);
-            has_unit(&value.ir.meta.attributes, "command") && wire == command.name.as_ref()
+            has_unit(&value.ir.meta.attributes, "command")
+                && wire == command.name.as_ref()
         });
         if !found {
             missing.push(command.name.to_string());
@@ -486,7 +491,8 @@ fn test_registry_command_count() {
         .types
         .values()
         .filter(|value| {
-            matches!(value, UnifiedType::Struct(_)) && has_unit(attributes(value), "command")
+            matches!(value, UnifiedType::Struct(_))
+                && has_unit(attributes(value), "command")
         })
         .count();
     assert!(commands > 150, "{commands} commands");
@@ -530,7 +536,9 @@ fn test_removed_events_have_until() {
         .types
         .values()
         .filter_map(|value| match value {
-            UnifiedType::Struct(value) if has_unit(&value.ir.meta.attributes, "event") => {
+            UnifiedType::Struct(value)
+                if has_unit(&value.ir.meta.attributes, "event") =>
+            {
                 Some(value)
             }
             _ => None,
@@ -548,7 +556,9 @@ fn test_unions_have_discriminators() {
         .types
         .values()
         .filter_map(|value| match value {
-            UnifiedType::Struct(value) if value.ir.fields.iter().any(|f| f.name == "u") => {
+            UnifiedType::Struct(value)
+                if value.ir.fields.iter().any(|f| f.name == "u") =>
+            {
                 Some(value)
             }
             _ => None,
@@ -572,7 +582,9 @@ fn test_unions_have_discriminators() {
 fn test_alternates_are_enums() {
     for alt_name in ["BlockdevRef", "StrOrNull"] {
         match lookup(qmp(), alt_name) {
-            Some(UnifiedType::Enum(value)) => assert!(value.ir.variants.len() >= 2),
+            Some(UnifiedType::Enum(value)) => {
+                assert!(value.ir.variants.len() >= 2)
+            }
             other => panic!("{alt_name} should be an enum: {other:?}"),
         }
     }
@@ -624,14 +636,12 @@ fn command_returns_follow_the_newest_release() {
         (
             qga(),
             "guest-fstrim",
-            &[
-                ((1, 4, 0), "()"),
-                ((2, 4, 0), "GuestFilesystemTrimResponse"),
-            ],
+            &[((1, 4, 0), "()"), ((2, 4, 0), "GuestFilesystemTrimResponse")],
         ),
     ] {
         let value = structure(registry, command);
-        let expected: Vec<_> = history.iter().map(|(v, r)| (*v, r.to_string())).collect();
+        let expected: Vec<_> =
+            history.iter().map(|(v, r)| (*v, r.to_string())).collect();
         assert_eq!(value.returns_history, expected, "{command}");
         assert_eq!(
             value.returns(),
@@ -652,10 +662,7 @@ fn commands_named_like_another_type_get_command_types() {
         (qmp(), "block-dirty-bitmap-merge", "BlockDirtyBitmapMerge"),
     ] {
         let request = structure(registry, &format!("{other}Command"));
-        assert!(
-            has_unit(&request.ir.meta.attributes, "command"),
-            "{command}"
-        );
+        assert!(has_unit(&request.ir.meta.attributes, "command"), "{command}");
         assert_eq!(item(&request.ir.meta, "name"), Some(command));
         let value = structure(registry, other);
         assert!(!has_unit(&value.ir.meta.attributes, "command"), "{other}");
@@ -700,9 +707,9 @@ fn test_name_attributes_preserved() {
         .types
         .values()
         .filter(|value| {
-            attributes(value)
-                .iter()
-                .any(|a| matches!(a, Attribute::Item { name, .. } if name == "name"))
+            attributes(value).iter().any(
+                |a| matches!(a, Attribute::Item { name, .. } if name == "name"),
+            )
         })
         .count();
     assert!(named > 50, "{named} types with a wire name");
@@ -715,12 +722,8 @@ fn test_doc_preservation_in_ir() {
     let status = structure(qmp(), "StatusInfo");
     let doc = status.ir.meta.schema_doc.as_deref().unwrap();
     assert!(!doc.is_empty() && !doc.starts_with('\n') && !doc.ends_with('\n'));
-    let running = status
-        .ir
-        .fields
-        .iter()
-        .find(|f| f.name == "running")
-        .unwrap();
+    let running =
+        status.ir.fields.iter().find(|f| f.name == "running").unwrap();
     let doc = running.meta.schema_doc.as_deref().unwrap();
     assert!(doc.contains("VCPUs"), "{doc}");
     assert!(!doc.starts_with('\n') && !doc.ends_with('\n'));
@@ -785,11 +788,9 @@ fn registry_errors_name_the_schema_file_in_its_release() {
     );
     // A file that is not UTF-8, which the helper cannot write.
     std::fs::write(repo.path().join("qapi/one.json"), b"\xff").unwrap();
-    for args in [
-        &["add", "-A"][..],
-        &["commit", "-qm", "v10.1.0"],
-        &["tag", "v10.1.0"],
-    ] {
+    for args in
+        [&["add", "-A"][..], &["commit", "-qm", "v10.1.0"], &["tag", "v10.1.0"]]
+    {
         let status = Command::new("git")
             .args([
                 "-c",
@@ -816,7 +817,8 @@ fn registry_errors_name_the_schema_file_in_its_release() {
 fn a_release_is_checked_in_the_order_of_its_includes() {
     // Until 2.11 the QMP schema is at the top of the tree, so its label
     // has no directory.
-    let main = "{ 'struct': 'a b', 'data': {} }\n{ 'include': 'qapi/one.json' }\n";
+    let main =
+        "{ 'struct': 'a b', 'data': {} }\n{ 'include': 'qapi/one.json' }\n";
     let repo = repository(&[
         (
             "v2.9.0",

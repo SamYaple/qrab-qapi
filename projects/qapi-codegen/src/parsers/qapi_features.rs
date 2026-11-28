@@ -1,8 +1,9 @@
-use super::common::{take_kv, take_list};
-use super::qapi_feature::QapiFeature;
-use super::vec_newtype;
-use nom::IResult;
-use nom::Parser;
+use super::{
+    common::{take_kv, take_list},
+    qapi_feature::QapiFeature,
+    vec_newtype,
+};
+use nom::{IResult, Parser};
 
 /// Convenience wrapper for taking a list of features
 pub(crate) fn take_features(input: &str) -> IResult<&str, QapiFeatures<'_>> {
@@ -39,7 +40,8 @@ mod tests {
             r#if: None,
             keys: Some(vec!["name".into()]),
         }]);
-        let (remaining, result) = QapiFeatures::parse(input).expect("Parsing failed");
+        let (remaining, result) =
+            QapiFeatures::parse(input).expect("Parsing failed");
         assert_eq!(remaining, "");
         assert_eq!(result, expected);
     }
@@ -53,7 +55,8 @@ mod tests {
             r#if: None,
             keys: None,
         }]);
-        let (remaining, result) = QapiFeatures::parse(input).expect("Parsing failed");
+        let (remaining, result) =
+            QapiFeatures::parse(input).expect("Parsing failed");
         assert_eq!(remaining, "");
         assert_eq!(result, expected);
     }
@@ -67,14 +70,16 @@ mod tests {
             r#if: Some(QapiCond::ConfigName("CONFIG_OPTION".into())),
             keys: Some(vec!["name".into(), "if".into()]),
         }]);
-        let (remaining, result) = QapiFeatures::parse(input).expect("Parsing failed");
+        let (remaining, result) =
+            QapiFeatures::parse(input).expect("Parsing failed");
         assert_eq!(remaining, "");
         assert_eq!(result, expected);
     }
 
     #[test]
     fn test_parse_features_mixed() {
-        let input = "[{'name':'deprecated','if':'CONFIG_OPTION'},'testfeature']";
+        let input =
+            "[{'name':'deprecated','if':'CONFIG_OPTION'},'testfeature']";
         let expected = QapiFeatures(vec![
             QapiFeature {
                 malformed: Vec::new(),
@@ -89,7 +94,8 @@ mod tests {
                 keys: None,
             },
         ]);
-        let (remaining, result) = QapiFeatures::parse(input).expect("Parsing failed");
+        let (remaining, result) =
+            QapiFeatures::parse(input).expect("Parsing failed");
         assert_eq!(remaining, "");
         assert_eq!(result, expected);
     }
@@ -103,7 +109,8 @@ mod tests {
             r#if: None,
             keys: Some(vec!["name".into()]),
         };
-        let (remaining, result) = QapiFeature::parse(input).expect("Parsing failed");
+        let (remaining, result) =
+            QapiFeature::parse(input).expect("Parsing failed");
         assert_eq!(remaining, "");
         assert_eq!(result, expected);
     }
@@ -117,7 +124,8 @@ mod tests {
             r#if: None,
             keys: None,
         };
-        let (remaining, result) = QapiFeature::parse(input).expect("Parsing failed");
+        let (remaining, result) =
+            QapiFeature::parse(input).expect("Parsing failed");
         assert_eq!(remaining, "");
         assert_eq!(result, expected);
     }
@@ -131,7 +139,8 @@ mod tests {
             r#if: Some(QapiCond::ConfigName("CONFIG_OPTION".into())),
             keys: Some(vec!["name".into(), "if".into()]),
         };
-        let (remaining, result) = QapiFeature::parse(input).expect("Parsing failed");
+        let (remaining, result) =
+            QapiFeature::parse(input).expect("Parsing failed");
         assert_eq!(remaining, "");
         assert_eq!(result, expected);
     }

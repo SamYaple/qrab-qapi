@@ -5,13 +5,18 @@
 //! range of releases that have it, and emits the Rust modules of that
 //! registry as a [`GeneratedOutput`].
 
-use crate::QapiSchemaToken;
-use crate::qapi_ir::*;
-use crate::versions::{
-    extract_schema_from_tag, find_qga_schema_entry, find_schema_entry, parse_version_tag_full,
+use crate::{
+    QapiSchemaToken,
+    qapi_ir::*,
+    versions::{
+        extract_schema_from_tag, find_qga_schema_entry, find_schema_entry,
+        parse_version_tag_full,
+    },
 };
-use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::path::Path;
+use std::{
+    collections::{BTreeMap, BTreeSet, HashMap},
+    path::Path,
+};
 
 mod emit;
 mod error;
@@ -26,8 +31,8 @@ pub use crate::qapi_ir::LowerError;
 pub use emit::emit_registry;
 pub use emit::{Docs, GeneratedOutput, Protocol, Releases, generate};
 pub use error::{
-    Construct, Crash, GenerateError, NameRule, RegistryError, SchemaError, SchemaErrorKind, Shape,
-    Warning, WarningKind,
+    Construct, Crash, GenerateError, NameRule, RegistryError, SchemaError,
+    SchemaErrorKind, Shape, Warning, WarningKind,
 };
 pub(crate) use error::{SchemaContext, SchemaResult, definition, require};
 pub(crate) use merge::has_feature;
@@ -58,7 +63,9 @@ pub(crate) fn classify_type(ut: &UnifiedType) -> TypeCategory {
     };
     for attr in attrs {
         match attr {
-            Attribute::Unit(n) if n == "command" => return TypeCategory::Command,
+            Attribute::Unit(n) if n == "command" => {
+                return TypeCategory::Command;
+            }
             Attribute::Unit(n) if n == "event" => return TypeCategory::Event,
             _ => {}
         }
@@ -132,9 +139,9 @@ pub struct VersionRange {
 /// Whether `ranges` cover `version`.
 #[cfg(test)]
 fn in_ranges(ranges: &[(Version, Option<Version>)], version: Version) -> bool {
-    ranges
-        .iter()
-        .any(|(since, until)| version >= *since && until.is_none_or(|end| version < end))
+    ranges.iter().any(|(since, until)| {
+        version >= *since && until.is_none_or(|end| version < end)
+    })
 }
 
 /// Record whether a feature applies in `version`, the next merged release.
@@ -188,7 +195,8 @@ impl VersionRange {
     /// Record the features of `version`, the next merged release, and
     /// whether it makes the field its union's discriminator.
     fn track_features(&mut self, meta: &Metadata, version: Version) {
-        let discriminator = meta.attributes.contains(&Attribute::new("discriminator"));
+        let discriminator =
+            meta.attributes.contains(&Attribute::new("discriminator"));
         track_feature(
             &mut None,
             &mut self.discriminator_ranges,
@@ -283,11 +291,14 @@ impl UnifiedStruct {
             .get(name)
             .into_iter()
             .chain(
-                self.attr_history
-                    .iter()
-                    .filter_map(|(flag, range)| (flag == name).then_some(range)),
+                self.attr_history.iter().filter_map(|(flag, range)| {
+                    (flag == name).then_some(range)
+                }),
             )
-            .any(|range| version >= range.since && range.until.is_none_or(|until| version < until))
+            .any(|range| {
+                version >= range.since
+                    && range.until.is_none_or(|until| version < until)
+            })
     }
 
     /// The Rust type that a command returns in the newest merged release.
@@ -298,25 +309,27 @@ impl UnifiedStruct {
 
 fn returns_attr(meta: &Metadata) -> Option<&str> {
     meta.attributes.iter().find_map(|a| match a {
-        Attribute::Item { name, value } if name == "returns" => Some(value.as_str()),
+        Attribute::Item { name, value } if name == "returns" => {
+            Some(value.as_str())
+        }
         _ => None,
     })
 }
 
 /// A command's return type changed: the newest version is authoritative,
 /// and the change is recorded in `returns_history`.
-fn merge_returns(existing: &mut UnifiedStruct, new_meta: &Metadata, version: Version) {
+fn merge_returns(
+    existing: &mut UnifiedStruct,
+    new_meta: &Metadata,
+    version: Version,
+) {
     let Some(new) = returns_attr(new_meta) else {
         return;
     };
     if existing.returns_history.last().map(|(_, r)| r.as_str()) != Some(new) {
         existing.returns_history.push((version, new.to_owned()));
     }
-    existing
-        .ir
-        .meta
-        .qapi_returns
-        .clone_from(&new_meta.qapi_returns);
+    existing.ir.meta.qapi_returns.clone_from(&new_meta.qapi_returns);
     // A struct first seen as plain data gains `returns` through the
     // ordinary attribute union, keeping attribute order stable.
     for attr in &mut existing.ir.meta.attributes {
@@ -364,7 +377,9 @@ pub struct UnifiedRegistry {
 fn attrs_equivalent(a: &Attribute, b: &Attribute) -> bool {
     match (a, b) {
         (Attribute::Unit(a), Attribute::Unit(b)) => a == b,
-        (Attribute::Item { name: a, .. }, Attribute::Item { name: b, .. }) => a == b,
+        (Attribute::Item { name: a, .. }, Attribute::Item { name: b, .. }) => {
+            a == b
+        }
         (Attribute::List(a), Attribute::List(b)) => a == b,
         _ => false,
     }
@@ -372,7 +387,9 @@ fn attrs_equivalent(a: &Attribute, b: &Attribute) -> bool {
 
 fn condition(meta: &Metadata) -> Option<&str> {
     meta.attributes.iter().find_map(|attr| match attr {
-        Attribute::Item { name, value } if name == "condition" => Some(value.as_str()),
+        Attribute::Item { name, value } if name == "condition" => {
+            Some(value.as_str())
+        }
         _ => None,
     })
 }
@@ -395,9 +412,7 @@ fn refresh_current_attributes(existing: &mut Metadata, latest: &Metadata) {
         .attributes
         .retain(|attr| !matches!(attr, Attribute::Item { name, .. } if name == "condition"));
     if let Some(value) = condition(latest) {
-        existing
-            .attributes
-            .push(Attribute::with_value("condition", value));
+        existing.attributes.push(Attribute::with_value("condition", value));
     }
 }
 
@@ -418,9 +433,12 @@ fn lifecycle_feature(attr: &Attribute) -> bool {
     }
 }
 
-fn unstable_attributes(versions: &VersionRange) -> impl Iterator<Item = Attribute> + '_ {
+fn unstable_attributes(
+    versions: &VersionRange,
+) -> impl Iterator<Item = Attribute> + '_ {
     versions.unstable_ranges.iter().map(|(since, until)| {
-        let mut attrs = vec![Attribute::with_value("added", version_str(*since))];
+        let mut attrs =
+            vec![Attribute::with_value("added", version_str(*since))];
         if let Some(until) = until {
             attrs.push(Attribute::with_value("removed", version_str(*until)));
         }
@@ -435,24 +453,19 @@ fn unstable_attributes(versions: &VersionRange) -> impl Iterator<Item = Attribut
 fn merge_command_attrs_onto(source: &Struct, target: &mut Struct) {
     target.meta.attributes.retain(|attr| !feature(attr));
     target.meta.attributes.extend(
-        source
-            .meta
-            .attributes
-            .iter()
-            .filter(|attr| feature(attr))
-            .cloned(),
+        source.meta.attributes.iter().filter(|attr| feature(attr)).cloned(),
     );
     // The argument struct's QAPI name is not the command's wire name.
     // Preserve the command spelling when the two share a Rust identifier.
-    target
-        .meta
-        .attributes
-        .retain(|attr| !matches!(attr, Attribute::Item { name, .. } if name == "name"));
+    target.meta.attributes.retain(
+        |attr| !matches!(attr, Attribute::Item { name, .. } if name == "name"),
+    );
     target
         .meta
         .attributes
         .push(Attribute::with_value("name", source.name.clone()));
-    target.meta.schema_item = source.meta.schema_item.or(target.meta.schema_item);
+    target.meta.schema_item =
+        source.meta.schema_item.or(target.meta.schema_item);
     merge_doc_from(
         &mut target.meta.schema_doc,
         source.meta.schema_doc.as_deref(),

@@ -68,18 +68,13 @@ struct Recurrent {
 #[test]
 fn simple_union_layout_can_disappear_and_return() {
     for (version, wire) in [
-        (
-            (6, 1, 0),
-            json!({"type":"object","data":{"required":"value"}}),
-        ),
+        ((6, 1, 0), json!({"type":"object","data":{"required":"value"}})),
         ((8, 0, 0), json!({"type":"object","required":"value"})),
-        (
-            (11, 1, 3),
-            json!({"type":"object","data":{"required":"value"}}),
-        ),
+        ((11, 1, 3), json!({"type":"object","data":{"required":"value"}})),
     ] {
         qapi::with_version(version, || {
-            let value: Recurrent = serde_json::from_value(wire.clone()).unwrap();
+            let value: Recurrent =
+                serde_json::from_value(wire.clone()).unwrap();
             assert_eq!(serde_json::to_value(value).unwrap(), wire);
         });
     }
@@ -106,10 +101,7 @@ fn simple_unions_round_trip_scalar_array_object_and_null_payloads() {
     ] {
         assert!(serde_json::from_value::<Simple>(invalid).is_err());
     }
-    let missing = Simple {
-        kind: Kind::Text,
-        u: None,
-    };
+    let missing = Simple { kind: Kind::Text, u: None };
     assert!(serde_json::to_value(missing).is_err());
 }
 
@@ -117,12 +109,14 @@ fn simple_unions_round_trip_scalar_array_object_and_null_payloads() {
 fn simple_to_flat_transition_selects_the_peer_layout() {
     let historical = json!({"type":"object","data":{"required":"old"}});
     qapi::with_version((6, 1, 0), || {
-        let parsed: Transition = serde_json::from_value(historical.clone()).unwrap();
+        let parsed: Transition =
+            serde_json::from_value(historical.clone()).unwrap();
         assert_eq!(serde_json::to_value(parsed).unwrap(), historical);
     });
     let current = json!({"type":"object","required":"new"});
     qapi::with_version((6, 2, 0), || {
-        let parsed: Transition = serde_json::from_value(current.clone()).unwrap();
+        let parsed: Transition =
+            serde_json::from_value(current.clone()).unwrap();
         assert_eq!(serde_json::to_value(parsed).unwrap(), current);
     });
     // Unscoped inspection defaults to the newest representation.
@@ -141,13 +135,11 @@ fn generated_socket_addresses_use_the_pre_2_10_nested_layout() {
             (2, 9, 0),
             json!({"type":"inet","data":{"host":"127.0.0.1","port":"10809"}}),
         ),
-        (
-            (11, 1, 3),
-            json!({"type":"inet","host":"127.0.0.1","port":"10809"}),
-        ),
+        ((11, 1, 3), json!({"type":"inet","host":"127.0.0.1","port":"10809"})),
     ] {
         qapi::with_version(version, || {
-            let address: qapi::SocketAddress = serde_json::from_value(value.clone()).unwrap();
+            let address: qapi::SocketAddress =
+                serde_json::from_value(value.clone()).unwrap();
             assert_eq!(serde_json::to_value(address).unwrap(), value);
         });
     }
@@ -157,7 +149,8 @@ fn generated_socket_addresses_use_the_pre_2_10_nested_layout() {
 fn historical_generated_tags_stay_separate_from_later_schema_enums() {
     qapi::with_version((2, 1, 0), || {
         let wire = json!({"type":"node","data":{}});
-        let value: qapi::NumaOptions = serde_json::from_value(wire.clone()).unwrap();
+        let value: qapi::NumaOptions =
+            serde_json::from_value(wire.clone()).unwrap();
         assert_eq!(serde_json::to_value(value).unwrap(), wire);
         assert_eq!(
             serde_json::to_value(qapi::NumaOptionsKind::Node).unwrap(),
@@ -167,21 +160,23 @@ fn historical_generated_tags_stay_separate_from_later_schema_enums() {
     });
     qapi::with_version((2, 7, 0), || {
         let wire = json!({"type":"none","data":{}});
-        let value: qapi::NetLegacyOptions = serde_json::from_value(wire.clone()).unwrap();
+        let value: qapi::NetLegacyOptions =
+            serde_json::from_value(wire.clone()).unwrap();
         assert_eq!(serde_json::to_value(value).unwrap(), wire);
-        assert!(serde_json::to_value(qapi::NetLegacyOptionsType::None).is_err());
+        assert!(
+            serde_json::to_value(qapi::NetLegacyOptionsType::None).is_err()
+        );
     });
 }
 
 #[test]
 fn scalar_payloads_cannot_silently_disappear_from_flat_unions() {
-    let value = Transition {
-        kind: Kind::List,
-        u: Some(Branch::List(vec![1, 2])),
-    };
+    let value =
+        Transition { kind: Kind::List, u: Some(Branch::List(vec![1, 2])) };
     let error = qapi::to_value((6, 2, 0), &value).unwrap_err().to_string();
     assert!(
-        error == "Transition.u: a flattened payload must serialize to an object",
+        error
+            == "Transition.u: a flattened payload must serialize to an object",
         "{error}"
     );
 }

@@ -1,12 +1,15 @@
-use super::common::QapiString;
-use super::common::{
-    Malformed, keep, malformed_key, other_key, qstring, raw_value, take_keyed_dict, take_kv,
+use super::{
+    common::{
+        Malformed, QapiString, keep, malformed_key, other_key, qstring,
+        raw_value, take_keyed_dict, take_kv,
+    },
+    qapi_cond::{QapiCond, take_cond},
 };
-use super::qapi_cond::{QapiCond, take_cond};
-use nom::IResult;
-use nom::Parser;
-use nom::branch::alt;
-use nom::error::{Error, ErrorKind};
+use nom::{
+    IResult, Parser,
+    branch::alt,
+    error::{Error, ErrorKind},
+};
 
 /// Holds information on a specific Feature in a single option
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -38,7 +41,10 @@ impl<'i> QapiFeature<'i> {
         ))
         .parse(input)?;
         // The validation refuses a dictionary without 'name'.
-        if feature.name.is_empty() && feature.keys.is_none() && feature.malformed.is_empty() {
+        if feature.name.is_empty()
+            && feature.keys.is_none()
+            && feature.malformed.is_empty()
+        {
             return Err(nom::Err::Error(Error::new(start, ErrorKind::Tag)));
         }
         Ok((input, feature))
@@ -69,10 +75,11 @@ impl<'i> QapiFeature<'i> {
         let name_parser = take_kv("name", qstring).map(|v| s.name = v);
         let cond_parser = take_cond.map(|v| s.r#if = Some(v));
         let other = other_key(&["name", "if"]);
-        let malformed =
-            malformed_key(&["name", "if"]).map(|entry| keep(&mut s.malformed, &["if"], entry));
+        let malformed = malformed_key(&["name", "if"])
+            .map(|entry| keep(&mut s.malformed, &["if"], entry));
         let (input, (_, keys)) =
-            take_keyed_dict(alt((name_parser, cond_parser, other, malformed))).parse(input)?;
+            take_keyed_dict(alt((name_parser, cond_parser, other, malformed)))
+                .parse(input)?;
         s.keys = Some(keys);
         Ok((input, s))
     }
@@ -91,7 +98,8 @@ mod tests {
             r#if: None,
             keys: None,
         };
-        let (remaining, result) = QapiFeature::parse(input).expect("Parsing failed");
+        let (remaining, result) =
+            QapiFeature::parse(input).expect("Parsing failed");
         assert_eq!(remaining, "");
         assert_eq!(result, expected);
     }
@@ -105,7 +113,8 @@ mod tests {
             r#if: None,
             keys: Some(vec!["name".into()]),
         };
-        let (remaining, result) = QapiFeature::parse(input).expect("Parsing failed");
+        let (remaining, result) =
+            QapiFeature::parse(input).expect("Parsing failed");
         assert_eq!(remaining, "");
         assert_eq!(result, expected);
     }
@@ -119,14 +128,16 @@ mod tests {
             r#if: Some(QapiCond::ConfigName("CONFIG_CONDITION".into())),
             keys: Some(vec!["name".into(), "if".into()]),
         };
-        let (remaining, result) = QapiFeature::parse(input).expect("Parsing failed");
+        let (remaining, result) =
+            QapiFeature::parse(input).expect("Parsing failed");
         assert_eq!(remaining, "");
         assert_eq!(result, expected);
     }
 
     #[test]
     fn test_parse_dict_feature_with_complex_if() {
-        let input = "{ 'name': 'feature_name', 'if': { 'not': 'CONFIG_CONDITION' } }";
+        let input =
+            "{ 'name': 'feature_name', 'if': { 'not': 'CONFIG_CONDITION' } }";
         let expected = QapiFeature {
             malformed: Vec::new(),
             name: "feature_name".into(),
@@ -135,7 +146,8 @@ mod tests {
             )))),
             keys: Some(vec!["name".into(), "if".into()]),
         };
-        let (remaining, result) = QapiFeature::parse(input).expect("Parsing failed");
+        let (remaining, result) =
+            QapiFeature::parse(input).expect("Parsing failed");
         assert_eq!(remaining, "");
         assert_eq!(result, expected);
     }
@@ -152,7 +164,8 @@ mod tests {
             ])),
             keys: Some(vec!["name".into(), "if".into()]),
         };
-        let (remaining, result) = QapiFeature::parse(input).expect("Parsing failed");
+        let (remaining, result) =
+            QapiFeature::parse(input).expect("Parsing failed");
         assert_eq!(remaining, "");
         assert_eq!(result, expected);
     }
@@ -169,25 +182,28 @@ mod tests {
             ])),
             keys: Some(vec!["name".into(), "if".into()]),
         };
-        let (remaining, result) = QapiFeature::parse(input).expect("Parsing failed");
+        let (remaining, result) =
+            QapiFeature::parse(input).expect("Parsing failed");
         assert_eq!(remaining, "");
         assert_eq!(result, expected);
     }
 
     #[test]
     fn test_parse_feature_with_nested_conditions() {
-        let input =
-            "{ 'name': 'feature_name', 'if': { 'all': [ 'CONFIG_A', { 'not': 'CONFIG_B' } ] } }";
+        let input = "{ 'name': 'feature_name', 'if': { 'all': [ 'CONFIG_A', { 'not': 'CONFIG_B' } ] } }";
         let expected = QapiFeature {
             malformed: Vec::new(),
             name: "feature_name".into(),
             r#if: Some(QapiCond::All(vec![
                 QapiCond::ConfigName("CONFIG_A".into()),
-                QapiCond::Not(Box::new(QapiCond::ConfigName("CONFIG_B".into()))),
+                QapiCond::Not(Box::new(QapiCond::ConfigName(
+                    "CONFIG_B".into(),
+                ))),
             ])),
             keys: Some(vec!["name".into(), "if".into()]),
         };
-        let (remaining, result) = QapiFeature::parse(input).expect("Parsing failed");
+        let (remaining, result) =
+            QapiFeature::parse(input).expect("Parsing failed");
         assert_eq!(remaining, "");
         assert_eq!(result, expected);
     }
@@ -201,7 +217,8 @@ mod tests {
             r#if: Some(QapiCond::ConfigName("CONFIG_CONDITION".into())),
             keys: Some(vec!["name".into(), "if".into()]),
         };
-        let (remaining, result) = QapiFeature::parse(input).expect("Parsing failed");
+        let (remaining, result) =
+            QapiFeature::parse(input).expect("Parsing failed");
         assert_eq!(remaining.trim(), "");
         assert_eq!(result, expected);
     }
@@ -298,7 +315,8 @@ mod tests {
 
     #[test]
     fn test_parse_invalid_extra_fields() {
-        let input = "{'name':'feature_name', 'if':'CONFIG_CONDITION', 'extra':'value'}";
+        let input =
+            "{'name':'feature_name', 'if':'CONFIG_CONDITION', 'extra':'value'}";
         let (_, feature) = QapiFeature::parse(input).unwrap();
         assert_eq!(feature.keys.unwrap(), ["name", "if", "extra"]);
     }

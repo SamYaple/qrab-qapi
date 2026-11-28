@@ -34,11 +34,14 @@ mod support;
 #[cfg(test)]
 mod tests;
 
-use crate::attrs::{MetaArgs, TypeAttrs, parse_items};
-use crate::enums::gen_enum;
-use crate::structs::gen_struct;
-use crate::support::{
-    condition_note, deprecated_attr, flag_at_newest, push_doc_notes, ranges_at_newest,
+use crate::{
+    attrs::{MetaArgs, TypeAttrs, parse_items},
+    enums::gen_enum,
+    structs::gen_struct,
+    support::{
+        condition_note, deprecated_attr, flag_at_newest, push_doc_notes,
+        ranges_at_newest,
+    },
 };
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
@@ -130,11 +133,17 @@ pub fn qapi(args: TokenStream, input: TokenStream) -> TokenStream {
     let qapi_args = parse_macro_input!(args with parse_items);
     let input_ast = parse_macro_input!(input as DeriveInput);
 
-    TokenStream::from(expand(qapi_args, input_ast).unwrap_or_else(|error| error.to_compile_error()))
+    TokenStream::from(
+        expand(qapi_args, input_ast)
+            .unwrap_or_else(|error| error.to_compile_error()),
+    )
 }
 
 /// The expansion of an item, after every key and member is checked.
-pub(crate) fn expand(qapi_args: MetaArgs, mut input_ast: DeriveInput) -> syn::Result<TokenStream2> {
+pub(crate) fn expand(
+    qapi_args: MetaArgs,
+    mut input_ast: DeriveInput,
+) -> syn::Result<TokenStream2> {
     let ta = TypeAttrs::parse(&qapi_args, &input_ast.attrs)?;
     input_ast.attrs.retain(|a| !a.path().is_ident("qapi"));
     reject_generics(&input_ast.generics)?;
@@ -167,11 +176,12 @@ pub(crate) fn expand(qapi_args: MetaArgs, mut input_ast: DeriveInput) -> syn::Re
 fn annotate_type(attrs: &mut Vec<syn::Attribute>, ta: &TypeAttrs) {
     let mut notes = Vec::new();
     // Unstable is not deprecated, so it is a doc line, not #[deprecated].
-    if flag_at_newest(&ta.unstable) || (ta.unstable.is_empty() && ta.has_feature("unstable")) {
+    if flag_at_newest(&ta.unstable)
+        || (ta.unstable.is_empty() && ta.has_feature("unstable"))
+    {
         // The ranges do not overlap, so at most one holds there.
-        let since = ranges_at_newest(&ta.unstable)
-            .next()
-            .and_then(|range| range.added);
+        let since =
+            ranges_at_newest(&ta.unstable).next().and_then(|range| range.added);
         notes.push(match since {
             Some(since) => format!(
                 "**Unstable** since QEMU {since} — this interface may change without notice."
@@ -189,10 +199,7 @@ fn annotate_type(attrs: &mut Vec<syn::Attribute>, ta: &TypeAttrs) {
         "type",
     ));
     attrs.push(syn::parse_quote! { #[derive(::core::fmt::Debug, ::core::clone::Clone)] });
-    if !attrs
-        .iter()
-        .any(|attr| attr.path().is_ident("non_exhaustive"))
-    {
+    if !attrs.iter().any(|attr| attr.path().is_ident("non_exhaustive")) {
         attrs.push(syn::parse_quote! { #[non_exhaustive] });
     }
 }
@@ -217,7 +224,10 @@ fn reject_generics(generics: &syn::Generics) -> syn::Result<()> {
 /// path rather than at the conflicting impl: for a struct also `Default`,
 /// which it implements where every field is an `Option` and leaves out
 /// where it has `new`.
-fn reject_own_derives(attrs: &[syn::Attribute], is_struct: bool) -> syn::Result<()> {
+fn reject_own_derives(
+    attrs: &[syn::Attribute],
+    is_struct: bool,
+) -> syn::Result<()> {
     let provided: &[&str] = if is_struct {
         &["Debug", "Clone", "Serialize", "Deserialize", "Default"]
     } else {

@@ -1,23 +1,23 @@
-use super::common::{is_whitespace, line_ending, lines, qcomment, whitespace1};
-use super::qapi_alternate::QapiAlternate;
-use super::qapi_command::QapiCommand;
-use super::qapi_documentation::QapiDocumentation;
-use super::qapi_documentation::{QapiFreeformDoc, QapiSectionDocumentation};
-use super::qapi_enum::QapiEnum;
-use super::qapi_event::QapiEvent;
-use super::qapi_include::QapiInclude;
-use super::qapi_pragma::QapiPragma;
-use super::qapi_struct::QapiStruct;
-use super::qapi_union::QapiUnion;
-use super::vec_newtype;
-use nom::IResult;
-use nom::Parser;
-use nom::branch::alt;
-use nom::bytes::complete::tag;
-use nom::character::complete::space0;
-use nom::combinator::recognize;
-use nom::multi::many0;
-use nom::sequence::terminated;
+use super::{
+    common::{is_whitespace, line_ending, lines, qcomment, whitespace1},
+    qapi_alternate::QapiAlternate,
+    qapi_command::QapiCommand,
+    qapi_documentation::{
+        QapiDocumentation, QapiFreeformDoc, QapiSectionDocumentation,
+    },
+    qapi_enum::QapiEnum,
+    qapi_event::QapiEvent,
+    qapi_include::QapiInclude,
+    qapi_pragma::QapiPragma,
+    qapi_struct::QapiStruct,
+    qapi_union::QapiUnion,
+    vec_newtype,
+};
+use nom::{
+    IResult, Parser, branch::alt, bytes::complete::tag,
+    character::complete::space0, combinator::recognize, multi::many0,
+    sequence::terminated,
+};
 
 pub(crate) fn take_schema(input: &str) -> IResult<&str, QapiSchema<'_>> {
     QapiSchema::parse(input)
@@ -73,7 +73,9 @@ impl<'i> QapiSchemaToken<'i> {
         }
     }
 
-    pub(crate) fn documentation_mut(&mut self) -> Option<&mut Option<QapiDocumentation<'i>>> {
+    pub(crate) fn documentation_mut(
+        &mut self,
+    ) -> Option<&mut Option<QapiDocumentation<'i>>> {
         match self {
             Self::Alternate(value) => Some(&mut value.doc),
             Self::Command(value) => Some(&mut value.doc),
@@ -130,9 +132,7 @@ impl<'i> QapiSchema<'i> {
             legacy_comment.map(QapiSchemaToken::Comment),
             ignored_expression,
         ));
-        many0(|input| token_parser.parse(input))
-            .map(Self)
-            .parse(input)
+        many0(|input| token_parser.parse(input)).map(Self).parse(input)
     }
 }
 
@@ -158,24 +158,22 @@ fn ignored_expression(input: &str) -> IResult<&str, QapiSchemaToken<'_>> {
             "pragma",
         ]
     } else if version >= (2, 4, 0) {
-        &[
-            "enum",
-            "struct",
-            "union",
-            "alternate",
-            "command",
-            "event",
-            "include",
-        ]
+        &["enum", "struct", "union", "alternate", "command", "event", "include"]
     } else if version >= (2, 1, 0) {
         &["enum", "type", "union", "command", "event", "include"]
     } else {
         &["enum", "type", "union", "command"]
     };
-    let refuse = || nom::Err::Error(nom::error::Error::new(input, nom::error::ErrorKind::Tag));
+    let refuse = || {
+        nom::Err::Error(nom::error::Error::new(
+            input,
+            nom::error::ErrorKind::Tag,
+        ))
+    };
     match super::common::top_level_expression(input) {
         Ok((Some(keys), rest)) => {
-            let text = super::common::expression_text(input, rest).trim_end_matches(is_whitespace);
+            let text = super::common::expression_text(input, rest)
+                .trim_end_matches(is_whitespace);
             let read = keys.iter().any(|key| metas.contains(&key.as_ref()));
             Ok((
                 rest,
@@ -233,10 +231,16 @@ fn invalid_documentation(input: &str) -> IResult<&str, QapiSchemaToken<'_>> {
         // A comment that QEMU reads without fault: what follows it fails.
         // Otherwise the documentation check reports the comment's fault in
         // place of this error, whose kind no message shows.
-        let error = match super::doc_comment::read(input.trim_start_matches(is_whitespace), &mut ())
-        {
-            Ok((_, rest)) => nom::error::Error::new(rest, nom::error::ErrorKind::Eof),
-            Err(_) => nom::error::Error::new(input, nom::error::ErrorKind::Fail),
+        let error = match super::doc_comment::read(
+            input.trim_start_matches(is_whitespace),
+            &mut (),
+        ) {
+            Ok((_, rest)) => {
+                nom::error::Error::new(rest, nom::error::ErrorKind::Eof)
+            }
+            Err(_) => {
+                nom::error::Error::new(input, nom::error::ErrorKind::Fail)
+            }
         };
         return Err(nom::Err::Failure(error));
     }
@@ -319,7 +323,12 @@ mod tests {
         assert_eq!(rem, "");
         let type_count = s
             .iter()
-            .filter(|t| !matches!(t, QapiSchemaToken::EmptyLines | QapiSchemaToken::Comment(_)))
+            .filter(|t| {
+                !matches!(
+                    t,
+                    QapiSchemaToken::EmptyLines | QapiSchemaToken::Comment(_)
+                )
+            })
             .count();
         assert_eq!(type_count, 4);
     }
@@ -354,11 +363,11 @@ mod freeform_schema_tests {
             "Unparsed: {:?}",
             &rem[..std::cmp::min(rem.len(), 100)]
         );
-        let has_freeform = s
-            .iter()
-            .any(|t| matches!(t, QapiSchemaToken::FreeformDoc(_)));
+        let has_freeform =
+            s.iter().any(|t| matches!(t, QapiSchemaToken::FreeformDoc(_)));
         assert!(has_freeform, "Should have freeform doc");
-        let has_include = s.iter().any(|t| matches!(t, QapiSchemaToken::Include(_)));
+        let has_include =
+            s.iter().any(|t| matches!(t, QapiSchemaToken::Include(_)));
         assert!(has_include, "Should have include");
     }
 }

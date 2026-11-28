@@ -1,14 +1,15 @@
 //! `QapiCommand` and `QapiEvent` implementations.
 
-use crate::attrs::{AttrRange, TypeAttrs};
-use crate::support::{
-    HelperNames, Version, active_check, decoding_selects, flag_at_newest, unavailable_decode_error,
-    unavailable_error, version_range_check,
+use crate::{
+    attrs::{AttrRange, TypeAttrs},
+    support::{
+        HelperNames, Version, active_check, decoding_selects, flag_at_newest,
+        unavailable_decode_error, unavailable_error, version_range_check,
+    },
 };
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{ToTokens, format_ident, quote};
-use syn::ext::IdentExt;
-use syn::{LitStr, Type};
+use syn::{LitStr, Type, ext::IdentExt};
 
 /// Refuse command keys on an item that is no command, an item that is both
 /// a command and an event, and a return type history that is not one: a
@@ -39,10 +40,13 @@ pub(crate) fn check_command_keys(ta: &TypeAttrs) -> syn::Result<()> {
              so it lists two or more; give one type as `returns = \"Type\"`",
         ));
     }
-    let same = |text: &LitStr| return_type(text).map(|ty| ty.to_token_stream().to_string());
+    let same = |text: &LitStr| {
+        return_type(text).map(|ty| ty.to_token_stream().to_string())
+    };
     let mut previous: Option<(Version, &LitStr)> = None;
     for (added, value) in &ta.returns_history {
-        let error = |message: String| Err(syn::Error::new_spanned(value, message));
+        let error =
+            |message: String| Err(syn::Error::new_spanned(value, message));
         return_type(value)?;
         match (previous, ta.since) {
             (Some((before, _)), _) if *added <= before => {
@@ -134,7 +138,10 @@ fn returns_enum_ident(text: &LitStr) -> syn::Result<syn::Ident> {
 /// so do its errors.
 fn return_type(text: &LitStr) -> syn::Result<Type> {
     text.parse().map_err(|error| {
-        syn::Error::new_spanned(text, format!("qapi: `returns` is not a Rust type: {error}"))
+        syn::Error::new_spanned(
+            text,
+            format!("qapi: `returns` is not a Rust type: {error}"),
+        )
     })
 }
 
@@ -156,11 +163,10 @@ pub(crate) fn gen_command_impl(
         // One return type in the whole history.
         [(.., ty)] => (ty.into_token_stream(), TokenStream2::new()),
         _ => {
-            let enum_name = returns_enum_ident(
-                ta.returns_enum
-                    .as_ref()
-                    .expect("check_command_keys requires `returns_enum` with a history"),
-            )?;
+            let enum_name =
+                returns_enum_ident(ta.returns_enum.as_ref().expect(
+                    "check_command_keys requires `returns_enum` with a history",
+                ))?;
             let returns_enum = gen_returns_enum(&enum_name, vis, wn, &entries);
             (enum_name.into_token_stream(), returns_enum)
         }
@@ -263,7 +269,8 @@ fn gen_returns_enum(
     entries: &[ReturnEntry],
 ) -> TokenStream2 {
     let name_str = enum_name.unraw().to_string();
-    let mut names = HelperNames::new(enum_name, [], entries.iter().map(|(.., ty)| ty));
+    let mut names =
+        HelperNames::new(enum_name, [], entries.iter().map(|(.., ty)| ty));
     let serializer_ty = names.ty("Serializer");
     let serializer = names.ident("serializer");
     let deserializer_ty = names.ty("Deserializer");
@@ -274,7 +281,9 @@ fn gen_returns_enum(
 
     let variants = entries.iter().map(|(added, until, variant, ty)| {
         let doc = match until {
-            Some(until) => format!(" The return type from QEMU {added} until {until}."),
+            Some(until) => {
+                format!(" The return type from QEMU {added} until {until}.")
+            }
             None => format!(" The return type from QEMU {added}."),
         };
         quote! {

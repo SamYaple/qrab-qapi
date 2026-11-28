@@ -1,7 +1,9 @@
 //! Descriptors ride SCM_RIGHTS with the frame of the command that takes them
 //! (`getfd`), the way QEMU's QMP socket chardev expects.
 use qapi_protocol::Qmp;
-use rustix::net::{RecvAncillaryBuffer, RecvAncillaryMessage, RecvFlags, recvmsg};
+use rustix::net::{
+    RecvAncillaryBuffer, RecvAncillaryMessage, RecvFlags, recvmsg,
+};
 use serde_json::{Value, json};
 use std::{
     io::{IoSliceMut, Read, Write},
@@ -21,12 +23,18 @@ async fn line_with_fds(stream: &UnixStream) -> (Value, Vec<OwnedFd>) {
     let mut fds = Vec::new();
     loop {
         let mut chunk = [0u8; 1];
-        let mut space = [MaybeUninit::uninit(); rustix::cmsg_space!(ScmRights(4))];
+        let mut space =
+            [MaybeUninit::uninit(); rustix::cmsg_space!(ScmRights(4))];
         let n = stream
             .async_io(tokio::io::Interest::READABLE, || {
                 let mut control = RecvAncillaryBuffer::new(&mut space);
                 let mut iov = [IoSliceMut::new(&mut chunk)];
-                let msg = recvmsg(stream, &mut iov, &mut control, RecvFlags::empty())?;
+                let msg = recvmsg(
+                    stream,
+                    &mut iov,
+                    &mut control,
+                    RecvFlags::empty(),
+                )?;
                 for message in control.drain() {
                     if let RecvAncillaryMessage::ScmRights(received) = message {
                         fds.extend(received);
@@ -45,10 +53,7 @@ async fn line_with_fds(stream: &UnixStream) -> (Value, Vec<OwnedFd>) {
 }
 
 async fn send(stream: &mut UnixStream, value: Value) {
-    stream
-        .write_all(format!("{value}\n").as_bytes())
-        .await
-        .unwrap();
+    stream.write_all(format!("{value}\n").as_bytes()).await.unwrap();
 }
 
 /// Answer the capability negotiation and then the client's
@@ -76,10 +81,7 @@ async fn getfd_carries_its_descriptor_and_plain_commands_carry_none() {
     let listener = UnixListener::bind(&path).unwrap();
     let server = tokio::spawn(async move {
         let (mut stream, _) = listener.accept().await.unwrap();
-        stream
-            .write_all(format!("{GREETING}\n").as_bytes())
-            .await
-            .unwrap();
+        stream.write_all(format!("{GREETING}\n").as_bytes()).await.unwrap();
         negotiate(&mut stream).await;
 
         let (getfd, fds) = line_with_fds(&stream).await;
@@ -122,24 +124,20 @@ async fn getfd_carries_its_descriptor_and_plain_commands_carry_none() {
         Some(rustix::io::Errno::PIPE.raw_os_error()),
         "the client kept the descriptor"
     );
-    let status = qmp
-        .execute_raw::<Value>("query-status", json!({}))
-        .await
-        .unwrap();
+    let status =
+        qmp.execute_raw::<Value>("query-status", json!({})).await.unwrap();
     assert_eq!(status["status"], "running");
     drop(qmp);
     server.await.unwrap();
 }
 
 #[tokio::test]
-async fn more_descriptors_than_one_message_carries_are_refused_before_sending() {
+async fn more_descriptors_than_one_message_carries_are_refused_before_sending()
+{
     let (client, server) = UnixStream::pair().unwrap();
     let mut server = server;
     let (qmp, ()) = tokio::join!(Qmp::from_stream(client), async {
-        server
-            .write_all(format!("{GREETING}\n").as_bytes())
-            .await
-            .unwrap();
+        server.write_all(format!("{GREETING}\n").as_bytes()).await.unwrap();
         negotiate(&mut server).await;
     });
     let (qmp, _events) = qmp.unwrap();
@@ -168,10 +166,7 @@ async fn descriptors_of_a_refused_request_are_closed() {
     let listener = UnixListener::bind(&path).unwrap();
     let server = tokio::spawn(async move {
         let (mut stream, _) = listener.accept().await.unwrap();
-        stream
-            .write_all(format!("{GREETING}\n").as_bytes())
-            .await
-            .unwrap();
+        stream.write_all(format!("{GREETING}\n").as_bytes()).await.unwrap();
         negotiate(&mut stream).await;
         let mut rest = String::new();
         let _ = BufReader::new(stream).read_line(&mut rest).await;
@@ -180,8 +175,7 @@ async fn descriptors_of_a_refused_request_are_closed() {
     let (read, write) = rustix::pipe::pipe().unwrap();
     // Invalid arguments are refused before any I/O, and the descriptor goes with it.
     assert!(matches!(
-        qmp.execute_raw_with_fds::<Value>("getfd", json!([]), vec![read])
-            .await,
+        qmp.execute_raw_with_fds::<Value>("getfd", json!([]), vec![read]).await,
         Err(qapi_protocol::Error::InvalidRequest(
             qapi_protocol::InvalidRequestKind::ArgumentsNotObject { .. }
         ))
@@ -202,10 +196,7 @@ async fn descriptors_go_once_with_a_frame_written_in_parts() {
     let (client, server) = UnixStream::pair().unwrap();
     let mut server = server;
     let (qmp, ()) = tokio::join!(Qmp::from_stream(client), async {
-        server
-            .write_all(format!("{GREETING}\n").as_bytes())
-            .await
-            .unwrap();
+        server.write_all(format!("{GREETING}\n").as_bytes()).await.unwrap();
         negotiate(&mut server).await;
     });
     let (qmp, _events) = qmp.unwrap();
@@ -220,7 +211,11 @@ async fn descriptors_go_once_with_a_frame_written_in_parts() {
             add["arguments"]["opaque"].as_str().unwrap().len(),
             512 * 1024
         );
-        assert_eq!(fds.len(), 1, "the descriptor went with the first part only");
+        assert_eq!(
+            fds.len(),
+            1,
+            "the descriptor went with the first part only"
+        );
         send(
             &mut server,
             json!({"return":{"fdset-id":0,"fd":3},"id":add["id"]}),

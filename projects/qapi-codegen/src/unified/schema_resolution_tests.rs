@@ -1,6 +1,4 @@
-use super::lower::process_version_schema;
-use super::merge::has_feature;
-use super::*;
+use super::{lower::process_version_schema, merge::has_feature, *};
 
 /// Read a fixture under the 11.1.3 grammar or that of an older `version`,
 /// restoring the caller's grammar.
@@ -19,12 +17,12 @@ fn boxed_union_arguments_lower() {
         "{'union':'Choice','base':{'kind':'Kind'},'discriminator':'kind','data':{'one':'Payload'}}\n",
     );
     process(&format!("{definitions} {{'command':'good','boxed':true,'data':'Choice'}} {{'event':'GOOD','boxed':true,'data':'Choice'}} {{'command':'plain','data':'Payload'}}")).unwrap();
-    let error = process(&format!("{definitions} {{'event':'BAD','data':'Choice'}}")).unwrap_err();
+    let error =
+        process(&format!("{definitions} {{'event':'BAD','data':'Choice'}}"))
+            .unwrap_err();
     assert_eq!(
         error.kind(),
-        &SchemaErrorKind::UnboxedUnion {
-            name: "Choice".into()
-        }
+        &SchemaErrorKind::UnboxedUnion { name: "Choice".into() }
     );
 }
 
@@ -69,8 +67,11 @@ fn command_flags_reject_invalid_values_and_incompatible_execution_modes() {
     ))
     .unwrap();
     crate::set_parser_version((1, 0, 0));
-    process_version_schema(&[("old.json".into(), "{'command':'manual','gen':'no'}".into())])
-        .unwrap();
+    process_version_schema(&[(
+        "old.json".into(),
+        "{'command':'manual','gen':'no'}".into(),
+    )])
+    .unwrap();
 }
 
 #[test]
@@ -96,7 +97,9 @@ fn alternate_scalar_conflicts_follow_the_historical_qobject_model() {
         crate::set_parser_version((2, 9, 0));
         process_version_schema(&[("old.json".into(), input.into())]).unwrap();
         crate::set_parser_version((2, 10, 0));
-        let error = process_version_schema(&[("new.json".into(), input.into())]).unwrap_err();
+        let error =
+            process_version_schema(&[("new.json".into(), input.into())])
+                .unwrap_err();
         assert!(format!("{error:#}").contains("cannot be distinguished"));
     }
     process(concat!(
@@ -111,27 +114,19 @@ fn implicit_arrays_require_creation_and_reject_nested_arrays() {
     for (input, expected) in [
         (
             "{'struct':'Holder','data':{'values':'QTypeList'}}",
-            SchemaErrorKind::UnknownType {
-                name: "QTypeList".into(),
-            },
+            SchemaErrorKind::UnknownType { name: "QTypeList".into() },
         ),
         (
             "{'struct':'Item','data':{}} {'struct':'Holder','data':{'values':'ItemList'}}",
-            SchemaErrorKind::UnknownType {
-                name: "ItemList".into(),
-            },
+            SchemaErrorKind::UnknownType { name: "ItemList".into() },
         ),
         (
             "{'struct':'Holder','data':{'values':['intList']}}",
-            SchemaErrorKind::NestedArray {
-                name: "intList".into(),
-            },
+            SchemaErrorKind::NestedArray { name: "intList".into() },
         ),
         (
             "{'struct':'Holder','data':{'direct':['intList'],'alias':'intListList'}}",
-            SchemaErrorKind::NestedArray {
-                name: "intList".into(),
-            },
+            SchemaErrorKind::NestedArray { name: "intList".into() },
         ),
         (
             "{'struct':'ItemList','data':{}}",
@@ -179,10 +174,7 @@ fn predefined_types_are_synthesized_only_when_used() {
     )])
     .unwrap();
     assert!(
-        enums["QType"]
-            .variants
-            .iter()
-            .any(|variant| variant.name == "qnum")
+        enums["QType"].variants.iter().any(|variant| variant.name == "qnum")
     );
     assert!(structs.contains_key("QEmpty"));
     crate::set_parser_version((2, 6, 0));
@@ -192,10 +184,7 @@ fn predefined_types_are_synthesized_only_when_used() {
     )])
     .unwrap();
     assert!(
-        enums["QType"]
-            .variants
-            .iter()
-            .any(|variant| variant.name == "qint")
+        enums["QType"].variants.iter().any(|variant| variant.name == "qint")
     );
     crate::set_parser_version((2, 5, 0));
     let error = process_version_schema(&[(
@@ -205,23 +194,15 @@ fn predefined_types_are_synthesized_only_when_used() {
     .unwrap_err();
     assert_eq!(
         error.kind(),
-        &SchemaErrorKind::UnknownType {
-            name: "QType".into()
-        }
+        &SchemaErrorKind::UnknownType { name: "QType".into() }
     );
 }
 
 #[test]
 fn duplicate_definitions_fail_across_kinds_and_source_files() {
     let sources = [
-        (
-            "first.json".into(),
-            "{'struct':'Repeated','data':{}}".into(),
-        ),
-        (
-            "included.json".into(),
-            "{'enum':'Repeated','data':['one']}".into(),
-        ),
+        ("first.json".into(), "{'struct':'Repeated','data':{}}".into()),
+        ("included.json".into(), "{'enum':'Repeated','data':['one']}".into()),
     ];
     let error = format!("{:#}", process_version_schema(&sources).unwrap_err());
     for expected in ["Repeated", "first.json", "included.json"] {
@@ -232,8 +213,8 @@ fn duplicate_definitions_fail_across_kinds_and_source_files() {
 #[test]
 fn primitive_type_names_cannot_be_redefined() {
     for name in [
-        "str", "number", "int", "int8", "int16", "int32", "int64", "uint8", "uint16", "uint32",
-        "uint64", "size", "bool", "any", "null",
+        "str", "number", "int", "int8", "int16", "int32", "int64", "uint8",
+        "uint16", "uint32", "uint64", "size", "bool", "any", "null",
     ] {
         let error = process(&format!("{{'command':'{name}'}}")).unwrap_err();
         assert_eq!(error.file(), Some(Path::new("fixture.json")));
@@ -242,12 +223,15 @@ fn primitive_type_names_cannot_be_redefined() {
             &SchemaErrorKind::Predefined { name: name.into() }
         );
     }
-    let (_, structs) = process("{'struct':'Str','data':{'value':'str'}}").unwrap();
+    let (_, structs) =
+        process("{'struct':'Str','data':{'value':'str'}}").unwrap();
     assert!(structs.contains_key("Str"));
     // Before 2.4 QEMU checks no names, but the builtin could not be told
     // apart; a command is no type.
     crate::set_parser_version((1, 0, 0));
-    let old = |text: &str| process_version_schema(&[("old.json".into(), text.into())]);
+    let old = |text: &str| {
+        process_version_schema(&[("old.json".into(), text.into())])
+    };
     let error = old("{'type':'str','data':{}}").unwrap_err();
     assert_eq!(
         error.kind(),
@@ -260,9 +244,7 @@ fn primitive_type_names_cannot_be_redefined() {
     assert_eq!(
         error.kind(),
         &SchemaErrorKind::Unsupported {
-            construct: Construct::BuiltinName {
-                name: "dict".into()
-            }
+            construct: Construct::BuiltinName { name: "dict".into() }
         }
     );
 }
@@ -284,20 +266,21 @@ fn documentation_links_follow_the_declared_symbol_and_members() {
 
 #[test]
 fn inheritance_requires_plain_struct_bases() {
-    for (base, meta) in [
-        ("str", "built-in"),
-        ("Kind", "enum"),
-        ("Choice", "alternate"),
-    ] {
+    for (base, meta) in
+        [("str", "built-in"), ("Kind", "enum"), ("Choice", "alternate")]
+    {
         let definitions = concat!(
             "{'enum':'Kind','data':['one']}\n",
             "{'alternate':'Choice','data':{'flag':'bool','integer':'int'}}\n",
         );
         for definition in [
             format!("{{'struct':'Derived','base':'{base}','data':{{}}}}"),
-            format!("{{'union':'Derived','base':'{base}','discriminator':'kind','data':{{}}}}"),
+            format!(
+                "{{'union':'Derived','base':'{base}','discriminator':'kind','data':{{}}}}"
+            ),
         ] {
-            let error = process(&format!("{definitions}{definition}")).unwrap_err();
+            let error =
+                process(&format!("{definitions}{definition}")).unwrap_err();
             assert_eq!(error.file(), Some(Path::new("fixture.json")));
             assert_eq!(error.context(), ["'base'"]);
             assert_eq!(
@@ -341,9 +324,7 @@ fn invalid_nested_union_layouts_report_source_context() {
     .unwrap_err();
     assert_eq!(
         error.kind(),
-        &SchemaErrorKind::InheritanceCycle {
-            name: "Loop".into()
-        }
+        &SchemaErrorKind::InheritanceCycle { name: "Loop".into() }
     );
     // A union may be the branch type of two branches.
     process(concat!(
@@ -374,24 +355,34 @@ fn upstream_negative_fixtures_never_panic_during_lowering_or_emission() {
     /// kind of its error, as the fixture table of the validation tests
     /// writes it, or `None` when it lowers, merges and emits in both modes.
     /// A fixture that cannot be read at all panics.
-    fn outcome(path: &Path, version: Version) -> Result<Option<String>, GenerateError> {
+    fn outcome(
+        path: &Path,
+        version: Version,
+    ) -> Result<Option<String>, GenerateError> {
         let kind = crate::schema_validation::tests::kind_name;
         let sources = match read_fixture(path, version) {
             Ok(sources) => sources,
             Err(crate::ReadError::Parse { source, .. }) => {
-                return Ok(Some(crate::schema_validation::tests::parse_kind_name(
-                    &source.kind,
-                )));
+                return Ok(Some(
+                    crate::schema_validation::tests::parse_kind_name(
+                        &source.kind,
+                    ),
+                ));
             }
             Err(crate::ReadError::Include { kind: fault, .. }) => {
-                return Ok(Some(format!("Include:{}", kind(format!("{fault:?}")))));
+                return Ok(Some(format!(
+                    "Include:{}",
+                    kind(format!("{fault:?}"))
+                )));
             }
             Err(error) => panic!("{} cannot be read: {error}", path.display()),
         };
         crate::with_parser_version(version, || {
             let (enums, structs) = match process_version_schema(&sources) {
                 Ok(lowered) => lowered,
-                Err(error) => return Ok(Some(kind(format!("{:?}", error.kind())))),
+                Err(error) => {
+                    return Ok(Some(kind(format!("{:?}", error.kind()))));
+                }
             };
             let release = super::lower::VersionResult {
                 tag: format!("v{}", version_str(version)),
@@ -402,7 +393,8 @@ fn upstream_negative_fixtures_never_panic_during_lowering_or_emission() {
                 structs,
                 warnings: Vec::new(),
             };
-            let registry = super::registry::merge_releases("QMP", vec![release])?;
+            let registry =
+                super::registry::merge_releases("QMP", vec![release])?;
             for docs in [Docs::Reference, Docs::Schema] {
                 super::emit::emit_registry(&registry, Protocol::Qmp, docs)?;
             }
@@ -410,8 +402,12 @@ fn upstream_negative_fixtures_never_panic_during_lowering_or_emission() {
         })
     }
 
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../vendor/qemu/tests/qapi-schema");
-    let pins = crate::versions::parse_pinned_versions(crate::versions::PINNED_VERSIONS).unwrap();
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../vendor/qemu/tests/qapi-schema");
+    let pins = crate::versions::parse_pinned_versions(
+        crate::versions::PINNED_VERSIONS,
+    )
+    .unwrap();
     // The first release of each series: the grammar and the rules change
     // with the series.
     let mut versions: Vec<_> = pins
@@ -446,11 +442,15 @@ fn upstream_negative_fixtures_never_panic_during_lowering_or_emission() {
                     first_accepted.get_or_insert(version);
                 }
                 Ok(Ok(Some(_))) => {}
-                Ok(Err(error)) => failed.push(format!("{name} at {version:?}: {error}")),
+                Ok(Err(error)) => {
+                    failed.push(format!("{name} at {version:?}: {error}"))
+                }
                 Err(_) => failed.push(format!("{name} panics at {version:?}")),
             }
         }
-        accepted.extend(first_accepted.map(|version| format!("{name} (from {version:?})")));
+        accepted.extend(
+            first_accepted.map(|version| format!("{name} (from {version:?})")),
+        );
     }
     eprintln!("Negative fixtures that older releases accept: {accepted:#?}");
     assert!(failed.is_empty(), "Failed on:\n{}", failed.join("\n"));
@@ -460,7 +460,9 @@ fn upstream_negative_fixtures_never_panic_during_lowering_or_emission() {
     );
 }
 
-fn process(input: &str) -> SchemaResult<(HashMap<String, Enum>, HashMap<String, Struct>)> {
+fn process(
+    input: &str,
+) -> SchemaResult<(HashMap<String, Enum>, HashMap<String, Struct>)> {
     crate::set_parser_version((11, 1, 3));
     process_version_schema(&[("fixture.json".into(), input.into())])
 }
@@ -468,11 +470,7 @@ fn process(input: &str) -> SchemaResult<(HashMap<String, Enum>, HashMap<String, 
 #[test]
 fn undefined_type_references_report_the_source_and_definition() {
     for (input, definition, member) in [
-        (
-            "{'struct':'Record','data':{'value':'Missing'}}",
-            "Record",
-            "value",
-        ),
+        ("{'struct':'Record','data':{'value':'Missing'}}", "Record", "value"),
         // QEMU names no member for the element type of an array.
         (
             "{'struct':'Record','data':{'values':['Missing']}}",
@@ -484,11 +482,7 @@ fn undefined_type_references_report_the_source_and_definition() {
             "query-record",
             "return",
         ),
-        (
-            "{'event':'RECORD','data':{'value':'Missing'}}",
-            "RECORD",
-            "value",
-        ),
+        ("{'event':'RECORD','data':{'value':'Missing'}}", "RECORD", "value"),
         (
             "{'alternate':'Choice','data':{'value':'Missing'}}",
             "Choice",
@@ -514,17 +508,13 @@ fn schema_errors_carry_their_kind_and_location() {
             "{'struct':'Record','data':{'value':'Missing'}}",
             "struct 'Record'",
             &["member 'value'"][..],
-            SchemaErrorKind::UnknownType {
-                name: "Missing".into(),
-            },
+            SchemaErrorKind::UnknownType { name: "Missing".into() },
         ),
         (
             "{'command':'query-record','returns':'Missing'}",
             "command 'query-record'",
             &["'returns'"][..],
-            SchemaErrorKind::UnknownType {
-                name: "Missing".into(),
-            },
+            SchemaErrorKind::UnknownType { name: "Missing".into() },
         ),
         (
             "{'struct':'Base','data':{}} {'struct':'Base','data':{}}",
@@ -567,7 +557,8 @@ fn historical_inline_members_lower_and_undefined_types_are_unsupported() {
     // undefined types.
     crate::set_parser_version((1, 0, 0));
     let record = "{'type':'Record','data':{'outer':{'inner':'Missing'}}}";
-    let error = process_version_schema(&[("old.json".into(), record.into())]).unwrap_err();
+    let error = process_version_schema(&[("old.json".into(), record.into())])
+        .unwrap_err();
     assert_eq!(
         error.kind(),
         &SchemaErrorKind::Unsupported {
@@ -581,7 +572,8 @@ fn historical_inline_members_lower_and_undefined_types_are_unsupported() {
         (Some(1), Some("struct 'Record'"))
     );
     let defined = format!("{record} {{'type':'Missing','data':{{}}}}");
-    let (_, structs) = process_version_schema(&[("old.json".into(), defined)]).unwrap();
+    let (_, structs) =
+        process_version_schema(&[("old.json".into(), defined)]).unwrap();
     assert!(structs.contains_key("Record"));
 }
 
@@ -589,7 +581,8 @@ fn historical_inline_members_lower_and_undefined_types_are_unsupported() {
 fn inline_event_members_are_refused_from_2_1_to_2_3() {
     let input = "{'event':'BAD','data':{'object':{'value':'str'}}}";
     crate::set_parser_version((2, 3, 0));
-    let error = process_version_schema(&[("old.json".into(), input.into())]).unwrap_err();
+    let error = process_version_schema(&[("old.json".into(), input.into())])
+        .unwrap_err();
     assert_eq!(error.kind(), &SchemaErrorKind::NestedEventData);
     assert_eq!(error.context(), ["member 'object'"]);
     assert_eq!(error.file(), Some(Path::new("old.json")));
@@ -600,16 +593,12 @@ fn legacy_alternate_lowers_to_a_bare_value_enum_without_the_ignored_features() {
     crate::set_parser_version((1, 7, 0));
     let input = "{ 'union': 'Ref', 'discriminator': {}, 'data': {'reference':'str'}, 'features':['deprecated'] }";
     let (enums, structs) =
-        process_version_schema(&[("fixture.json".into(), input.into())]).unwrap();
+        process_version_schema(&[("fixture.json".into(), input.into())])
+            .unwrap();
     assert!(!structs.contains_key("Ref"));
     let value = &enums["Ref"];
     assert!(!has_feature(&value.meta, "deprecated"));
-    assert!(
-        !value
-            .meta
-            .attributes
-            .contains(&Attribute::new("union_branch"))
-    );
+    assert!(!value.meta.attributes.contains(&Attribute::new("union_branch")));
 }
 
 #[test]
@@ -627,13 +616,9 @@ fn all_implicit_union_branches_are_preserved_as_branch_enums() {
             .iter()
             .all(|branch| branch.kind == EnumVariantKind::Unit)
     );
-    assert!(
-        branches
-            .meta
-            .attributes
-            .iter()
-            .any(|attr| matches!(attr, Attribute::Unit(name) if name == "union_branch"))
-    );
+    assert!(branches.meta.attributes.iter().any(
+        |attr| matches!(attr, Attribute::Unit(name) if name == "union_branch")
+    ));
     let code = branches.generate().to_string();
     assert!(code.contains("union_branch"));
 }
@@ -650,8 +635,10 @@ fn conflicting_schema_definitions_do_not_silently_overwrite_types() {
 
 #[test]
 fn distinct_raw_type_names_keep_separate_rust_identities() {
-    let (enums, structs) =
-        process("{ 'struct':'FooBAR', 'data':{} } { 'enum':'FooBar', 'data':['one'] }").unwrap();
+    let (enums, structs) = process(
+        "{ 'struct':'FooBAR', 'data':{} } { 'enum':'FooBar', 'data':['one'] }",
+    )
+    .unwrap();
     assert!(enums.contains_key("FooBar"));
     assert!(structs.contains_key("FooBarGenerated"));
 }
@@ -674,12 +661,11 @@ fn inherited_structs_resolve_forward_base_chains() {
 
 #[test]
 fn unresolved_inheritance_returns_an_error() {
-    let error = process("{ 'struct': 'Leaf', 'base': 'Missing', 'data': {} }").unwrap_err();
+    let error = process("{ 'struct': 'Leaf', 'base': 'Missing', 'data': {} }")
+        .unwrap_err();
     assert_eq!(
         error.kind(),
-        &SchemaErrorKind::UnknownType {
-            name: "Missing".into()
-        }
+        &SchemaErrorKind::UnknownType { name: "Missing".into() }
     );
     let error = process(
         "{ 'struct': 'First', 'base': 'Second', 'data': {} }\n{ 'struct': 'Second', 'base': 'First', 'data': {} }",
@@ -687,9 +673,7 @@ fn unresolved_inheritance_returns_an_error() {
     .unwrap_err();
     assert_eq!(
         error.kind(),
-        &SchemaErrorKind::InheritanceCycle {
-            name: "First".into()
-        }
+        &SchemaErrorKind::InheritanceCycle { name: "First".into() }
     );
 }
 
@@ -701,9 +685,7 @@ fn invalid_union_bases_return_an_error() {
     .unwrap_err();
     assert_eq!(
         error.kind(),
-        &SchemaErrorKind::UnknownType {
-            name: "Missing".into()
-        }
+        &SchemaErrorKind::UnknownType { name: "Missing".into() }
     );
     let error = process(
         "{ 'struct': 'Base', 'data': {} }\n{ 'union': 'ExampleUnion', 'base': 'Base', 'discriminator': 'kind', 'data': { 'one': 'Base' } }",

@@ -75,7 +75,9 @@ pub trait QapiFlatUnion: Sized {
     ) -> Result<Self, serde_json::Error> {
         use serde::de::Error as _;
         match value {
-            serde_json::Value::Object(map) => Self::deserialize_variant(discriminator, map),
+            serde_json::Value::Object(map) => {
+                Self::deserialize_variant(discriminator, map)
+            }
             _ => Err(serde_json::Error::custom(
                 "expected an object for a flat union payload",
             )),

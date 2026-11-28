@@ -66,21 +66,18 @@ struct WithD {
 #[test]
 fn schema_type_names_do_not_capture_visitor_or_serde_generic_names() {
     let value: S = serde_json::from_value(json!({"text":"value"})).unwrap();
-    assert_eq!(
-        serde_json::to_value(value).unwrap(),
-        json!({"text":"value"})
-    );
-    let value: __Visitor = serde_json::from_value(json!({"text":"visitor"})).unwrap();
-    assert_eq!(
-        serde_json::to_value(value).unwrap(),
-        json!({"text":"visitor"})
-    );
-    let value: __QapiDeserializer = serde_json::from_value(json!({"text":"deserializer"})).unwrap();
+    assert_eq!(serde_json::to_value(value).unwrap(), json!({"text":"value"}));
+    let value: __Visitor =
+        serde_json::from_value(json!({"text":"visitor"})).unwrap();
+    assert_eq!(serde_json::to_value(value).unwrap(), json!({"text":"visitor"}));
+    let value: __QapiDeserializer =
+        serde_json::from_value(json!({"text":"deserializer"})).unwrap();
     assert_eq!(
         serde_json::to_value(value).unwrap(),
         json!({"text":"deserializer"})
     );
-    let value: WithD = serde_json::from_value(json!({"data":{"text":"nested"}})).unwrap();
+    let value: WithD =
+        serde_json::from_value(json!({"data":{"text":"nested"}})).unwrap();
     assert_eq!(
         serde_json::to_value(value).unwrap(),
         json!({"data":{"text":"nested"}})
@@ -118,7 +115,8 @@ struct UnionStorage {
 fn user_fields_cannot_capture_shared_wire_or_union_payload_storage() {
     qapi::with_version((11, 1, 3), || {
         let wire = json!({"__qapi_raw_76616c7565":"user","value":"current"});
-        let value: SharedStorage = serde_json::from_value(wire.clone()).unwrap();
+        let value: SharedStorage =
+            serde_json::from_value(wire.clone()).unwrap();
         assert_eq!(serde_json::to_value(value).unwrap(), wire);
         let wire = json!({"kind":"one","__qapi_union_payload":"user","tail":"payload"});
         let value: UnionStorage = serde_json::from_value(wire.clone()).unwrap();
@@ -138,7 +136,8 @@ struct ReferencedVisitor {
 #[test]
 fn helper_type_names_cannot_shadow_referenced_schema_types() {
     let wire = json!({"value":{"text":"schema type"}});
-    let value: ReferencedVisitor = serde_json::from_value(wire.clone()).unwrap();
+    let value: ReferencedVisitor =
+        serde_json::from_value(wire.clone()).unwrap();
     assert_eq!(serde_json::to_value(value).unwrap(), wire);
 }
 
@@ -264,21 +263,25 @@ fn expansion_does_not_depend_on_names_in_scope() {
             value_legacy: None,
             list: vec![1],
         };
-        let wire = json!({"count": 1, "new": 2, "value": "current", "list": [1]});
+        let wire =
+            json!({"count": 1, "new": 2, "value": "current", "list": [1]});
         assert_eq!(serde_json::to_value(&command).unwrap(), wire);
         let back: shadowed::DoIt = serde_json::from_value(wire).unwrap();
         assert_eq!(back.value.as_deref(), Some("current"));
 
         let wire = json!({"type": "two", "text": "flat"});
-        let union: shadowed::Union = serde_json::from_value(wire.clone()).unwrap();
+        let union: shadowed::Union =
+            serde_json::from_value(wire.clone()).unwrap();
         assert_eq!(serde_json::to_value(&union).unwrap(), wire);
 
         for wire in [json!(3), json!("text"), json!({"text": "object"})] {
-            let value: shadowed::Alternate = serde_json::from_value(wire.clone()).unwrap();
+            let value: shadowed::Alternate =
+                serde_json::from_value(wire.clone()).unwrap();
             assert_eq!(serde_json::to_value(&value).unwrap(), wire);
         }
         let event: shadowed::Done =
-            serde_json::from_value(json!({"payload": {"text": "done"}})).unwrap();
+            serde_json::from_value(json!({"payload": {"text": "done"}}))
+                .unwrap();
         assert_eq!(
             event.to_string(),
             "DONE(payload=Payload { text: \"done\" })"

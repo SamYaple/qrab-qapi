@@ -55,9 +55,9 @@ fn a_coalesced_return_type_is_the_returns_type_of_a_build_from_its_release() {
     }
     let output = generate(&repo, &["v5.0.0", "v6.0.0", "v10.1.0"]).unwrap();
     assert!(
-        output
-            .commands
-            .contains(r#"#[qapi(returns(added = "6.0.0", value = "QemuTargetInfo"))]"#),
+        output.commands.contains(
+            r#"#[qapi(returns(added = "6.0.0", value = "QemuTargetInfo"))]"#
+        ),
         "{}",
         output.commands
     );

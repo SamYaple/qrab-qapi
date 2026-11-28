@@ -1,16 +1,12 @@
 //! Version-specific QName syntax, independent of casing/pragma style rules.
-use crate::QapiSchemaToken;
-use crate::unified::{SchemaErrorKind, SchemaResult, require};
+use crate::{
+    QapiSchemaToken,
+    unified::{SchemaErrorKind, SchemaResult, require},
+};
 
 pub(crate) fn c_name(name: &str) -> String {
     name.chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || c == '_' {
-                c
-            } else {
-                '_'
-            }
-        })
+        .map(|c| if c.is_ascii_alphanumeric() || c == '_' { c } else { '_' })
         .collect()
 }
 
@@ -31,16 +27,16 @@ fn valid(name: &str) -> bool {
         name.as_bytes()
             .first()
             .is_some_and(|b| b.is_ascii_alphabetic() || *b == b'_')
-            && name
-                .bytes()
-                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'.'))
+            && name.bytes().all(|b| {
+                b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'.')
+            })
     } else {
         let stem = if let Some(rest) = name.strip_prefix("__") {
             rest.split_once('_').and_then(|(prefix, stem)| {
                 (!prefix.is_empty()
-                    && prefix
-                        .bytes()
-                        .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-')))
+                    && prefix.bytes().all(|b| {
+                        b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-')
+                    }))
                 .then_some(stem)
             })
         } else {
@@ -48,9 +44,9 @@ fn valid(name: &str) -> bool {
         };
         stem.is_some_and(|stem| {
             stem.as_bytes().first().is_some_and(u8::is_ascii_alphabetic)
-                && stem
-                    .bytes()
-                    .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-'))
+                && stem.bytes().all(|b| {
+                    b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-')
+                })
         })
     };
     valid && !reserved
@@ -90,11 +86,9 @@ pub(crate) fn reserved_suffix(token: &QapiSchemaToken<'_>) -> SchemaResult {
         QapiSchemaToken::Command(_) | QapiSchemaToken::Event(_)
     );
     for suffix in reserved_suffixes(command_or_event) {
-        require(!name.ends_with(suffix), || {
-            SchemaErrorKind::ReservedSuffix {
-                name: name.to_owned(),
-                suffix,
-            }
+        require(!name.ends_with(suffix), || SchemaErrorKind::ReservedSuffix {
+            name: name.to_owned(),
+            suffix,
         })?;
     }
     Ok(())
@@ -119,9 +113,7 @@ fn optional(name: &str) -> SchemaResult {
     let version = crate::parser_version();
     require(
         !(name.starts_with('*') && ((2, 4, 0)..(4, 2, 0)).contains(&version)),
-        || SchemaErrorKind::OptionalName {
-            name: name.to_owned(),
-        },
+        || SchemaErrorKind::OptionalName { name: name.to_owned() },
     )
 }
 
@@ -149,7 +141,8 @@ mod tests {
     fn definition(version: (u32, u32, u32), text: &str) -> SchemaResult {
         crate::set_parser_version(version);
         let schema = crate::parse_schema(text).unwrap();
-        validate_definition(&schema.0[0]).and_then(|()| reserved_suffix(&schema.0[0]))
+        validate_definition(&schema.0[0])
+            .and_then(|()| reserved_suffix(&schema.0[0]))
     }
 
     #[test]
@@ -175,7 +168,10 @@ mod tests {
             ((11, 1, 3), "___Name", false),
             ((11, 1, 3), "__org.qemu_1", false),
         ] {
-            let result = definition(version, &format!("{{'struct':'{name}','data':{{}}}}"));
+            let result = definition(
+                version,
+                &format!("{{'struct':'{name}','data':{{}}}}"),
+            );
             assert_eq!(result.is_ok(), valid, "{version:?} {name}");
             if !valid {
                 assert_eq!(
@@ -197,11 +193,7 @@ mod tests {
             ((2, 5, 0), "{'struct':'FooList','data':{}}", Some("List")),
             ((2, 5, 0), "{'event':'FOOList'}", Some("List")),
             ((6, 0, 0), "{'struct':'FooList','data':{}}", Some("List")),
-            (
-                (6, 0, 0),
-                "{'union':'FooKind','data':{'a':'str'}}",
-                Some("Kind"),
-            ),
+            ((6, 0, 0), "{'union':'FooKind','data':{'a':'str'}}", Some("Kind")),
             (
                 (6, 1, 0),
                 "{'alternate':'FooKind','data':{'a':'str'}}",

@@ -20,11 +20,7 @@ pub(crate) struct JsonReader<R> {
 
 impl<R: AsyncRead + Unpin> JsonReader<R> {
     pub fn new(reader: R, limit: usize) -> Self {
-        Self {
-            reader,
-            inbound: Inbound::new(),
-            limit,
-        }
+        Self { reader, inbound: Inbound::new(), limit }
     }
 
     pub async fn next(&mut self) -> Result<Vec<u8>> {
@@ -73,7 +69,11 @@ impl<R: AsyncRead + Unpin> JsonReader<R> {
     async fn read_inside_line(&mut self) -> Result<()> {
         let n = self.reader.read(self.inbound.space()).await?;
         if n == 0 {
-            return Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "early eof").into());
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "early eof",
+            )
+            .into());
         }
         self.inbound.filled(n);
         Ok(())
@@ -103,7 +103,9 @@ pub(crate) async fn write_call<W: AsyncWrite + Unpin>(
     while !call.transmit().is_empty() {
         let n = writer.write(call.transmit()).await?;
         if n == 0 {
-            return Err(std::io::Error::from(std::io::ErrorKind::WriteZero).into());
+            return Err(
+                std::io::Error::from(std::io::ErrorKind::WriteZero).into()
+            );
         }
         call.advance(n);
     }

@@ -64,7 +64,8 @@ mod schema_docs {
         }
         let out = PathBuf::from(std::env::var_os("OUT_DIR").expect("OUT_DIR"));
         use qapi_codegen::unified::{Docs, Protocol, Releases, generate};
-        for (dir, protocol) in [("qmp", Protocol::Qmp), ("qga", Protocol::Qga)] {
+        for (dir, protocol) in [("qmp", Protocol::Qmp), ("qga", Protocol::Qga)]
+        {
             generate(
                 &qemu,
                 Releases::Pinned(qapi_codegen::versions::PINNED_VERSIONS),
@@ -87,7 +88,9 @@ mod schema_docs {
         }
         // `#[path]` needs a literal, so declare the modules in a file that
         // `src/lib.rs` includes; module paths match the default build.
-        let path = |dir: &str| format!("{:?}", out.join(dir).join("mod.rs").display().to_string());
+        let path = |dir: &str| {
+            format!("{:?}", out.join(dir).join("mod.rs").display().to_string())
+        };
         let modules = format!(
             "#[rustfmt::skip]\n#[path = {}]\nmod generated;\n\n\
              /// QEMU Guest Agent (QGA) types.\n#[rustfmt::skip]\n#[path = {}]\npub mod qga;\n",
@@ -95,7 +98,9 @@ mod schema_docs {
             path("qga"),
         );
         std::fs::write(out.join("schema_docs_modules.rs"), modules)
-            .unwrap_or_else(|error| fail(format_args!("writing module declarations: {error}")));
+            .unwrap_or_else(|error| {
+                fail(format_args!("writing module declarations: {error}"))
+            });
         println!("cargo::rustc-cfg=qrab_qapi_schema_docs");
     }
 }

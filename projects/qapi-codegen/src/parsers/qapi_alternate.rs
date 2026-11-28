@@ -1,18 +1,19 @@
-use super::common::QapiString;
-use super::common::{Malformed, keep, malformed_key};
-use super::common::{expression_text, other_key, qstring, take_keyed_dict, take_kv};
-use super::qapi_alternatives::QapiAlternatives;
-use super::qapi_alternatives::take_alternatives;
-use super::qapi_cond::QapiCond;
-use super::qapi_cond::take_cond;
-use super::qapi_documentation::QapiDocumentation;
-use super::qapi_features::QapiFeatures;
-use super::qapi_features::take_features;
-use nom::IResult;
-use nom::Parser;
-use nom::branch::alt;
-use nom::combinator::opt;
-use nom::error::{Error, ErrorKind};
+use super::{
+    common::{
+        Malformed, QapiString, expression_text, keep, malformed_key, other_key,
+        qstring, take_keyed_dict, take_kv,
+    },
+    qapi_alternatives::{QapiAlternatives, take_alternatives},
+    qapi_cond::{QapiCond, take_cond},
+    qapi_documentation::QapiDocumentation,
+    qapi_features::{QapiFeatures, take_features},
+};
+use nom::{
+    IResult, Parser,
+    branch::alt,
+    combinator::opt,
+    error::{Error, ErrorKind},
+};
 
 /// The keys whose `null` QEMU 2.4 to 4.1 take for an absent key.
 const ABSENT: &[&str] = &["if"];
@@ -45,7 +46,8 @@ impl<'i> QapiAlternate<'i> {
     /// From 2.4: the generators of earlier releases skip it.
     pub(crate) fn parse(input: &'i str) -> IResult<&'i str, Self> {
         if super::parser_version() < (2, 4, 0) {
-            let error = nom::error::Error::new(input, nom::error::ErrorKind::Tag);
+            let error =
+                nom::error::Error::new(input, nom::error::ErrorKind::Tag);
             return Err(nom::Err::Error(error));
         }
         Self::parse_v1(input)
@@ -53,10 +55,7 @@ impl<'i> QapiAlternate<'i> {
 
     pub(crate) fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
         let (input, doc) = opt(QapiDocumentation::parse).parse(input)?;
-        let mut s = Self {
-            doc,
-            ..Default::default()
-        };
+        let mut s = Self { doc, ..Default::default() };
         let start = input;
         let (input, (_, keys)) = take_keyed_dict(alt((
             take_kv("alternate", qstring).map(|v| s.name = v),
@@ -64,7 +63,8 @@ impl<'i> QapiAlternate<'i> {
             take_cond.map(|v| s.r#if = Some(v)),
             take_features.map(|v| s.features = Some(v)),
             other_key(READ),
-            malformed_key(READ).map(|entry| keep(&mut s.malformed, ABSENT, entry)),
+            malformed_key(READ)
+                .map(|entry| keep(&mut s.malformed, ABSENT, entry)),
         )))
         .parse(input)?;
         if !super::common::named(&keys, "alternate", &s.name) {

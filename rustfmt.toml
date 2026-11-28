@@ -1,0 +1,8 @@
+# Formatting: 80 columns, with rustfmt's widest heuristics for the
+# expressions that fit them. Format with `cargo xfmt`, which also merges
+# the imports of each crate into one `use` and sorts all imports as one
+# group (.cargo/config.toml).
+max_width = 80
+use_small_heuristics = "max"
+edition = "2024"
+style_edition = "2024"

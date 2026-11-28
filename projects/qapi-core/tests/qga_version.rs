@@ -32,41 +32,19 @@ fn components_that_are_not_u32_name_the_component() {
         ("x.y.z", VersionComponent::Major, IntErrorKind::InvalidDigit),
         ("9.x.0", VersionComponent::Minor, IntErrorKind::InvalidDigit),
         ("9.1.rc0", VersionComponent::Patch, IntErrorKind::Empty),
-        (
-            "9.1.0rc1.2",
-            VersionComponent::Patch,
-            IntErrorKind::InvalidDigit,
-        ),
+        ("9.1.0rc1.2", VersionComponent::Patch, IntErrorKind::InvalidDigit),
         ("9.1.0.x", VersionComponent::Fourth, IntErrorKind::Empty),
-        (
-            "+9.1.0",
-            VersionComponent::Major,
-            IntErrorKind::InvalidDigit,
-        ),
-        (
-            "9.+1.0",
-            VersionComponent::Minor,
-            IntErrorKind::InvalidDigit,
-        ),
-        (
-            "9.1.+0.1",
-            VersionComponent::Patch,
-            IntErrorKind::InvalidDigit,
-        ),
-        (
-            "4294967296.0.0",
-            VersionComponent::Major,
-            IntErrorKind::PosOverflow,
-        ),
+        ("+9.1.0", VersionComponent::Major, IntErrorKind::InvalidDigit),
+        ("9.+1.0", VersionComponent::Minor, IntErrorKind::InvalidDigit),
+        ("9.1.+0.1", VersionComponent::Patch, IntErrorKind::InvalidDigit),
+        ("4294967296.0.0", VersionComponent::Major, IntErrorKind::PosOverflow),
     ] {
         let error = parse_qga_version(input).unwrap_err();
-        let VersionParseErrorKind::Component { which, source } = error.kind() else {
+        let VersionParseErrorKind::Component { which, source } = error.kind()
+        else {
             panic!("{input:?}: {error}");
         };
         assert_eq!((*which, source.kind()), (component, &kind), "{input:?}");
-        assert!(
-            error.to_string().contains(&component.to_string()),
-            "{error}"
-        );
+        assert!(error.to_string().contains(&component.to_string()), "{error}");
     }
 }

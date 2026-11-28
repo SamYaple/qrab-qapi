@@ -115,14 +115,17 @@ impl Inbound {
                     match byte {
                         b'"' => self.in_string = true,
                         b'{' | b'[' => self.depth += 1,
-                        b'}' | b']' => self.depth = self.depth.saturating_sub(1),
+                        b'}' | b']' => {
+                            self.depth = self.depth.saturating_sub(1)
+                        }
                         _ => {}
                     }
                 }
             }
             let take = end.unwrap_or(input.len());
             // A CR belongs to the terminator; leave one byte of allowance until LF.
-            if self.partial.len().saturating_add(take) > limit.saturating_add(1) {
+            if self.partial.len().saturating_add(take) > limit.saturating_add(1)
+            {
                 return Err(Error::MessageTooLarge { limit });
             }
             self.partial.extend_from_slice(&input[..take]);
@@ -249,7 +252,9 @@ mod tests {
 
     #[test]
     fn a_message_split_across_reads_is_kept_until_its_end() {
-        let messages = frames(&[b"{\"ret", b"urn\": {}, \"id\"", b": 1}\n"], 1024).unwrap();
+        let messages =
+            frames(&[b"{\"ret", b"urn\": {}, \"id\"", b": 1}\n"], 1024)
+                .unwrap();
         assert_eq!(messages, [b"{\"return\": {}, \"id\": 1}".to_vec()]);
     }
 
@@ -384,10 +389,7 @@ mod tests {
         let mut inbound = Inbound::new();
         feed(&mut inbound, b"noise");
         assert!(!inbound.skip_to_sentinel());
-        feed(
-            &mut inbound,
-            b"more\xff{\"execute\":\"guest-sync-delimited\"}\n",
-        );
+        feed(&mut inbound, b"more\xff{\"execute\":\"guest-sync-delimited\"}\n");
         assert!(inbound.skip_to_sentinel());
         assert_eq!(
             inbound.frame(64).unwrap().unwrap(),

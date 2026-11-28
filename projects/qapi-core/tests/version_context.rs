@@ -2,8 +2,8 @@
 //! for the generated ones of qrab-qapi.
 
 use qapi_core::{
-    EncodeError, qemu_version, scoped_qemu_version, to_value, unavailable_error,
-    unavailable_type_message, with_version,
+    EncodeError, qemu_version, scoped_qemu_version, to_value,
+    unavailable_error, unavailable_type_message, with_version,
 };
 use serde::{Serialize, Serializer};
 
@@ -16,7 +16,10 @@ struct Gated {
 }
 
 impl Serialize for Gated {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+    fn serialize<S: Serializer>(
+        &self,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
         if qemu_version() < self.since {
             return Err(unavailable_error(self.name));
         }
@@ -25,11 +28,7 @@ impl Serialize for Gated {
 }
 
 fn gated(name: &'static str, since: (u32, u32, u32)) -> Gated {
-    Gated {
-        name,
-        since,
-        value: 1,
-    }
+    Gated { name, since, value: 1 }
 }
 
 #[test]
@@ -48,17 +47,16 @@ fn a_scope_nests_and_restores_the_outer_version() {
 
 #[test]
 fn a_scope_is_restored_when_its_closure_panics() {
-    let result = std::panic::catch_unwind(|| with_version((9, 2, 0), || panic!("inside")));
+    let result = std::panic::catch_unwind(|| {
+        with_version((9, 2, 0), || panic!("inside"))
+    });
     assert!(result.is_err());
     assert_eq!(scoped_qemu_version(), None);
 }
 
 #[test]
 fn to_value_names_what_the_release_lacks_wherever_it_is_nested() {
-    assert_eq!(
-        to_value((11, 1, 3), &gated("Gated", (10, 0, 0))).unwrap(),
-        1
-    );
+    assert_eq!(to_value((11, 1, 3), &gated("Gated", (10, 0, 0))).unwrap(), 1);
     let nested = vec![gated("Outer", (1, 0, 0)), gated("Inner", (10, 0, 0))];
     match to_value((9, 2, 0), &nested) {
         Err(EncodeError::Unavailable { name, version }) => {
@@ -76,10 +74,7 @@ fn an_unrelated_error_is_not_reported_as_unavailable() {
             Err(serde::ser::Error::custom("Gated is broken"))
         }
     }
-    assert!(matches!(
-        to_value((11, 1, 3), &Fails),
-        Err(EncodeError::Serde(_))
-    ));
+    assert!(matches!(to_value((11, 1, 3), &Fails), Err(EncodeError::Serde(_))));
 }
 
 #[test]
@@ -91,13 +86,16 @@ fn a_name_is_matched_whole_not_as_the_end_of_a_longer_one() {
     struct Recovers;
     impl Serialize for Recovers {
         fn serialize<S: Serializer>(&self, _: S) -> Result<S::Ok, S::Error> {
-            let kept = serde_json::to_value(gated("OtherGated", (10, 0, 0))).unwrap_err();
+            let kept = serde_json::to_value(gated("OtherGated", (10, 0, 0)))
+                .unwrap_err();
             let _ = serde_json::to_value(gated("Gated", (10, 0, 0)));
             Err(serde::ser::Error::custom(kept))
         }
     }
     match to_value((9, 2, 0), &Recovers) {
-        Err(EncodeError::Unavailable { name, .. }) => assert_eq!(name, "OtherGated"),
+        Err(EncodeError::Unavailable { name, .. }) => {
+            assert_eq!(name, "OtherGated")
+        }
         other => panic!("{other:?}"),
     }
 }
@@ -106,7 +104,9 @@ fn a_name_is_matched_whole_not_as_the_end_of_a_longer_one() {
 fn without_a_context_the_error_says_how_to_give_one() {
     let error = serde_json::to_value(gated("Gated", (10, 0, 0))).unwrap_err();
     assert!(error.to_string().contains("qapi::with_version"), "{error}");
-    assert!(unavailable_type_message("Gated").contains("without a QEMU version"));
+    assert!(
+        unavailable_type_message("Gated").contains("without a QEMU version")
+    );
     assert_eq!(
         with_version((9, 2, 0), || unavailable_type_message("Gated")),
         "Gated is not available in QEMU 9.2.0"

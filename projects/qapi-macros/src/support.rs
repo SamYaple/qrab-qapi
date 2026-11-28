@@ -16,7 +16,8 @@ impl Version {
     /// Parse exactly three decimal components without leading zeros.
     pub(crate) fn parse(text: &str) -> Option<Self> {
         let mut parts = text.split('.').map(|part| {
-            let digits = !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit());
+            let digits = !part.is_empty()
+                && part.bytes().all(|byte| byte.is_ascii_digit());
             (digits && (part == "0" || !part.starts_with('0')))
                 .then(|| part.parse().ok())
                 .flatten()
@@ -40,10 +41,11 @@ impl ToTokens for Version {
     }
 }
 
-pub(crate) fn wire_name(attrs_name: &Option<String>, ident: &syn::Ident) -> String {
-    attrs_name
-        .clone()
-        .unwrap_or_else(|| ident.unraw().to_string())
+pub(crate) fn wire_name(
+    attrs_name: &Option<String>,
+    ident: &syn::Ident,
+) -> String {
+    attrs_name.clone().unwrap_or_else(|| ident.unraw().to_string())
 }
 
 /// Whether the current version context lies in `[since, until)`, or `None`
@@ -53,9 +55,9 @@ pub(crate) fn version_range_check(
     until: Option<Version>,
 ) -> Option<TokenStream2> {
     match (since, until) {
-        (Some(s), Some(u)) => {
-            Some(quote! { (::qapi::qemu_version() >= #s && ::qapi::qemu_version() < #u) })
-        }
+        (Some(s), Some(u)) => Some(
+            quote! { (::qapi::qemu_version() >= #s && ::qapi::qemu_version() < #u) },
+        ),
         (Some(s), None) => Some(quote! { (::qapi::qemu_version() >= #s) }),
         (None, Some(u)) => Some(quote! { (::qapi::qemu_version() < #u) }),
         (None, None) => None,
@@ -63,7 +65,10 @@ pub(crate) fn version_range_check(
 }
 
 /// [`version_range_check`], `true` for a lifetime without bounds.
-pub(crate) fn active_check(since: Option<Version>, until: Option<Version>) -> TokenStream2 {
+pub(crate) fn active_check(
+    since: Option<Version>,
+    until: Option<Version>,
+) -> TokenStream2 {
     version_range_check(since, until).unwrap_or_else(|| quote! { true })
 }
 
@@ -71,13 +76,19 @@ pub(crate) fn active_check(since: Option<Version>, until: Option<Version>) -> To
 /// takes the one `active` for that peer. Unscoped decoding, including under
 /// the process-wide default, which only serialization uses, takes the newest
 /// (`latest`), so that recorded and newer replies stay readable.
-pub(crate) fn decoding_selects(latest: TokenStream2, active: TokenStream2) -> TokenStream2 {
+pub(crate) fn decoding_selects(
+    latest: TokenStream2,
+    active: TokenStream2,
+) -> TokenStream2 {
     quote! { (if ::qapi::scoped_qemu_version().is_none() { #latest } else { #active }) }
 }
 
 /// Order the representations of one wire name newest first: those never
 /// removed, then by latest removal, then by latest addition.
-pub(crate) fn newest_first<T>(items: &mut [&T], attrs: impl Fn(&T) -> &ItemAttrs) {
+pub(crate) fn newest_first<T>(
+    items: &mut [&T],
+    attrs: impl Fn(&T) -> &ItemAttrs,
+) {
     use std::cmp::Reverse;
     items.sort_by_key(|item| {
         let attrs = attrs(item);
@@ -99,7 +110,9 @@ pub(crate) fn check_disjoint_wires<'a>(
     let mut seen: Vec<(String, &ItemAttrs)> = Vec::new();
     for (wire, attrs, ident) in items {
         if seen.iter().any(|(other, earlier)| {
-            *other == wire && start(earlier) < end(attrs) && start(attrs) < end(earlier)
+            *other == wire
+                && start(earlier) < end(attrs)
+                && start(attrs) < end(earlier)
         }) {
             return Err(syn::Error::new_spanned(
                 ident,
@@ -115,7 +128,10 @@ pub(crate) fn check_disjoint_wires<'a>(
 }
 
 /// Add doc lines to an item, as a paragraph of their own after its docs.
-pub(crate) fn push_doc_notes(attrs: &mut Vec<syn::Attribute>, notes: Vec<String>) {
+pub(crate) fn push_doc_notes(
+    attrs: &mut Vec<syn::Attribute>,
+    notes: Vec<String>,
+) {
     if notes.is_empty() {
         return;
     }
@@ -146,7 +162,9 @@ pub(crate) fn deprecated_attr(
 ) -> Option<syn::Attribute> {
     let note = if let Some(until) = until {
         format!("removed in QEMU {until}")
-    } else if let Some(run) = deprecated.iter().find(|run| run.removed.is_none()) {
+    } else if let Some(run) =
+        deprecated.iter().find(|run| run.removed.is_none())
+    {
         format!("deprecated since QEMU {}", run.added)
     } else if deprecated.is_empty() && feature {
         format!("deprecated QAPI {what}")
@@ -159,7 +177,11 @@ pub(crate) fn deprecated_attr(
 /// Replace the `#[qapi(...)]` attributes of a member by its QAPI
 /// metadata: doc lines for the `unstable` feature and the build condition,
 /// and Rust `#[deprecated]`.
-pub(crate) fn annotate_item(item_attrs: &mut Vec<syn::Attribute>, attrs: &ItemAttrs, what: &str) {
+pub(crate) fn annotate_item(
+    item_attrs: &mut Vec<syn::Attribute>,
+    attrs: &ItemAttrs,
+    what: &str,
+) {
     item_attrs.retain(|attr| !attr.path().is_ident("qapi"));
     let mut notes = Vec::new();
     // Unstable is not deprecated, so it is a doc line, not #[deprecated].
@@ -180,7 +202,10 @@ pub(crate) fn annotate_item(item_attrs: &mut Vec<syn::Attribute>, attrs: &ItemAt
 
 /// The start of a type's serializer: refuse it outside its lifetime, and
 /// warn once where the peer's version deprecates it.
-pub(crate) fn type_serialization_guard(name: &syn::Ident, ta: &TypeAttrs) -> TokenStream2 {
+pub(crate) fn type_serialization_guard(
+    name: &syn::Ident,
+    ta: &TypeAttrs,
+) -> TokenStream2 {
     let name = name.unraw().to_string();
     let check = version_range_check(ta.since, ta.until).map(|available| {
         let unavailable = unavailable_error(&name);
@@ -208,7 +233,10 @@ pub(crate) fn unavailable_decode_error(name: &str) -> TokenStream2 {
 
 /// The start of a type's decoder: in a peer's version scope, refuse a type
 /// outside its lifetime.
-pub(crate) fn type_deserialization_guard(name: &syn::Ident, attrs: &TypeAttrs) -> TokenStream2 {
+pub(crate) fn type_deserialization_guard(
+    name: &syn::Ident,
+    attrs: &TypeAttrs,
+) -> TokenStream2 {
     version_range_check(attrs.since, attrs.until)
         .map(|active| {
             let error = unavailable_decode_error(&name.unraw().to_string());
@@ -224,7 +252,10 @@ pub(crate) fn type_deserialization_guard(name: &syn::Ident, attrs: &TypeAttrs) -
 /// Once-guarded run-time warnings, one per deprecation, that `name`, the
 /// Rust path of a type or member, is in use with a peer whose release
 /// deprecates it; nothing for an item without deprecations.
-pub(crate) fn deprecation_warning(name: &str, deprecated: &[Deprecation]) -> TokenStream2 {
+pub(crate) fn deprecation_warning(
+    name: &str,
+    deprecated: &[Deprecation],
+) -> TokenStream2 {
     let warnings = deprecated.iter().map(|run| {
         let msg = format!(
             "qapi warning: {name} is deprecated since QEMU {}",
@@ -247,7 +278,9 @@ pub(crate) fn deprecation_warning(name: &str, deprecated: &[Deprecation]) -> Tok
 
 /// The ranges of a flag such as `unstable` that hold in the newest
 /// release: those without a removal.
-pub(crate) fn ranges_at_newest(ranges: &[AttrRange]) -> impl Iterator<Item = &AttrRange> {
+pub(crate) fn ranges_at_newest(
+    ranges: &[AttrRange],
+) -> impl Iterator<Item = &AttrRange> {
     ranges.iter().filter(|range| range.removed.is_none())
 }
 
@@ -289,7 +322,9 @@ impl HelperNames {
                 proc_macro2::TokenTree::Ident(ident) => {
                     self.used.insert(ident.unraw().to_string());
                 }
-                proc_macro2::TokenTree::Group(group) => self.reserve(group.stream()),
+                proc_macro2::TokenTree::Group(group) => {
+                    self.reserve(group.stream())
+                }
                 _ => {}
             }
         }

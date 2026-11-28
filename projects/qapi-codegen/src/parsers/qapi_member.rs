@@ -1,18 +1,18 @@
-use super::common::QapiString;
-use super::common::{
-    Malformed, keep, malformed_key, other_key, qstring, qtag, raw_value, take_keyed_dict,
+use super::{
+    common::{
+        Malformed, QapiString, keep, malformed_key, other_key, qstring, qtag,
+        raw_value, take_keyed_dict,
+    },
+    qapi_cond::{QapiCond, take_cond},
+    qapi_features::{QapiFeatures, take_features},
+    qapi_type_ref::{QapiTypeRef, take_type_ref},
 };
-use super::qapi_cond::QapiCond;
-use super::qapi_cond::take_cond;
-use super::qapi_features::QapiFeatures;
-use super::qapi_features::take_features;
-use super::qapi_type_ref::QapiTypeRef;
-use super::qapi_type_ref::take_type_ref;
-use nom::IResult;
-use nom::Parser;
-use nom::branch::alt;
-use nom::error::{Error, ErrorKind};
-use nom::sequence::terminated;
+use nom::{
+    IResult, Parser,
+    branch::alt,
+    error::{Error, ErrorKind},
+    sequence::terminated,
+};
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct QapiMember<'i> {
@@ -59,8 +59,12 @@ impl<'i> QapiMember<'i> {
         if member.name.starts_with('*') {
             member.optional = true;
             member.name = match member.name {
-                QapiString::Borrowed(value) => QapiString::Borrowed(&value[1..]),
-                QapiString::Owned(value) => QapiString::Owned(value[1..].to_owned()),
+                QapiString::Borrowed(value) => {
+                    QapiString::Borrowed(&value[1..])
+                }
+                QapiString::Owned(value) => {
+                    QapiString::Owned(value[1..].to_owned())
+                }
             };
         }
         if member.name.is_empty() && !lenient {
@@ -73,7 +77,8 @@ impl<'i> QapiMember<'i> {
     /// refuses as the member's type.
     fn malformed_parser(input: &'i str) -> IResult<&'i str, Self> {
         let mut s = Self::default();
-        let (input, (name, _, value)) = (qstring, qtag(":"), raw_value).parse(input)?;
+        let (input, (name, _, value)) =
+            (qstring, qtag(":"), raw_value).parse(input)?;
         s.name = name;
         s.malformed.push(("type".into(), value));
         Ok((input, s))
@@ -104,7 +109,8 @@ impl<'i> QapiMember<'i> {
         let features_parser = take_features.map(|v| s.features = Some(v));
         const READ: &[&str] = &["type", "if", "features"];
         let other = other_key(READ);
-        let malformed = malformed_key(READ).map(|entry| keep(&mut s.malformed, &["if"], entry));
+        let malformed = malformed_key(READ)
+            .map(|entry| keep(&mut s.malformed, &["if"], entry));
         let (input, (_, (_, keys))) = (
             name_parser,
             take_keyed_dict(alt((

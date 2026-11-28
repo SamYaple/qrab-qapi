@@ -1,7 +1,9 @@
 #![allow(dead_code)]
-use qapi_protocol::qga::Qga;
-use qapi_protocol::server::QgaSession;
-use qapi_protocol::{ClientOptions, Qmp, QmpEvents, server::QmpSession};
+use qapi_protocol::{
+    ClientOptions, Qmp, QmpEvents,
+    qga::Qga,
+    server::{QgaSession, QmpSession},
+};
 use tokio::net::UnixStream;
 
 pub async fn qmp(options: ClientOptions) -> (Qmp, QmpEvents, QmpSession) {
@@ -14,12 +16,11 @@ pub async fn qmp_version(
 ) -> (Qmp, QmpEvents, QmpSession) {
     let (client, server) = UnixStream::pair().unwrap();
     let mut peer = QmpSession::from_stream(server);
-    let (client, ()) = tokio::join!(Qmp::from_stream_with_options(client, options), async {
-        peer.send_greeting(version.0, version.1, version.2)
-            .await
-            .unwrap();
-        peer.negotiate().await.unwrap();
-    });
+    let (client, ()) =
+        tokio::join!(Qmp::from_stream_with_options(client, options), async {
+            peer.send_greeting(version.0, version.1, version.2).await.unwrap();
+            peer.negotiate().await.unwrap();
+        });
     let (client, events) = client.unwrap();
     (client, events, peer)
 }
@@ -28,16 +29,22 @@ pub async fn qga(options: ClientOptions) -> (Qga, QgaSession) {
     qga_version(options, "11.1.3").await
 }
 
-pub async fn qga_version(options: ClientOptions, version: &str) -> (Qga, QgaSession) {
+pub async fn qga_version(
+    options: ClientOptions,
+    version: &str,
+) -> (Qga, QgaSession) {
     let (client, server) = UnixStream::pair().unwrap();
     let mut peer = QgaSession::from_stream(server);
-    let (client, ()) = tokio::join!(Qga::from_stream_with_options(client, options), async {
-        peer.handle_sync().await.unwrap();
-        assert_eq!(peer.recv_command().await.unwrap().0, "guest-info");
-        peer.send_return(serde_json::json!({"version": version, "supported_commands": []}))
+    let (client, ()) = tokio::join!(
+        Qga::from_stream_with_options(client, options),
+        async {
+            peer.handle_sync().await.unwrap();
+            assert_eq!(peer.recv_command().await.unwrap().0, "guest-info");
+            peer.send_return(serde_json::json!({"version": version, "supported_commands": []}))
             .await
             .unwrap();
-    });
+        }
+    );
     (client.unwrap(), peer)
 }
 
@@ -64,25 +71,28 @@ pub fn greeting() -> serde_json::Value {
 pub fn probe_refusal(id: &serde_json::Value) -> serde_json::Value {
     serde_json::json!({"error": {"class": "CommandNotFound", "desc": "The command query-commands has not been found"}, "id": id})
 }
-pub async fn raw_qmp(options: ClientOptions) -> (Qmp, QmpEvents, RawReader, RawWriter) {
+pub async fn raw_qmp(
+    options: ClientOptions,
+) -> (Qmp, QmpEvents, RawReader, RawWriter) {
     let (client, peer) = UnixStream::pair().unwrap();
     let (read_half, mut writer) = peer.into_split();
     let mut reader = tokio::io::BufReader::new(read_half);
     let probe = options.probe_commands;
-    let (client, ()) = tokio::join!(Qmp::from_stream_with_options(client, options), async {
-        write(&mut writer, greeting()).await;
-        let caps = read(&mut reader).await;
-        write(
-            &mut writer,
-            serde_json::json!({"return": {}, "id": caps["id"]}),
-        )
-        .await;
-        if probe {
-            let query = read(&mut reader).await;
-            assert_eq!(query["execute"], "query-commands");
-            write(&mut writer, probe_refusal(&query["id"])).await;
-        }
-    });
+    let (client, ()) =
+        tokio::join!(Qmp::from_stream_with_options(client, options), async {
+            write(&mut writer, greeting()).await;
+            let caps = read(&mut reader).await;
+            write(
+                &mut writer,
+                serde_json::json!({"return": {}, "id": caps["id"]}),
+            )
+            .await;
+            if probe {
+                let query = read(&mut reader).await;
+                assert_eq!(query["execute"], "query-commands");
+                write(&mut writer, probe_refusal(&query["id"])).await;
+            }
+        });
     let (client, events) = client.unwrap();
     (client, events, reader, writer)
 }

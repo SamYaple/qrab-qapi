@@ -1,19 +1,21 @@
-use super::common::QapiString;
-use super::common::{Malformed, keep, malformed_key};
-use super::common::{
-    expression_text, other_key, qbool, qstring, read_since, take_keyed_dict, take_kv,
+use super::{
+    common::{
+        Malformed, QapiString, expression_text, keep, malformed_key, other_key,
+        qbool, qstring, read_since, take_keyed_dict, take_kv,
+    },
+    parser_version,
+    qapi_cond::{QapiCond, take_cond},
+    qapi_documentation::QapiDocumentation,
+    qapi_features::{QapiFeatures, take_features},
+    qapi_members::{MembersOrRef, take_members_or_ref},
+    qapi_type_ref::QapiTypeRef,
 };
-use super::parser_version;
-use super::qapi_cond::{QapiCond, take_cond};
-use super::qapi_documentation::QapiDocumentation;
-use super::qapi_features::{QapiFeatures, take_features};
-use super::qapi_members::{MembersOrRef, take_members_or_ref};
-use super::qapi_type_ref::QapiTypeRef;
-use nom::IResult;
-use nom::Parser;
-use nom::branch::alt;
-use nom::combinator::opt;
-use nom::error::{Error, ErrorKind};
+use nom::{
+    IResult, Parser,
+    branch::alt,
+    combinator::opt,
+    error::{Error, ErrorKind},
+};
 
 /// The keys whose `null` QEMU 2.4 to 4.1 take for an absent key.
 const ABSENT: &[&str] = &["data", "returns", "if"];
@@ -76,12 +78,12 @@ impl<'i> QapiCommand<'i> {
         Self::parse_common(input, false)
     }
 
-    fn parse_common(input: &'i str, gen_string_as_bool: bool) -> IResult<&'i str, Self> {
+    fn parse_common(
+        input: &'i str,
+        gen_string_as_bool: bool,
+    ) -> IResult<&'i str, Self> {
         let (input, doc) = opt(QapiDocumentation::parse).parse(input)?;
-        let mut s = Self {
-            doc,
-            ..Default::default()
-        };
+        let mut s = Self { doc, ..Default::default() };
         let start = input;
         let flag = move |input: &'i str| -> IResult<&'i str, QapiString<'i>> {
             if gen_string_as_bool {
@@ -92,20 +94,25 @@ impl<'i> QapiCommand<'i> {
         };
         let (input, (_, keys)) = take_keyed_dict(alt((
             take_kv("command", qstring).map(|v| s.name = v),
-            read_since((2, 4, 0), take_kv("boxed", qbool)).map(|v| s.boxed = Some(v)),
+            read_since((2, 4, 0), take_kv("boxed", qbool))
+                .map(|v| s.boxed = Some(v)),
             read_since((2, 4, 0), take_cond).map(|v| s.r#if = Some(v)),
             read_since((2, 4, 0), take_features).map(|v| s.features = Some(v)),
             take_kv("returns", QapiTypeRef::parse).map(|v| s.returns = Some(v)),
             read_since((1, 1, 0), take_kv("success-response", flag))
                 .map(|v| s.success_response = Some(v)),
-            read_since((1, 1, 0), take_kv("gen", flag)).map(|v| s.r#gen = Some(v)),
-            read_since((2, 4, 0), take_kv("allow-oob", qbool)).map(|v| s.allow_oob = Some(v)),
-            read_since((2, 4, 0), take_kv("coroutine", qbool)).map(|v| s.coroutine = Some(v)),
+            read_since((1, 1, 0), take_kv("gen", flag))
+                .map(|v| s.r#gen = Some(v)),
+            read_since((2, 4, 0), take_kv("allow-oob", qbool))
+                .map(|v| s.allow_oob = Some(v)),
+            read_since((2, 4, 0), take_kv("coroutine", qbool))
+                .map(|v| s.coroutine = Some(v)),
             read_since((2, 4, 0), take_kv("allow-preconfig", qbool))
                 .map(|v| s.allow_preconfig = Some(v)),
             take_kv("data", take_members_or_ref).map(|v| s.data = Some(v)),
             other_key(READ),
-            malformed_key(READ).map(|entry| keep(&mut s.malformed, ABSENT, entry)),
+            malformed_key(READ)
+                .map(|entry| keep(&mut s.malformed, ABSENT, entry)),
         )))
         .parse(input)?;
         if !super::common::named(&keys, "command", &s.name) {
@@ -136,7 +143,8 @@ mod tests {
     #[test]
     fn test_gen_string_accepted_in_v1() {
         set_parser_version((1, 1, 0));
-        let input = "{ 'command': 'query-name', 'returns': 'NameInfo', 'gen': 'no' }";
+        let input =
+            "{ 'command': 'query-name', 'returns': 'NameInfo', 'gen': 'no' }";
         let (rem, cmd) = QapiCommand::parse(input).unwrap();
         assert_eq!(rem, "");
         assert_eq!(cmd.name, "query-name");

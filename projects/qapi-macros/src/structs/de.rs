@@ -1,7 +1,11 @@
 //! Version-aware `Deserialize` implementations for structs.
 
-use crate::structs::{FieldInfo, StructExpansion, discriminators, inner_option_type};
-use crate::support::{decoding_selects, type_deserialization_guard, unavailable_decode_error};
+use crate::{
+    structs::{FieldInfo, StructExpansion, discriminators, inner_option_type},
+    support::{
+        decoding_selects, type_deserialization_guard, unavailable_decode_error,
+    },
+};
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use std::collections::BTreeMap;
@@ -26,7 +30,8 @@ impl StructExpansion<'_> {
             .fields
             .iter()
             .map(|field| {
-                let slot = self.names.ident(&format!("field_{}", field.ident.unraw()));
+                let slot =
+                    self.names.ident(&format!("field_{}", field.ident.unraw()));
                 (field.ident.to_string(), slot)
             })
             .collect();
@@ -36,7 +41,8 @@ impl StructExpansion<'_> {
             .collect::<Vec<_>>()
             .into_iter()
             .map(|wire| {
-                let encoded: String = wire.bytes().map(|byte| format!("{byte:02x}")).collect();
+                let encoded: String =
+                    wire.bytes().map(|byte| format!("{byte:02x}")).collect();
                 let raw = self.names.ident(&format!("raw_{encoded}"));
                 (wire, raw)
             })
@@ -46,7 +52,11 @@ impl StructExpansion<'_> {
 
     /// In a peer's version scope, refuse a value without a field that the
     /// version requires.
-    fn required_checks(&self, result: &syn::Ident, error_ty: &TokenStream2) -> TokenStream2 {
+    fn required_checks(
+        &self,
+        result: &syn::Ident,
+        error_ty: &TokenStream2,
+    ) -> TokenStream2 {
         let checks = self
             .fields
             .iter()
@@ -110,11 +120,12 @@ impl StructExpansion<'_> {
 
     /// Declare the slots of the shared wire names' alternates.
     fn alternate_slots(&self, slots: &Slots) -> TokenStream2 {
-        let declarations = self.shared_wires().into_values().flatten().map(|field| {
-            let slot = slots.field(field);
-            let ty = &field.ty;
-            quote! { let mut #slot: #ty = ::core::option::Option::None; }
-        });
+        let declarations =
+            self.shared_wires().into_values().flatten().map(|field| {
+                let slot = slots.field(field);
+                let ty = &field.ty;
+                quote! { let mut #slot: #ty = ::core::option::Option::None; }
+            });
         quote! { #(#declarations)* }
     }
 
@@ -140,7 +151,11 @@ impl StructExpansion<'_> {
 
     /// The error for a member that the value lacks, named with the type as
     /// the expansion's other errors are.
-    fn missing_field(&self, wire: &str, error_ty: &TokenStream2) -> TokenStream2 {
+    fn missing_field(
+        &self,
+        wire: &str,
+        error_ty: &TokenStream2,
+    ) -> TokenStream2 {
         let message = format!("{}: missing field `{wire}`", self.name_str);
         quote! { <#error_ty as ::qapi::__private::serde::de::Error>::custom(#message) }
     }
@@ -185,7 +200,8 @@ impl StructExpansion<'_> {
             });
         }
         let alternate_slots = self.alternate_slots(&slots);
-        let alternates = self.decode_alternates(&slots, &raw_value, &error, &error_ty);
+        let alternates =
+            self.decode_alternates(&slots, &raw_value, &error, &error_ty);
         let values: Vec<_> = self
             .fields
             .iter()
@@ -250,10 +266,8 @@ impl StructExpansion<'_> {
         };
         let shared = self.shared_wires();
 
-        let has_union = self
-            .fields
-            .iter()
-            .any(|field| field.attrs.union_field.is_some());
+        let has_union =
+            self.fields.iter().any(|field| field.attrs.union_field.is_some());
         let union_payload = has_union.then(|| {
             let simple = self.simple_union_layout(true);
             let missing = self.missing_field("data", &error_ty);
@@ -300,7 +314,8 @@ impl StructExpansion<'_> {
             members.push(quote! { let #raw = #map.remove(#wire); });
         }
         let alternate_slots = self.alternate_slots(&slots);
-        let alternates = self.decode_alternates(&slots, &raw_value, &error, &error_ty);
+        let alternates =
+            self.decode_alternates(&slots, &raw_value, &error, &error_ty);
 
         let discriminators = discriminators(self.fields);
         let mut flattened = Vec::new();
@@ -322,7 +337,9 @@ impl StructExpansion<'_> {
                     [single] if !single.is_option() => None,
                     [single] => {
                         let disc = slots.field(single);
-                        Some(quote! { #disc.as_ref().map(::std::string::ToString::to_string) })
+                        Some(
+                            quote! { #disc.as_ref().map(::std::string::ToString::to_string) },
+                        )
                     }
                     // The member that is the discriminator in the peer's
                     // release, or unscoped in the newest the build
@@ -362,9 +379,13 @@ impl StructExpansion<'_> {
                     }
                     None => {
                         let disc = slots.field(discriminators[0]);
-                        let missing = self.missing_field(&discriminators[0].wire(), &error_ty);
-                        let decode =
-                            dispatch(quote! { &::std::string::ToString::to_string(&#tag) });
+                        let missing = self.missing_field(
+                            &discriminators[0].wire(),
+                            &error_ty,
+                        );
+                        let decode = dispatch(
+                            quote! { &::std::string::ToString::to_string(&#tag) },
+                        );
                         let decode = if field.is_option() {
                             quote! { ::core::option::Option::Some(#decode) }
                         } else {
@@ -381,7 +402,8 @@ impl StructExpansion<'_> {
                 quote! { { #decode } }
             } else {
                 let context = format!("{name_str}: {{}}");
-                let failed = custom(quote! { ::std::format!(#context, #error) });
+                let failed =
+                    custom(quote! { ::std::format!(#context, #error) });
                 quote! {
                     ::qapi::__private::serde_json::from_value::<#ty>(::qapi::__private::serde_json::Value::Object(::core::clone::Clone::clone(&#map)))
                         .map_err(|#error| #failed)?

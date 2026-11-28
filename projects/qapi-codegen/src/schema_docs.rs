@@ -7,11 +7,18 @@
 //! [`check_symbol`] and [`check_sections`] at their own places before), and
 //! with the definition's types [`connect`] and [`check_described`], which
 //! from 9.0 runs after every definition's types instead.
-use crate::parsers::doc_comment::{self, Describe};
-use crate::unified::{SchemaContext, SchemaError, SchemaErrorKind, SchemaResult, require};
-use crate::{MembersOrRef, QapiFeatures, QapiMembers, QapiPragma, QapiSchema, QapiSchemaToken};
-use std::collections::{HashMap, HashSet};
-use std::path::Path;
+use crate::{
+    MembersOrRef, QapiFeatures, QapiMembers, QapiPragma, QapiSchema,
+    QapiSchemaToken,
+    parsers::doc_comment::{self, Describe},
+    unified::{
+        SchemaContext, SchemaError, SchemaErrorKind, SchemaResult, require,
+    },
+};
+use std::{
+    collections::{HashMap, HashSet},
+    path::Path,
+};
 
 /// Before 2.9, give a comment that documents another definition of its
 /// file, one without a comment of its own, to that definition, before or
@@ -55,7 +62,8 @@ pub(crate) fn resolve_legacy(schemas: &mut [(&Path, QapiSchema<'_>)]) {
             let Some(name) = token.definition_name().map(str::to_owned) else {
                 continue;
             };
-            if let Some(slot) = token.documentation_mut().filter(|slot| slot.is_none())
+            if let Some(slot) =
+                token.documentation_mut().filter(|slot| slot.is_none())
                 && let Some(doc) = pending.remove(name.as_str())
             {
                 *slot = Some(doc);
@@ -139,7 +147,10 @@ fn comment<'i>(token: &QapiSchemaToken<'i>) -> Option<DocComment<'i>> {
     Some(comment)
 }
 
-fn fail(kind: SchemaErrorKind, position: Option<(usize, usize)>) -> SchemaResult {
+fn fail(
+    kind: SchemaErrorKind,
+    position: Option<(usize, usize)>,
+) -> SchemaResult {
     Err(SchemaError::from(kind).at(position))
 }
 
@@ -159,8 +170,12 @@ pub(crate) fn check_expression(
 
 /// From 2.9, with the `doc-required` pragma, a definition must have
 /// documentation.
-pub(crate) fn check_required(token: &QapiSchemaToken<'_>, pragmas: &Pragmas) -> SchemaResult {
-    if crate::parser_version() < (2, 9, 0) || token.definition_name().is_none() {
+pub(crate) fn check_required(
+    token: &QapiSchemaToken<'_>,
+    pragmas: &Pragmas,
+) -> SchemaResult {
+    if crate::parser_version() < (2, 9, 0) || token.definition_name().is_none()
+    {
         return Ok(());
     }
     require(comment(token).is_some() || !pragmas.doc_required, || {
@@ -170,7 +185,9 @@ pub(crate) fn check_required(token: &QapiSchemaToken<'_>, pragmas: &Pragmas) -> 
 
 /// From 2.9, a definition's documentation must name the definition.
 pub(crate) fn check_symbol(token: &QapiSchemaToken<'_>) -> SchemaResult {
-    let (Some(name), Some(doc)) = (token.definition_name(), token.documentation()) else {
+    let (Some(name), Some(doc)) =
+        (token.definition_name(), token.documentation())
+    else {
         return Ok(());
     };
     if crate::parser_version() < (2, 9, 0) || comment(token).is_none() {
@@ -184,7 +201,10 @@ pub(crate) fn check_symbol(token: &QapiSchemaToken<'_>) -> SchemaResult {
 
 /// From 2.9, the sections that only commands may have: Returns, from 9.0
 /// only for a command that returns something, and Errors from 9.0.
-pub(crate) fn check_sections(token: &QapiSchemaToken<'_>, content: &str) -> SchemaResult {
+pub(crate) fn check_sections(
+    token: &QapiSchemaToken<'_>,
+    content: &str,
+) -> SchemaResult {
     let version = crate::parser_version();
     if version < (2, 9, 0) || token.definition_name().is_none() {
         return Ok(());
@@ -197,19 +217,25 @@ pub(crate) fn check_sections(token: &QapiSchemaToken<'_>, content: &str) -> Sche
     let at = |section: &str| crate::locate(content, section);
     if let QapiSchemaToken::Command(value) = token {
         return match comment.returns {
-            Some(returns) if version >= (9, 0, 0) && value.returns.is_none() => {
+            Some(returns)
+                if version >= (9, 0, 0) && value.returns.is_none() =>
+            {
                 fail(SchemaErrorKind::ReturnsWithoutType, at(returns))
             }
             _ => Ok(()),
         };
     }
     match (comment.returns, comment.errors) {
-        (Some(returns), _) => fail(SchemaErrorKind::ReturnsSection, at(returns)),
+        (Some(returns), _) => {
+            fail(SchemaErrorKind::ReturnsSection, at(returns))
+        }
         // 9.0 fails on it, looking for the Returns section to report.
         (None, Some(errors)) if version < (9, 1, 0) => {
             fail(SchemaErrorKind::ErrorsWithoutReturns, at(errors))
         }
-        (None, Some(errors)) => fail(SchemaErrorKind::ErrorsSection, at(errors)),
+        (None, Some(errors)) => {
+            fail(SchemaErrorKind::ErrorsSection, at(errors))
+        }
         (None, None) => Ok(()),
     }
 }
@@ -223,7 +249,10 @@ enum Connected<'a> {
 
 /// Features, which a release that does not know them has refused as
 /// unknown keys.
-fn features<'a>(features: Option<&'a QapiFeatures<'_>>, connected: &mut Vec<Connected<'a>>) {
+fn features<'a>(
+    features: Option<&'a QapiFeatures<'_>>,
+    connected: &mut Vec<Connected<'a>>,
+) {
     connected.extend(
         features
             .iter()
@@ -232,12 +261,12 @@ fn features<'a>(features: Option<&'a QapiFeatures<'_>>, connected: &mut Vec<Conn
     );
 }
 
-fn members<'a>(fields: &'a QapiMembers<'_>, connected: &mut Vec<Connected<'a>>) {
+fn members<'a>(
+    fields: &'a QapiMembers<'_>,
+    connected: &mut Vec<Connected<'a>>,
+) {
     for field in fields.iter() {
-        connected.push(Connected::Member {
-            role: "member",
-            name: &field.name,
-        });
+        connected.push(Connected::Member { role: "member", name: &field.name });
         features(field.features.as_ref(), connected);
     }
 }
@@ -251,7 +280,8 @@ fn connected<'a>(token: &'a QapiSchemaToken<'_>) -> Option<Vec<Connected<'a>>> {
     let version = crate::parser_version();
     let modern = version >= (4, 2, 0);
     let mut connected = Vec::new();
-    let arguments = |data: &'a Option<MembersOrRef<'_>>, connected: &mut Vec<Connected<'a>>| {
+    let arguments = |data: &'a Option<MembersOrRef<'_>>,
+                     connected: &mut Vec<Connected<'a>>| {
         if let Some(MembersOrRef::Members(fields)) = data
             && !fields.is_empty()
         {
@@ -280,9 +310,8 @@ fn connected<'a>(token: &'a QapiSchemaToken<'_>) -> Option<Vec<Connected<'a>>> {
         }
         QapiSchemaToken::Alternate(value) => {
             features(value.features.as_ref(), &mut connected);
-            connected.extend(value.data.iter().map(|branch| Connected::Member {
-                role: "branch",
-                name: &branch.name,
+            connected.extend(value.data.iter().map(|branch| {
+                Connected::Member { role: "branch", name: &branch.name }
             }));
             true
         }
@@ -293,10 +322,8 @@ fn connected<'a>(token: &'a QapiSchemaToken<'_>) -> Option<Vec<Connected<'a>>> {
             }
             // A simple union's tag member (simple unions end with 6.1).
             if value.discriminator.is_none() {
-                connected.push(Connected::Member {
-                    role: "member",
-                    name: "type",
-                });
+                connected
+                    .push(Connected::Member { role: "member", name: "type" });
             }
             true
         }
@@ -319,7 +346,10 @@ fn connected<'a>(token: &'a QapiSchemaToken<'_>) -> Option<Vec<Connected<'a>>> {
 /// definition. The first undescribed one, in QEMU's order, fails. From
 /// 10.0 to 11.0 QEMU adds a section for an exempt member after the member
 /// descriptions, and fails when nothing follows them.
-pub(crate) fn connect(token: &QapiSchemaToken<'_>, pragmas: &Pragmas) -> SchemaResult {
+pub(crate) fn connect(
+    token: &QapiSchemaToken<'_>,
+    pragmas: &Pragmas,
+) -> SchemaResult {
     let version = crate::parser_version();
     if version < (4, 2, 0) {
         return Ok(());
@@ -366,14 +396,15 @@ pub(crate) fn connect(token: &QapiSchemaToken<'_>, pragmas: &Pragmas) -> SchemaR
 
 /// QEMU 4.2's connection of one feature of a definition to its
 /// documentation, as it checks the feature: it must be described.
-pub(crate) fn connect_feature(token: &QapiSchemaToken<'_>, feature: &str) -> SchemaResult {
+pub(crate) fn connect_feature(
+    token: &QapiSchemaToken<'_>,
+    feature: &str,
+) -> SchemaResult {
     let Some(comment) = comment(token) else {
         return Ok(());
     };
     require(describes(&comment.features, feature), || {
-        SchemaErrorKind::UndocumentedFeature {
-            name: feature.to_owned(),
-        }
+        SchemaErrorKind::UndocumentedFeature { name: feature.to_owned() }
     })
 }
 
@@ -382,7 +413,10 @@ pub(crate) fn connect_feature(token: &QapiSchemaToken<'_>, feature: &str) -> Sch
 /// inline, non-empty arguments, from 4.2 for every definition and for
 /// features too. Every such name is listed. Until 8.2 the error names the
 /// comment's opening line, from 9.0 the first such description.
-pub(crate) fn check_described<'i>(token: &QapiSchemaToken<'i>, content: &str) -> SchemaResult {
+pub(crate) fn check_described<'i>(
+    token: &QapiSchemaToken<'i>,
+    content: &str,
+) -> SchemaResult {
     let version = crate::parser_version();
     if version < (2, 9, 0) {
         return Ok(());
@@ -413,16 +447,13 @@ pub(crate) fn check_described<'i>(token: &QapiSchemaToken<'i>, content: &str) ->
             names.first().map(|(_, at)| *at)
         };
         (
-            names
-                .iter()
-                .map(|(name, _)| name.clone())
-                .collect::<Vec<_>>(),
+            names.iter().map(|(name, _)| name.clone()).collect::<Vec<_>>(),
             at.and_then(|at| crate::locate(content, at)),
         )
     };
     let (names, at) = unknown(&comment.members, known(false));
-    require(names.is_empty(), || {
-        SchemaErrorKind::UnknownDocumentedMember { names }
+    require(names.is_empty(), || SchemaErrorKind::UnknownDocumentedMember {
+        names,
     })
     .at(|| at)?;
     if version < (4, 2, 0) {
@@ -430,13 +461,10 @@ pub(crate) fn check_described<'i>(token: &QapiSchemaToken<'i>, content: &str) ->
     }
     let (names, at) = unknown(&comment.features, known(true));
     // Until 6.1 QEMU words them as members.
-    let word = if version < (6, 2, 0) {
-        "member"
-    } else {
-        "feature"
-    };
-    require(names.is_empty(), || {
-        SchemaErrorKind::UnknownDocumentedFeature { names, word }
+    let word = if version < (6, 2, 0) { "member" } else { "feature" };
+    require(names.is_empty(), || SchemaErrorKind::UnknownDocumentedFeature {
+        names,
+        word,
     })
     .at(|| at)
 }
@@ -458,7 +486,8 @@ mod tests {
                 .iter()
                 .filter_map(|token| {
                     let name = token.definition_name()?.to_owned();
-                    let doc = token.documentation().map(|doc| doc.body.join("\n"));
+                    let doc =
+                        token.documentation().map(|doc| doc.body.join("\n"));
                     Some((name, doc))
                 })
                 .collect()
@@ -510,8 +539,9 @@ mod tests {
     #[test]
     fn harmless_case_typos_and_unknown_legacy_doc_targets_stay_attached() {
         for name in ["EXAMPLE", "Unknown"] {
-            let input =
-                format!("##\n# @{name}:\n# Description.\n##\n{{'type':'Example','data':{{}}}}");
+            let input = format!(
+                "##\n# @{name}:\n# Description.\n##\n{{'type':'Example','data':{{}}}}"
+            );
             assert_eq!(
                 legacy(&input),
                 [("Example".into(), Some("Description.".into()))]
@@ -522,7 +552,8 @@ mod tests {
     #[test]
     fn formal_docs_are_never_moved() {
         let input = "##\n# @Target:\n# Text.\n##\n{ 'struct': 'Other', 'data': {} }\n{ 'struct': 'Target', 'data': {} }\n";
-        let schema = crate::parse_schema_with_version(input, (11, 1, 3)).unwrap();
+        let schema =
+            crate::parse_schema_with_version(input, (11, 1, 3)).unwrap();
         let mut schemas = [(Path::new("schema.json"), schema)];
         crate::with_parser_version((11, 1, 3), || resolve_legacy(&mut schemas));
         let token = schemas[0]
@@ -540,7 +571,10 @@ mod tests {
         ));
     }
 
-    fn definition<'i>(schema: &'i QapiSchema<'i>, name: &str) -> &'i QapiSchemaToken<'i> {
+    fn definition<'i>(
+        schema: &'i QapiSchema<'i>,
+        name: &str,
+    ) -> &'i QapiSchemaToken<'i> {
         schema
             .0
             .iter()
@@ -552,9 +586,13 @@ mod tests {
     fn the_first_undocumented_feature_in_declaration_order_fails() {
         let input = "##\n# @Example:\n#\n# @m: Member.\n#\n# Features:\n#\n# @b: Documented.\n##\n{ 'struct': 'Example', 'data': { 'm': { 'type': 'int', 'features': [ 'a' ] } }, 'features': [ 'c', 'b' ] }";
         // 4.2 knows no features of members.
-        let plain = input.replace("{ 'type': 'int', 'features': [ 'a' ] }", "'int'");
-        for (version, input) in [((4, 2, 0), plain.as_str()), ((11, 1, 3), input)] {
-            let schema = crate::parse_schema_with_version(input, version).unwrap();
+        let plain =
+            input.replace("{ 'type': 'int', 'features': [ 'a' ] }", "'int'");
+        for (version, input) in
+            [((4, 2, 0), plain.as_str()), ((11, 1, 3), input)]
+        {
+            let schema =
+                crate::parse_schema_with_version(input, version).unwrap();
             let error = crate::with_parser_version(version, || {
                 connect(definition(&schema, "Example"), &Pragmas::default())
             })
@@ -566,7 +604,8 @@ mod tests {
         }
         // The member's feature comes after the definition's.
         let input = input.replace("[ 'c', 'b' ]", "[ 'b' ]");
-        let schema = crate::parse_schema_with_version(&input, (5, 0, 0)).unwrap();
+        let schema =
+            crate::parse_schema_with_version(&input, (5, 0, 0)).unwrap();
         let error = crate::with_parser_version((5, 0, 0), || {
             connect(definition(&schema, "Example"), &Pragmas::default())
         })
@@ -578,7 +617,8 @@ mod tests {
     fn validate(version: (u32, u32, u32), input: &str) -> SchemaResult {
         crate::with_parser_version(version, || {
             let sources = [(PathBuf::from("schema.json"), input.to_owned())];
-            let schemas = crate::builtins::parse_sources(&sources, &Default::default())?;
+            let schemas =
+                crate::builtins::parse_sources(&sources, &Default::default())?;
             crate::schema_validation::validate(&schemas, &sources)
         })
     }
@@ -800,7 +840,10 @@ mod tests {
     }
 
     /// The kind and line of the error that a release reports first.
-    fn outcome(version: (u32, u32, u32), input: &str) -> Option<(String, usize)> {
+    fn outcome(
+        version: (u32, u32, u32),
+        input: &str,
+    ) -> Option<(String, usize)> {
         validate(version, input).err().map(|error| {
             let kind = format!("{:?}", error.kind());
             let kind = kind.split([' ', '{', '(']).next().unwrap_or_default();
@@ -812,11 +855,11 @@ mod tests {
     fn qemu_4_2_checks_a_features_documentation_with_the_feature() {
         let types = "##\n# @Foo:\n#\n# @a: A.\n##\n{ 'struct': 'Foo', 'data': { 'a': 'Unknown' }, 'features': [ 'f' ] }\n";
         let clash = "##\n# @Foo:\n#\n# @a: A.\n#\n# @b: B.\n##\n{ 'struct': 'Foo', 'data': { 'a-b': 'int', 'a_b': 'int' }, 'features': [ 'f' ] }\n";
-        let returns =
-            "##\n# @foo:\n##\n{ 'command': 'foo', 'returns': 'Unknown', 'features': [ 'f' ] }\n";
+        let returns = "##\n# @foo:\n##\n{ 'command': 'foo', 'returns': 'Unknown', 'features': [ 'f' ] }\n";
         // A base, checked with the struct before it, with its own comment.
         let base = "##\n# @Foo:\n#\n# @b: B.\n##\n{ 'struct': 'Foo', 'base': 'Base', 'data': { 'b': 'Unknown' } }\n##\n# @Base:\n#\n# @a: A.\n##\n{ 'struct': 'Base', 'data': { 'a': 'int' }, 'features': [ 'g' ] }\n";
-        let undocumented = |line| Some(("UndocumentedFeature".to_owned(), line));
+        let undocumented =
+            |line| Some(("UndocumentedFeature".to_owned(), line));
         for (version, input, expected) in [
             ((4, 2, 0), types, undocumented(6)),
             ((5, 0, 0), types, Some(("UnknownType".to_owned(), 6))),
@@ -827,7 +870,11 @@ mod tests {
             ((4, 2, 0), base, undocumented(12)),
             ((5, 0, 0), base, Some(("UnknownType".to_owned(), 6))),
         ] {
-            assert_eq!(outcome(version, input), expected, "{version:?} {input}");
+            assert_eq!(
+                outcome(version, input),
+                expected,
+                "{version:?} {input}"
+            );
         }
     }
 
@@ -849,11 +896,7 @@ mod tests {
         let crash = |line| Some(("ExemptMemberAfterMembers".to_owned(), line));
         for (version, input, expected) in [
             ((8, 2, 0), errors, None),
-            (
-                (9, 0, 0),
-                errors,
-                Some(("ErrorsWithoutReturns".to_owned(), 6)),
-            ),
+            ((9, 0, 0), errors, Some(("ErrorsWithoutReturns".to_owned(), 6))),
             ((9, 1, 0), errors, Some(("ErrorsSection".to_owned(), 6))),
             ((9, 2, 0), described.as_str(), None),
             ((10, 0, 0), &described, crash(7)),
@@ -865,7 +908,11 @@ mod tests {
             ((11, 1, 0), &bare, None),
             ((10, 0, 0), &since, None),
         ] {
-            assert_eq!(outcome(version, input), expected, "{version:?} {input}");
+            assert_eq!(
+                outcome(version, input),
+                expected,
+                "{version:?} {input}"
+            );
         }
         let error = validate((10, 0, 0), &bare).unwrap_err();
         assert_eq!(
@@ -904,18 +951,27 @@ mod tests {
             ((8, 2, 0), order, at("UnknownDocumentedMember", 1)),
             ((9, 0, 0), order, at("UnknownType", 14)),
         ] {
-            assert_eq!(outcome(version, input), expected, "{version:?} {input}");
+            assert_eq!(
+                outcome(version, input),
+                expected,
+                "{version:?} {input}"
+            );
         }
         // 2.8 moves the comment to the definition it names.
         crate::with_parser_version((2, 8, 0), || {
             let sources = [(PathBuf::from("schema.json"), forward.to_owned())];
-            let schemas = crate::builtins::parse_sources(&sources, &Default::default()).unwrap();
+            let schemas =
+                crate::builtins::parse_sources(&sources, &Default::default())
+                    .unwrap();
             let documented: Vec<_> = schemas[0]
                 .1
                 .0
                 .iter()
                 .filter_map(|token| {
-                    Some((token.definition_name()?, token.documentation().is_some()))
+                    Some((
+                        token.definition_name()?,
+                        token.documentation().is_some(),
+                    ))
                 })
                 .collect();
             assert_eq!(documented, [("Helper", false), ("Backend", true)]);
@@ -941,13 +997,18 @@ mod tests {
 ";
         crate::with_parser_version((2, 3, 0), || {
             let sources = [(PathBuf::from("schema.json"), input.to_owned())];
-            let schemas = crate::builtins::parse_sources(&sources, &Default::default()).unwrap();
+            let schemas =
+                crate::builtins::parse_sources(&sources, &Default::default())
+                    .unwrap();
             let names: Vec<_> = schemas[0]
                 .1
                 .0
                 .iter()
                 .filter_map(|token| {
-                    Some((token.definition_name()?, token.documentation().is_some()))
+                    Some((
+                        token.definition_name()?,
+                        token.documentation().is_some(),
+                    ))
                 })
                 .collect();
             assert_eq!(names, [("Helper", false), ("Backend", true)]);

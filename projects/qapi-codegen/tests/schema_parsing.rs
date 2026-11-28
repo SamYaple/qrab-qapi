@@ -1,15 +1,19 @@
 //! The pinned releases against the QEMU tree: the pins themselves, release
 //! discovery and extraction, and every pinned schema parsed with its grammar.
 
-use std::path::{Path, PathBuf};
-use std::process::Command;
-
-use qapi_codegen::versions::{
-    PINNED_VERSIONS, PinnedVersion, TreeError, discover_qga_version_tags, discover_version_tags,
-    extract_schema_from_tag, find_qga_schema_entry, find_schema_entry, parse_pinned_versions,
-    parse_version_tag, parse_version_tag_full, verify_pinned_versions,
+use qapi_codegen::{
+    QapiSchemaToken, parse_schema_with_version, read_schema_with_version,
+    versions::{
+        PINNED_VERSIONS, PinnedVersion, TreeError, discover_qga_version_tags,
+        discover_version_tags, extract_schema_from_tag, find_qga_schema_entry,
+        find_schema_entry, parse_pinned_versions, parse_version_tag,
+        parse_version_tag_full, verify_pinned_versions,
+    },
 };
-use qapi_codegen::{QapiSchemaToken, parse_schema_with_version, read_schema_with_version};
+use std::{
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 fn qemu_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../vendor/qemu")
@@ -65,9 +69,12 @@ struct Summary {
 }
 
 /// Read a schema and its includes and parse them with `version`'s grammar.
-fn parse_tree(entry: &Path, version: (u32, u32, u32)) -> Result<Summary, String> {
-    let sources =
-        read_schema_with_version(entry, Some(version)).map_err(|error| error.to_string())?;
+fn parse_tree(
+    entry: &Path,
+    version: (u32, u32, u32),
+) -> Result<Summary, String> {
+    let sources = read_schema_with_version(entry, Some(version))
+        .map_err(|error| error.to_string())?;
     let mut summary = Summary::default();
     for (path, content) in &sources {
         let schema = parse_schema_with_version(content, version)
@@ -81,7 +88,8 @@ fn parse_tree(entry: &Path, version: (u32, u32, u32)) -> Result<Summary, String>
                     summary.conditional += usize::from(value.r#if.is_some())
                 }
                 QapiSchemaToken::Union(value) => {
-                    summary.simple_unions += usize::from(value.discriminator.is_none())
+                    summary.simple_unions +=
+                        usize::from(value.discriminator.is_none())
                 }
                 QapiSchemaToken::Event(_) => summary.events += 1,
                 QapiSchemaToken::Alternate(_) => summary.alternates += 1,
@@ -117,20 +125,11 @@ fn the_checked_out_baseline_parses() {
     let qga = find_qga_schema_entry(&root).unwrap();
     assert!(qga.ends_with("qga/qapi-schema.json"));
     let files = read_schema_with_version(&qmp, Some(version)).unwrap().len();
-    assert!(
-        files > 10,
-        "expected more than 10 QMP schema files, got {files}"
-    );
+    assert!(files > 10, "expected more than 10 QMP schema files, got {files}");
     let count = parse_tree(&qmp, version).unwrap().definitions;
-    assert!(
-        count > 500,
-        "expected more than 500 QMP definitions, got {count}"
-    );
+    assert!(count > 500, "expected more than 500 QMP definitions, got {count}");
     let count = parse_tree(&qga, version).unwrap().definitions;
-    assert!(
-        count > 50,
-        "expected more than 50 QGA definitions, got {count}"
-    );
+    assert!(count > 50, "expected more than 50 QGA definitions, got {count}");
 }
 
 // ── The pins ──
@@ -177,7 +176,9 @@ fn every_pinned_release_parses_with_its_grammar() {
             let Some(entry) = entry else { continue };
             match parse_tree(&entry, version) {
                 Ok(_) => *parsed += 1,
-                Err(error) => failures.push(format!("{} {protocol}: {error}", pin.tag)),
+                Err(error) => {
+                    failures.push(format!("{} {protocol}: {error}", pin.tag))
+                }
             }
         }
     }
@@ -213,10 +214,11 @@ fn pins_are_checked_in_the_named_tree_only() {
     );
     git(&repo, &["update-ref", "refs/tags/v11.1.3", &commit]);
     let pin = |tag: &str, commit: &str| {
-        let [pin]: [PinnedVersion; 1] = parse_pinned_versions(&format!("{tag} {commit}"))
-            .unwrap()
-            .try_into()
-            .unwrap();
+        let [pin]: [PinnedVersion; 1] =
+            parse_pinned_versions(&format!("{tag} {commit}"))
+                .unwrap()
+                .try_into()
+                .unwrap();
         pin
     };
     verify_pinned_versions(&repo, &[pin("v11.1.3", &commit)]).unwrap();
@@ -234,13 +236,13 @@ fn pins_are_checked_in_the_named_tree_only() {
     std::fs::create_dir(&empty).unwrap();
     assert!(matches!(
         verify_pinned_versions(&empty, &[pin("v11.1.3", &commit)]),
-        Err(TreeError::Failed {
-            command: "rev-parse",
-            ..
-        })
+        Err(TreeError::Failed { command: "rev-parse", .. })
     ));
     assert!(matches!(
-        verify_pinned_versions(&dir.path().join("missing"), &[pin("v11.1.3", &commit)]),
+        verify_pinned_versions(
+            &dir.path().join("missing"),
+            &[pin("v11.1.3", &commit)]
+        ),
         Err(TreeError::Repository { .. })
     ));
     // Only release tags are extracted, and a release without schemas is empty.
@@ -270,12 +272,7 @@ fn release_2_1_schema_has_events_across_included_files() {
     let version = parse_version_tag("v2.1.0").unwrap();
     let schemas = extract_schema_from_tag(&qemu_root(), "v2.1.0").unwrap();
     let entry = find_schema_entry(schemas.path()).unwrap();
-    assert!(
-        read_schema_with_version(&entry, Some(version))
-            .unwrap()
-            .len()
-            > 1
-    );
+    assert!(read_schema_with_version(&entry, Some(version)).unwrap().len() > 1);
     assert!(parse_tree(&entry, version).unwrap().events > 0);
 }
 
@@ -287,10 +284,7 @@ fn release_2_5_schema_has_alternates() {
 #[test]
 fn release_4_0_schema_has_pragmas_and_conditions() {
     let summary = release("v4.0.0");
-    assert!(
-        summary.pragmas > 0 && summary.conditional > 0,
-        "{summary:?}"
-    );
+    assert!(summary.pragmas > 0 && summary.conditional > 0, "{summary:?}");
 }
 
 #[test]

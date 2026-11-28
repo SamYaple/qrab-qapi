@@ -1,7 +1,11 @@
 //! Version-aware `Serialize` implementations for structs.
 
-use crate::structs::{StructExpansion, discriminators, inner_option_type};
-use crate::support::{deprecation_warning, type_serialization_guard, unavailable_error};
+use crate::{
+    structs::{StructExpansion, discriminators, inner_option_type},
+    support::{
+        deprecation_warning, type_serialization_guard, unavailable_error,
+    },
+};
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 
@@ -192,10 +196,8 @@ impl StructExpansion<'_> {
     fn union_discriminator_checks(&mut self) -> TokenStream2 {
         let name_str = self.name_str.clone();
         let mut checks = Vec::new();
-        for branch in self
-            .fields
-            .iter()
-            .filter(|field| field.attrs.union_field.is_some())
+        for branch in
+            self.fields.iter().filter(|field| field.attrs.union_field.is_some())
         {
             let ident = &branch.ident;
             let payload = self.names.ident("union_payload");

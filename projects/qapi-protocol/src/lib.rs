@@ -173,7 +173,9 @@ pub enum InvalidRequestKind {
     /// The command sends no success response in the peer's release, so
     /// waiting for one would never end. A guest agent sends such a command
     /// with [`Qga::send_no_response`](qga::Qga::send_no_response).
-    #[error("{command} does not send a success response; send it with send_no_response")]
+    #[error(
+        "{command} does not send a success response; send it with send_no_response"
+    )]
     #[non_exhaustive]
     NoSuccessResponse {
         /// The command name.
@@ -276,7 +278,9 @@ pub enum ProtocolViolation {
     /// A mock session received a request without a nonempty `execute` or
     /// `exec-oob` command name, or with another member than that verb,
     /// `arguments` and `id`, or with arguments that are not an object.
-    #[error("expected {verb} with a command name and optional object arguments")]
+    #[error(
+        "expected {verb} with a command name and optional object arguments"
+    )]
     #[non_exhaustive]
     InvalidCommand {
         /// The verb of the request, `execute` or `exec-oob`.
@@ -447,7 +451,9 @@ impl Required {
         version: (u32, u32, u32),
         peer: Option<&PeerCommands>,
     ) -> Option<Unavailability> {
-        if version < self.since || self.removed.is_some_and(|removed| version >= removed) {
+        if version < self.since
+            || self.removed.is_some_and(|removed| version >= removed)
+        {
             return Some(Unavailability::Release);
         }
         peer.and_then(|peer| peer.refusal(self.name))
@@ -501,7 +507,9 @@ impl fmt::Display for TimeoutPhase {
             Self::Connect => "connecting",
             Self::Handshake => "during the handshake",
             Self::BeforeDispatch => "before the request was sent",
-            Self::AfterDispatch => "after the request was sent; it may have run",
+            Self::AfterDispatch => {
+                "after the request was sent; it may have run"
+            }
         })
     }
 }
@@ -590,8 +598,9 @@ impl ClientOptions {
     #[cfg(feature = "tokio")]
     pub(crate) fn validate(&self) -> Result<()> {
         let now = tokio::time::Instant::now();
-        let bad_timeout =
-            |timeout: Duration| timeout.is_zero() || now.checked_add(timeout).is_none();
+        let bad_timeout = |timeout: Duration| {
+            timeout.is_zero() || now.checked_add(timeout).is_none()
+        };
         let invalid = [
             ("connect_timeout", bad_timeout(self.connect_timeout)),
             ("handshake_timeout", bad_timeout(self.handshake_timeout)),
@@ -600,16 +609,19 @@ impl ClientOptions {
             ("max_event_bytes", self.max_event_bytes == 0),
             (
                 "event_capacity",
-                self.event_capacity == 0 || self.event_capacity > MAX_EVENT_CAPACITY,
+                self.event_capacity == 0
+                    || self.event_capacity > MAX_EVENT_CAPACITY,
             ),
         ];
         match invalid
             .into_iter()
             .find_map(|(option, bad)| bad.then_some(option))
         {
-            Some(option) => Err(Error::InvalidRequest(InvalidRequestKind::Options {
-                option,
-            })),
+            Some(option) => {
+                Err(Error::InvalidRequest(InvalidRequestKind::Options {
+                    option,
+                }))
+            }
             None => Ok(()),
         }
     }
@@ -620,11 +632,20 @@ impl ClientOptions {
 const MAX_EVENT_CAPACITY: usize = usize::MAX >> 3;
 // The event queue is a Tokio channel, which holds at most that many.
 #[cfg(feature = "tokio")]
-const _: () = assert!(MAX_EVENT_CAPACITY <= tokio::sync::Semaphore::MAX_PERMITS);
+const _: () =
+    assert!(MAX_EVENT_CAPACITY <= tokio::sync::Semaphore::MAX_PERMITS);
 
 /// An error reply from the peer. Unknown error classes from newer or patched
 /// peers are kept verbatim.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, thiserror::Error)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    thiserror::Error,
+)]
 #[error("{class}: {desc}")]
 #[non_exhaustive]
 pub struct RemoteError {
@@ -634,10 +655,7 @@ pub struct RemoteError {
 
 impl RemoteError {
     pub fn new(class: impl Into<String>, desc: impl Into<String>) -> Self {
-        Self {
-            class: class.into(),
-            desc: desc.into(),
-        }
+        Self { class: class.into(), desc: desc.into() }
     }
 
     /// The class as an [`ErrorClass`], or `None` for a class that this
@@ -742,12 +760,12 @@ pub struct QmpEvent {
 }
 
 impl QmpEvent {
-    pub fn new(event: impl Into<String>, timestamp: Timestamp, data: serde_json::Value) -> Self {
-        Self {
-            event: event.into(),
-            timestamp,
-            data,
-        }
+    pub fn new(
+        event: impl Into<String>,
+        timestamp: Timestamp,
+        data: serde_json::Value,
+    ) -> Self {
+        Self { event: event.into(), timestamp, data }
     }
 }
 
@@ -761,9 +779,6 @@ pub struct Timestamp {
 
 impl Timestamp {
     pub const fn new(seconds: i64, microseconds: i64) -> Self {
-        Self {
-            seconds,
-            microseconds,
-        }
+        Self { seconds, microseconds }
     }
 }

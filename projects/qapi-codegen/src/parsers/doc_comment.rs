@@ -7,8 +7,10 @@
 //! tokens up to a closing `##`. A fault is reported at the line QEMU names,
 //! which is the comment line being read, or the comment's opening `##` for
 //! the rules QEMU checks on the whole comment.
-use super::common::{QapiString, is_whitespace};
-use super::parser_version;
+use super::{
+    common::{QapiString, is_whitespace},
+    parser_version,
+};
 use crate::ParseErrorKind;
 
 /// A rule of documentation comments, as QEMU's parser applies it in the
@@ -156,9 +158,7 @@ struct Description<'i> {
 }
 
 fn describes(descriptions: &[Description<'_>], name: &str) -> bool {
-    descriptions
-        .iter()
-        .any(|description| description.name == name)
+    descriptions.iter().any(|description| description.name == name)
 }
 
 /// A documentation comment as QEMU's parser reads it.
@@ -222,12 +222,12 @@ fn next_token(mut input: &str, skip_comments: bool) -> (Token<'_>, &str) {
     }
 }
 
-fn fault<'i>(at: &'i str, comment: &'i str, error: DocumentationError) -> Fault<'i> {
-    Fault {
-        at,
-        comment,
-        kind: ParseErrorKind::Documentation(Box::new(error)),
-    }
+fn fault<'i>(
+    at: &'i str,
+    comment: &'i str,
+    error: DocumentationError,
+) -> Fault<'i> {
+    Fault { at, comment, kind: ParseErrorKind::Documentation(Box::new(error)) }
 }
 
 /// The comment that starts at the `##` of `input`, as the current release's
@@ -239,12 +239,7 @@ pub(crate) fn read<'i>(
     describe: &mut dyn Describe<'i>,
 ) -> Result<(Option<String>, &'i str), Fault<'i>> {
     let (token, rest) = next_token(input, false);
-    let mut reader = Reader {
-        comment: token.at(),
-        token,
-        rest,
-        literal: None,
-    };
+    let mut reader = Reader { comment: token.at(), token, rest, literal: None };
     let Token::Comment(at, text) = token else {
         return Err(fault(
             token.at(),
@@ -300,10 +295,8 @@ fn indentation(line: &str) -> usize {
 
 /// Python's `line[n:]`, in characters.
 fn skip_chars(line: &str, n: usize) -> &str {
-    let index = line
-        .char_indices()
-        .nth(n)
-        .map_or(line.len(), |(index, _)| index);
+    let index =
+        line.char_indices().nth(n).map_or(line.len(), |(index, _)| index);
     &line[index..]
 }
 
@@ -324,22 +317,16 @@ fn freeform_description(line: &str) -> Option<&str> {
 }
 
 /// The section tags of 2.9 to 8.0, as the first word of a line.
-const TAGS: [&str; 7] = [
-    "Returns:",
-    "Since:",
-    "Note:",
-    "Notes:",
-    "Example:",
-    "Examples:",
-    "TODO:",
-];
+const TAGS: [&str; 7] =
+    ["Returns:", "Since:", "Note:", "Notes:", "Example:", "Examples:", "TODO:"];
 
 /// `re.match(r'(Returns|Since|Notes?|Examples?|TODO): *', line)` (8.1 and
 /// 8.2) and, from 9.0, with `Errors` and, from 9.1, not before `::`.
 fn section_tag(line: &str) -> Option<(&str, &str)> {
     let errors = at_least((9, 0, 0));
     [
-        "Returns", "Errors", "Since", "Notes", "Note", "Examples", "Example", "TODO",
+        "Returns", "Errors", "Since", "Notes", "Note", "Examples", "Example",
+        "TODO",
     ]
     .into_iter()
     .filter(|tag| errors || *tag != "Errors")
@@ -362,15 +349,18 @@ fn line_format(line: &str) -> Option<(DocumentationError, Option<usize>)> {
     let word = |c: char| c.is_alphanumeric() || c == '_';
     let capital = |index: usize| {
         text.get(index) == Some(&' ')
-            && text
-                .get(index + 1)
-                .is_some_and(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || *c == '(')
+            && text.get(index + 1).is_some_and(|c| {
+                c.is_ascii_uppercase() || c.is_ascii_digit() || *c == '('
+            })
     };
     let mut index = 0;
     while index < text.len() {
         // r'(\be\.g\.|^ *\d\.|([.!?])) [A-Z0-9(]', in its order.
         let boundary = index == 0 || !word(text[index - 1]);
-        if boundary && text[index..].starts_with(&['e', '.', 'g', '.']) && capital(index + 4) {
+        if boundary
+            && text[index..].starts_with(&['e', '.', 'g', '.'])
+            && capital(index + 4)
+        {
             index += 6;
             continue;
         }
@@ -396,8 +386,7 @@ fn line_format(line: &str) -> Option<(DocumentationError, Option<usize>)> {
 fn is_url_line(line: &str) -> bool {
     let line = line.trim_start_matches(' ');
     ["http://", "https://", "ftp://"].iter().any(|scheme| {
-        line.strip_prefix(scheme)
-            .is_some_and(|rest| !rest.contains(' '))
+        line.strip_prefix(scheme).is_some_and(|rest| !rest.contains(' '))
     })
 }
 
@@ -417,11 +406,9 @@ impl<'i> Reader<'i> {
         match self.token {
             Token::Comment(at, text) => Ok((at, text)),
             Token::Other(at) => match super::common::token_error(at) {
-                Some((at, kind)) => Err(Fault {
-                    at,
-                    comment: self.comment,
-                    kind,
-                }),
+                Some((at, kind)) => {
+                    Err(Fault { at, comment: self.comment, kind })
+                }
                 None => self.fail(DocumentationError::Unterminated),
             },
             Token::End(_) => self.fail(DocumentationError::Unterminated),
@@ -538,7 +525,10 @@ impl<'i> Reader<'i> {
 
     /// QEMU's `get_doc_indented`: the text of a section after its first
     /// line, and the line after it.
-    fn indented(&mut self, doc: &mut Current<'i>) -> Result<Option<(&'i str, String)>, Fault<'i>> {
+    fn indented(
+        &mut self,
+        doc: &mut Current<'i>,
+    ) -> Result<Option<(&'i str, String)>, Fault<'i>> {
         let mut line = self.next_line()?;
         while let Some((_, text)) = &line
             && text.is_empty()
@@ -566,7 +556,9 @@ impl<'i> Reader<'i> {
                 if previous_blank {
                     return Ok(line);
                 }
-                return self.fail(DocumentationError::UnexpectedDeIndent { expected: indent });
+                return self.fail(DocumentationError::UnexpectedDeIndent {
+                    expected: indent,
+                });
             }
             // QEMU marks every line after the first as following a blank.
             previous_blank = true;
@@ -621,7 +613,8 @@ impl<'i> Reader<'i> {
                     };
                     if text == "Features:" {
                         if !doc.comment.features.is_empty() {
-                            return self.fail(DocumentationError::DuplicateFeatures);
+                            return self
+                                .fail(DocumentationError::DuplicateFeatures);
                         }
                         line = self.next_line()?;
                         while let Some((_, text)) = &line
@@ -639,14 +632,18 @@ impl<'i> Reader<'i> {
                             line = self.indented(&mut doc)?;
                         }
                         if doc.comment.features.is_empty() {
-                            return self.fail(DocumentationError::NoFeatureDescriptions);
+                            return self.fail(
+                                DocumentationError::NoFeatureDescriptions,
+                            );
                         }
                         no_more_args = true;
                     } else if let Some((name, _)) = at_name_colon(&text) {
                         if no_more_args {
-                            return self.fail(DocumentationError::DescriptionAfterSection {
-                                name: name.to_owned(),
-                            });
+                            return self.fail(
+                                DocumentationError::DescriptionAfterSection {
+                                    name: name.to_owned(),
+                                },
+                            );
                         }
                         while let Some((at, text)) = line.clone()
                             && let Some((name, rest)) = at_name_colon(&text)
@@ -660,11 +657,14 @@ impl<'i> Reader<'i> {
                         no_more_args = true;
                     } else if let Some((tag, rest)) = section_tag(&text) {
                         if at_least((9, 1, 0))
-                            && (tag.starts_with("Note") || tag.starts_with("Example"))
+                            && (tag.starts_with("Note")
+                                || tag.starts_with("Example"))
                         {
-                            return self.fail(DocumentationError::UnsupportedSection {
-                                section: tag.to_owned(),
-                            });
+                            return self.fail(
+                                DocumentationError::UnsupportedSection {
+                                    section: tag.to_owned(),
+                                },
+                            );
                         }
                         doc.tagged(at, tag)?;
                         if !rest.is_empty() {
@@ -673,7 +673,8 @@ impl<'i> Reader<'i> {
                         line = self.indented(&mut doc)?;
                         no_more_args = true;
                     } else if before_10_1 && text.starts_with('=') {
-                        return self.fail(DocumentationError::HeadingInDefinition);
+                        return self
+                            .fail(DocumentationError::HeadingInDefinition);
                     } else {
                         doc.untagged(at);
                         doc.text();
@@ -711,11 +712,7 @@ struct Section<'i> {
 
 impl<'i> Section<'i> {
     fn untagged(at: &'i str) -> Self {
-        Self {
-            tag: None,
-            at,
-            text: false,
-        }
+        Self { tag: None, at, text: false }
     }
 }
 
@@ -736,11 +733,20 @@ impl<'i> Current<'i> {
     }
 
     /// A fault that QEMU reports at the line of a section.
-    fn fail<T>(&self, at: &'i str, error: DocumentationError) -> Result<T, Fault<'i>> {
+    fn fail<T>(
+        &self,
+        at: &'i str,
+        error: DocumentationError,
+    ) -> Result<T, Fault<'i>> {
         Err(fault(at, self.start, error))
     }
 
-    fn describe(&mut self, at: &'i str, name: &str, feature: bool) -> Result<(), Fault<'i>> {
+    fn describe(
+        &mut self,
+        at: &'i str,
+        name: &str,
+        feature: bool,
+    ) -> Result<(), Fault<'i>> {
         if name.is_empty() {
             return self.fail(at, DocumentationError::EmptyName);
         }
@@ -757,29 +763,19 @@ impl<'i> Current<'i> {
                 DocumentationError::DuplicateName { name },
             ));
         }
-        list.push(Description {
-            name: name.to_owned(),
-            at,
-        });
+        list.push(Description { name: name.to_owned(), at });
         let tag = if at_least((10, 0, 0)) {
             if feature { "Feature" } else { "Member" }.to_owned()
         } else {
             format!("@{name}")
         };
-        self.sections.push(Section {
-            tag: Some(tag),
-            at,
-            text: false,
-        });
+        self.sections.push(Section { tag: Some(tag), at, text: false });
         Ok(())
     }
 
     fn tagged(&mut self, at: &'i str, tag: &str) -> Result<(), Fault<'i>> {
-        let tag = if at_least((10, 0, 0)) && tag == "TODO" {
-            "Todo"
-        } else {
-            tag
-        };
+        let tag =
+            if at_least((10, 0, 0)) && tag == "TODO" { "Todo" } else { tag };
         let slot = match tag {
             "Returns" => Some(self.comment.returns.is_some()),
             "Errors" => Some(self.comment.errors.is_some()),
@@ -788,7 +784,8 @@ impl<'i> Current<'i> {
         };
         if slot == Some(true) {
             let section = tag.to_owned();
-            return self.fail(at, DocumentationError::DuplicateSection { section });
+            return self
+                .fail(at, DocumentationError::DuplicateSection { section });
         }
         match tag {
             "Returns" => self.comment.returns = Some(at),
@@ -807,11 +804,7 @@ impl<'i> Current<'i> {
     /// QEMU's `ensure_untagged_section`: text after a tagged section
     /// starts an untagged one.
     fn untagged(&mut self, at: &'i str) {
-        if self
-            .sections
-            .last()
-            .is_none_or(|section| section.tag.is_some())
-        {
+        if self.sections.last().is_none_or(|section| section.tag.is_some()) {
             self.sections.push(Section::untagged(at));
         }
     }
@@ -822,15 +815,10 @@ impl<'i> Current<'i> {
             .sections
             .iter()
             .find(|section| section.tag.is_some() && !section.text);
-        if let Some(Section {
-            tag: Some(tag), at, ..
-        }) = empty
-        {
+        if let Some(Section { tag: Some(tag), at, .. }) = empty {
             return self.fail(
                 at,
-                DocumentationError::EmptySection {
-                    section: tag.clone(),
-                },
+                DocumentationError::EmptySection { section: tag.clone() },
             );
         }
         // Untagged text first is the introduction.
@@ -841,7 +829,8 @@ impl<'i> Current<'i> {
         let members = after
             .iter()
             .all(|section| section.tag.as_deref() == Some("Member"));
-        self.comment.sections = at_least((10, 0, 0)).then_some((after.len(), members));
+        self.comment.sections =
+            at_least((10, 0, 0)).then_some((after.len(), members));
         Ok(self.comment)
     }
 }
@@ -877,12 +866,7 @@ struct LegacySection {
 
 impl LegacySection {
     fn named(part: Part, name: Option<String>, indent: Option<usize>) -> Self {
-        Self {
-            part,
-            name,
-            indent,
-            ..Self::default()
-        }
+        Self { part, name, indent, ..Self::default() }
     }
 
     fn is_named(&self) -> bool {
@@ -890,7 +874,11 @@ impl LegacySection {
     }
 
     /// QEMU's `Section.append`.
-    fn append<'i>(&mut self, reader: &Reader<'i>, line: &str) -> Result<(), Fault<'i>> {
+    fn append<'i>(
+        &mut self,
+        reader: &Reader<'i>,
+        line: &str,
+    ) -> Result<(), Fault<'i>> {
         let mut line = line.to_owned();
         if at_least((8, 1, 0)) {
             line.truncate(line.trim_end_matches(is_whitespace).len());
@@ -904,7 +892,9 @@ impl LegacySection {
                     }
                 }
                 Some(expected) if indent < expected => {
-                    return reader.fail(DocumentationError::UnexpectedDeIndent { expected });
+                    return reader.fail(
+                        DocumentationError::UnexpectedDeIndent { expected },
+                    );
                 }
                 _ => {}
             }
@@ -981,7 +971,12 @@ impl<'i> Legacy<'i> {
     }
 
     /// QEMU's `QAPIDoc.append`.
-    fn append(&mut self, reader: &Reader<'i>, at: &'i str, text: &'i str) -> Result<(), Fault<'i>> {
+    fn append(
+        &mut self,
+        reader: &Reader<'i>,
+        at: &'i str,
+        text: &'i str,
+    ) -> Result<(), Fault<'i>> {
         let line = &text[1..];
         if line.is_empty() {
             return self.freeform(reader, "");
@@ -1000,15 +995,20 @@ impl<'i> Legacy<'i> {
         }
         match self.part {
             Part::Body => self.body_line(reader, at, line),
-            Part::Members | Part::Features => self.description_line(reader, at, line),
+            Part::Members | Part::Features => {
+                self.description_line(reader, at, line)
+            }
             Part::Sections => self.section_line(reader, line),
         }
     }
 
-    fn start_symbol(&mut self, reader: &Reader<'i>, line: &str) -> Result<(), Fault<'i>> {
-        let Some(symbol) = line
-            .strip_prefix('@')
-            .and_then(|line| line.strip_suffix(':'))
+    fn start_symbol(
+        &mut self,
+        reader: &Reader<'i>,
+        line: &str,
+    ) -> Result<(), Fault<'i>> {
+        let Some(symbol) =
+            line.strip_prefix('@').and_then(|line| line.strip_suffix(':'))
         else {
             return reader.fail(DocumentationError::SymbolWithoutColon);
         };
@@ -1051,11 +1051,21 @@ impl<'i> Legacy<'i> {
         let word = Self::first_word(line);
         let rest = line.get(word.len() + 1..).unwrap_or("");
         if word.starts_with('@') && word.ends_with(':') && word.len() >= 2 {
-            self.start_description(reader, at, &word[1..word.len() - 1], Part::Members, None)?;
+            self.start_description(
+                reader,
+                at,
+                &word[1..word.len() - 1],
+                Part::Members,
+                None,
+            )?;
             return self.freeform(reader, rest);
         }
         if TAGS.contains(&word) {
-            self.start_section(reader, Some(word[..word.len() - 1].to_owned()), None)?;
+            self.start_section(
+                reader,
+                Some(word[..word.len() - 1].to_owned()),
+                None,
+            )?;
             return self.freeform(reader, rest);
         }
         self.freeform(reader, line)
@@ -1068,7 +1078,10 @@ impl<'i> Legacy<'i> {
         at: &'i str,
         line: &'i str,
     ) -> Result<(), Fault<'i>> {
-        if self.symbol.is_none() && self.body_text().is_empty() && line.starts_with('@') {
+        if self.symbol.is_none()
+            && self.body_text().is_empty()
+            && line.starts_with('@')
+        {
             return self.start_symbol(reader, line);
         }
         if self.symbol.is_some() {
@@ -1117,11 +1130,7 @@ impl<'i> Legacy<'i> {
             }
             return (name, format!("{}{rest}", " ".repeat(end)), Some(end));
         }
-        (
-            name,
-            line.get(word.len() + 1..).unwrap_or("").to_owned(),
-            None,
-        )
+        (name, line.get(word.len() + 1..).unwrap_or("").to_owned(), None)
     }
 
     /// From 4.1: QEMU's `_append_args_line` and `_append_features_line`.
@@ -1140,7 +1149,9 @@ impl<'i> Legacy<'i> {
             self.part = Part::Sections;
             return self.section_line(reader, line);
         }
-        if self.section.after_blank() && line.chars().next().is_some_and(|c| !is_whitespace(c)) {
+        if self.section.after_blank()
+            && line.chars().next().is_some_and(|c| !is_whitespace(c))
+        {
             if self.part == Part::Members && line == "Features:" {
                 self.part = Part::Features;
             } else {
@@ -1154,7 +1165,11 @@ impl<'i> Legacy<'i> {
     }
 
     /// From 4.1: QEMU's `_append_various_line`.
-    fn section_line(&mut self, reader: &Reader<'i>, line: &str) -> Result<(), Fault<'i>> {
+    fn section_line(
+        &mut self,
+        reader: &Reader<'i>,
+        line: &str,
+    ) -> Result<(), Fault<'i>> {
         if Self::is_description(line) {
             let name = if at_least((8, 1, 0)) {
                 at_name_colon(line).unwrap_or_default().0
@@ -1176,9 +1191,11 @@ impl<'i> Legacy<'i> {
                 let tag = word[..word.len() - 1].to_owned();
                 if at_least((5, 2, 0)) {
                     // re.match(r'\S*:\s*', line).end()
-                    let run = &line[..line.find(is_whitespace).unwrap_or(line.len())];
+                    let run =
+                        &line[..line.find(is_whitespace).unwrap_or(line.len())];
                     let colon = run.rfind(':').unwrap_or(0);
-                    let end = chars(&line[..colon + 1]) + indentation(&line[colon + 1..]);
+                    let end = chars(&line[..colon + 1])
+                        + indentation(&line[colon + 1..]);
                     let rest = skip_chars(&line, end);
                     if rest.is_empty() {
                         (tag, String::new(), Some(0))
@@ -1186,7 +1203,8 @@ impl<'i> Legacy<'i> {
                         (tag, format!("{}{rest}", " ".repeat(end)), Some(end))
                     }
                 } else {
-                    let rest = line.get(word.len() + 1..).unwrap_or("").to_owned();
+                    let rest =
+                        line.get(word.len() + 1..).unwrap_or("").to_owned();
                     (tag, rest, Some(0))
                 }
             };
@@ -1216,11 +1234,8 @@ impl<'i> Legacy<'i> {
         if name.is_empty() {
             return reader.fail(DocumentationError::EmptyName);
         }
-        let list = if part == Part::Features {
-            &self.features
-        } else {
-            &self.members
-        };
+        let list =
+            if part == Part::Features { &self.features } else { &self.members };
         if describes(list, name) {
             return reader.fail(DocumentationError::DuplicateName {
                 name: name.to_owned(),
@@ -1232,19 +1247,13 @@ impl<'i> Legacy<'i> {
                 name: name.to_owned(),
             });
         }
-        let indent = if at_least((8, 1, 0)) {
-            None
-        } else {
-            Some(indent.unwrap_or(0))
-        };
+        let indent =
+            if at_least((8, 1, 0)) { None } else { Some(indent.unwrap_or(0)) };
         self.switch(
             reader,
             LegacySection::named(part, Some(name.to_owned()), indent),
         )?;
-        let description = Description {
-            name: name.to_owned(),
-            at,
-        };
+        let description = Description { name: name.to_owned(), at };
         if part == Part::Features {
             self.features.push(description);
         } else {
@@ -1288,7 +1297,11 @@ impl<'i> Legacy<'i> {
     }
 
     /// QEMU's `_end_section` and, from 6.2, `_switch_section`.
-    fn switch(&mut self, reader: &Reader<'i>, next: LegacySection) -> Result<(), Fault<'i>> {
+    fn switch(
+        &mut self,
+        reader: &Reader<'i>,
+        next: LegacySection,
+    ) -> Result<(), Fault<'i>> {
         self.end_section(reader)?;
         let previous = std::mem::replace(&mut self.section, next);
         if previous.part == Part::Body && self.body.is_none() {
@@ -1301,7 +1314,10 @@ impl<'i> Legacy<'i> {
         if self.section.ended {
             return Ok(());
         }
-        if self.section.part != Part::Body && self.section.is_named() && self.section.is_empty() {
+        if self.section.part != Part::Body
+            && self.section.is_named()
+            && self.section.is_empty()
+        {
             let section = self.section.name.clone().unwrap_or_default();
             return reader.fail(DocumentationError::EmptySection { section });
         }
@@ -1314,7 +1330,11 @@ impl<'i> Legacy<'i> {
     }
 
     /// QEMU's `_append_freeform`.
-    fn freeform(&mut self, reader: &Reader<'i>, line: &str) -> Result<(), Fault<'i>> {
+    fn freeform(
+        &mut self,
+        reader: &Reader<'i>,
+        line: &str,
+    ) -> Result<(), Fault<'i>> {
         let mut line = line.to_owned();
         if !at_least((4, 1, 0)) {
             let in_description = self.section.part == Part::Members;
@@ -1339,7 +1359,9 @@ impl<'i> Legacy<'i> {
                 text: text.to_owned(),
             });
         }
-        if !at_least((2, 12, 0)) && self.section.part == Part::Members && line.contains("#optional")
+        if !at_least((2, 12, 0))
+            && self.section.part == Part::Members
+            && line.contains("#optional")
         {
             return Err(fault(
                 reader.comment,
@@ -1362,7 +1384,9 @@ pub(crate) fn check(input: &str) -> Option<Fault<'_>> {
 }
 
 /// A definition's documentation, read last, that no definition follows.
-fn not_followed<'i>(pending: &Option<(&'i str, Option<String>)>) -> Result<(), Fault<'i>> {
+fn not_followed<'i>(
+    pending: &Option<(&'i str, Option<String>)>,
+) -> Result<(), Fault<'i>> {
     match pending {
         Some((at, Some(symbol))) => Err(fault(
             at,
@@ -1390,16 +1414,18 @@ fn check_from(mut rest: &str) -> Result<(), Fault<'_>> {
                 pending = Some((at, symbol));
                 rest = after;
                 // 9.0 reads the token after a comment with comments included.
-                skip_comments = parser_version() < (9, 0, 0) || at_least((9, 1, 0));
+                skip_comments =
+                    parser_version() < (9, 0, 0) || at_least((9, 1, 0));
             }
             Token::Other(at) => {
-                let Ok((Some(keys), after)) = super::common::top_level_expression(at) else {
+                let Ok((Some(keys), after)) =
+                    super::common::top_level_expression(at)
+                else {
                     return Ok(());
                 };
-                if keys
-                    .iter()
-                    .any(|key: &QapiString<'_>| key == "include" || key == "pragma")
-                {
+                if keys.iter().any(|key: &QapiString<'_>| {
+                    key == "include" || key == "pragma"
+                }) {
                     not_followed(&pending)?;
                 } else if let Some((at, None)) = pending {
                     return Err(fault(
@@ -1768,7 +1794,8 @@ mod tests {
                     .to_owned();
                 (error.line, error.column, rule)
             });
-            let expected = expected.map(|(line, column, rule)| (line, column, rule.to_owned()));
+            let expected = expected
+                .map(|(line, column, rule)| (line, column, rule.to_owned()));
             assert_eq!(actual, expected, "{version:?} {input:?}");
         }
     }

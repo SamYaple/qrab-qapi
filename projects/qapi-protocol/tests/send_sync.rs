@@ -4,10 +4,15 @@
 //! loses `Send` or `Sync`, this file no longer compiles. The futures are only
 //! built inside closures that never run.
 
-use qapi::commands::QueryStatus;
-use qapi::qga::commands::{GuestPing, GuestShutdown};
-use qapi_protocol::server::{QgaSession, QmpReader, QmpSession, QmpWriter};
-use qapi_protocol::{ClientOptions, Error, Qmp, QmpEvents, qga::Qga};
+use qapi::{
+    commands::QueryStatus,
+    qga::commands::{GuestPing, GuestShutdown},
+};
+use qapi_protocol::{
+    ClientOptions, Error, Qmp, QmpEvents,
+    qga::Qga,
+    server::{QgaSession, QmpReader, QmpSession, QmpWriter},
+};
 use serde_json::Value;
 use std::{os::fd::OwnedFd, path::Path, time::Duration};
 use tokio::net::{UnixListener, UnixStream};
@@ -55,10 +60,22 @@ fn qmp_futures_are_send() {
         send(qmp.execute_oob(&status));
         send(qmp.execute_oob_with_timeout(&status, timeout));
         send(qmp.execute_raw::<Value>("query-status", Value::Null));
-        send(qmp.execute_raw_with_timeout::<Value>("query-status", Value::Null, timeout));
+        send(qmp.execute_raw_with_timeout::<Value>(
+            "query-status",
+            Value::Null,
+            timeout,
+        ));
         send(qmp.execute_raw_oob::<Value>("query-status", Value::Null));
-        send(qmp.execute_raw_oob_with_timeout::<Value>("query-status", Value::Null, timeout));
-        send(qmp.execute_raw_with_fds::<Value>("getfd", Value::Null, any::<Vec<OwnedFd>>()));
+        send(qmp.execute_raw_oob_with_timeout::<Value>(
+            "query-status",
+            Value::Null,
+            timeout,
+        ));
+        send(qmp.execute_raw_with_fds::<Value>(
+            "getfd",
+            Value::Null,
+            any::<Vec<OwnedFd>>(),
+        ));
         send(qmp.execute_raw_with_fds_and_timeout::<Value>(
             "getfd",
             Value::Null,

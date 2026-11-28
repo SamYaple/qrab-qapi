@@ -37,19 +37,9 @@ struct Nested {
 #[test]
 fn outgoing_tags_match_flat_and_nested_payloads() {
     qapi::with_version((11, 1, 3), || {
-        let payload = || {
-            Branch::A(Data {
-                value: "payload".into(),
-            })
-        };
-        let flat = Flat {
-            kind: Tag::B,
-            u: Some(Box::new(payload())),
-        };
-        let nested = Nested {
-            kind: Tag::B,
-            u: Some(payload()),
-        };
+        let payload = || Branch::A(Data { value: "payload".into() });
+        let flat = Flat { kind: Tag::B, u: Some(Box::new(payload())) };
+        let nested = Nested { kind: Tag::B, u: Some(payload()) };
         let error = serde_json::to_value(flat).unwrap_err().to_string();
         assert_eq!(
             error,
@@ -60,14 +50,8 @@ fn outgoing_tags_match_flat_and_nested_payloads() {
             error,
             "Nested: discriminator `type` is `B`, but the payload is branch `A`"
         );
-        let flat = Flat {
-            kind: Tag::A,
-            u: Some(Box::new(payload())),
-        };
-        let nested = Nested {
-            kind: Tag::A,
-            u: Some(payload()),
-        };
+        let flat = Flat { kind: Tag::A, u: Some(Box::new(payload())) };
+        let nested = Nested { kind: Tag::A, u: Some(payload()) };
         assert_eq!(
             serde_json::to_value(flat).unwrap(),
             json!({"kind":"A","value":"payload"})

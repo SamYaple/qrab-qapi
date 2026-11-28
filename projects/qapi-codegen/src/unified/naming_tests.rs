@@ -3,8 +3,7 @@
 //! historical members when a patch release of an older series joins the
 //! selection; and the coalescing of wire-identical return types, which
 //! decides which commands need an enum.
-use super::registry_tests::registry;
-use super::*;
+use super::{registry_tests::registry, *};
 use crate::namespace::{Pattern, inventory, plan_returns_enums_with};
 
 /// The names of `registry` with `pattern`, as `namespace: name`.
@@ -39,17 +38,12 @@ fn pings(extra: &str) -> Result<UnifiedRegistry, RegistryError> {
 #[test]
 fn a_command_whose_return_type_changes_has_a_planned_enum() {
     let registry = pings("").unwrap();
-    let UnifiedType::Struct(ping) = &registry.types["Ping"] else {
-        panic!()
-    };
+    let UnifiedType::Struct(ping) = &registry.types["Ping"] else { panic!() };
     assert_eq!(ping.returns_enum.as_deref(), Some("PingReturns"));
     assert_eq!(names(&registry, Pattern::Returns), ["items: PingReturns"]);
     assert_eq!(
         names(&registry, Pattern::ReturnsVariant),
-        [
-            "variants of PingReturns: V9_0_0",
-            "variants of PingReturns: V9_1_0"
-        ]
+        ["variants of PingReturns: V9_0_0", "variants of PingReturns: V9_1_0"]
     );
     // A command named like its response has the enum of its request type.
     let registry = super::registry_tests::registry(&[
@@ -127,13 +121,12 @@ fn a_held_name_of_an_enum_of_return_types_is_an_error() {
     let tags = BTreeMap::from([((9, 1, 0), "v9.1.0".to_owned())]);
     let table = [("QMP", "ping", "PingReplies")];
     plan_returns_enums_with(&mut registry, "QMP", &tags, &table).unwrap();
-    let UnifiedType::Struct(ping) = &registry.types["Ping"] else {
-        panic!()
-    };
+    let UnifiedType::Struct(ping) = &registry.types["Ping"] else { panic!() };
     assert_eq!(ping.returns_enum.as_deref(), Some("PingReplies"));
     let other = registry.types["Beta"].clone();
     registry.types.insert("PingReplies".into(), other);
-    let error = plan_returns_enums_with(&mut registry, "QMP", &tags, &table).unwrap_err();
+    let error = plan_returns_enums_with(&mut registry, "QMP", &tags, &table)
+        .unwrap_err();
     assert!(
         matches!(&error, RegistryError::ReturnsNameTaken { name, .. } if name == "PingReplies"),
         "{error:?}"
@@ -147,9 +140,7 @@ fn a_held_name_of_an_enum_of_return_types_is_an_error() {
         &[("QGA", "ping", "PingReplies")],
     )
     .unwrap();
-    let UnifiedType::Struct(ping) = &registry.types["Ping"] else {
-        panic!()
-    };
+    let UnifiedType::Struct(ping) = &registry.types["Ping"] else { panic!() };
     assert_eq!(ping.returns_enum.as_deref(), Some("PingReturns"));
 }
 
@@ -219,12 +210,11 @@ fn the_inventory_names_every_pattern_of_synthesized_names() {
         ]
     );
     // A schema value that spells a release is a variant of its enum alone.
-    assert!(pattern(Pattern::Schema).contains(&"variants of Mode: V240".to_owned()));
-    let reserved = pattern(Pattern::Reserved);
     assert!(
-        reserved.contains(&"items: commands".to_owned()),
-        "{reserved:?}"
+        pattern(Pattern::Schema).contains(&"variants of Mode: V240".to_owned())
     );
+    let reserved = pattern(Pattern::Reserved);
+    assert!(reserved.contains(&"items: commands".to_owned()), "{reserved:?}");
     assert!(
         reserved.contains(&"items: QapiCommand".to_owned()),
         "{reserved:?}"
@@ -241,7 +231,9 @@ fn a_historical_member_whose_names_are_held_is_an_error() {
                'foo-legacy-v9-0':'int'}}}}"
         )
     };
-    let error = registry(&[("v9.0.0", &release("int")), ("v9.1.0", &release("str"))]).unwrap_err();
+    let error =
+        registry(&[("v9.0.0", &release("int")), ("v9.1.0", &release("str"))])
+            .unwrap_err();
     assert_eq!(
         error.to_string(),
         "QMP fields of Holder: member 'foo-legacy-v9-0' and the earlier member 'foo' are both \
@@ -249,9 +241,14 @@ fn a_historical_member_whose_names_are_held_is_an_error() {
     );
     // Without the member of the series name, the series name escapes the
     // numbered one.
-    let release =
-        |foo: &str| format!("{{'struct':'Holder','data':{{'foo':'{foo}','foo-legacy':'int'}}}}");
-    let registry = registry(&[("v9.0.0", &release("int")), ("v9.1.0", &release("str"))]).unwrap();
+    let release = |foo: &str| {
+        format!(
+            "{{'struct':'Holder','data':{{'foo':'{foo}','foo-legacy':'int'}}}}"
+        )
+    };
+    let registry =
+        registry(&[("v9.0.0", &release("int")), ("v9.1.0", &release("str"))])
+            .unwrap();
     assert_eq!(
         names(&registry, Pattern::Legacy),
         ["fields of Holder: foo_legacy_v9_0"]
@@ -293,10 +290,8 @@ fn history(releases: &[(&str, Option<&str>)]) -> UnifiedRegistry {
             (*tag, text)
         })
         .collect();
-    let schemas: Vec<_> = schemas
-        .iter()
-        .map(|(tag, text)| (*tag, text.as_str()))
-        .collect();
+    let schemas: Vec<_> =
+        schemas.iter().map(|(tag, text)| (*tag, text.as_str())).collect();
     registry(&schemas).unwrap()
 }
 
@@ -308,7 +303,9 @@ fn members(registry: &UnifiedRegistry) -> BTreeMap<String, (String, String)> {
         meta.attributes
             .iter()
             .find_map(|attr| match attr {
-                Attribute::Item { name, value } if name == "name" => Some(value.clone()),
+                Attribute::Item { name, value } if name == "name" => {
+                    Some(value.clone())
+                }
                 _ => None,
             })
             .unwrap_or_else(|| name.to_owned())
@@ -371,7 +368,9 @@ fn a_patch_release_of_an_older_series_renames_no_member() {
         let mut releases = base.to_vec();
         let at = releases
             .iter()
-            .position(|(tag, _)| parse_version_tag_full(tag) > parse_version_tag_full(inserted))
+            .position(|(tag, _)| {
+                parse_version_tag_full(tag) > parse_version_tag_full(inserted)
+            })
             .unwrap();
         releases.insert(at, (inserted, shape));
         let after = members(&history(&releases));
@@ -388,10 +387,8 @@ fn a_patch_release_of_an_older_series_renames_no_member() {
     let mut releases = base.to_vec();
     releases.insert(2, ("v8.1.1", Some("uint8")));
     let after = members(&history(&releases));
-    let added: Vec<_> = after
-        .keys()
-        .filter(|name| !before.contains_key(*name))
-        .collect();
+    let added: Vec<_> =
+        after.keys().filter(|name| !before.contains_key(*name)).collect();
     assert_eq!(
         added,
         [
@@ -467,10 +464,8 @@ fn coalescing(
             )
         }))
         .collect();
-    let schemas: Vec<_> = schemas
-        .iter()
-        .map(|(tag, text)| (*tag, text.as_str()))
-        .collect();
+    let schemas: Vec<_> =
+        schemas.iter().map(|(tag, text)| (*tag, text.as_str())).collect();
     registry(&schemas)
 }
 
@@ -497,20 +492,13 @@ fn a_wire_identical_successor_returns_from_the_release_that_matches_it() {
         command(&registry).returns_history,
         [((9, 0, 0), "Old".to_owned()), ((9, 1, 0), "New".to_owned())]
     );
-    assert_eq!(
-        command(&registry).returns_enum.as_deref(),
-        Some("PingReturns")
-    );
+    assert_eq!(command(&registry).returns_enum.as_deref(), Some("PingReturns"));
     assert_eq!(
         registry.coalesced,
-        [(
-            "Ping".to_owned(),
-            "Old".to_owned(),
-            "New".to_owned(),
-            (9, 1, 0)
-        )]
+        [("Ping".to_owned(), "Old".to_owned(), "New".to_owned(), (9, 1, 0))]
     );
-    let output = emit_registry(&registry, Protocol::Qmp, Docs::Reference).unwrap();
+    let output =
+        emit_registry(&registry, Protocol::Qmp, Docs::Reference).unwrap();
     let attributes = |name: &str| -> Vec<&str> {
         let start = output.types.find(&format!("pub struct {name} ")).unwrap();
         output.types[..start]
@@ -530,13 +518,12 @@ fn a_wire_identical_successor_returns_from_the_release_that_matches_it() {
     );
     // The member of the successor's first release starts with it.
     assert!(
-        output
-            .types
-            .contains("pub struct New {\n    pub a: String,\n}"),
+        output.types.contains("pub struct New {\n    pub a: String,\n}"),
         "{}",
         output.types
     );
-    let new = &output.metadata[output.metadata.find("static STRUCT_New:").unwrap()..];
+    let new =
+        &output.metadata[output.metadata.find("static STRUCT_New:").unwrap()..];
     let new = &new[..new.find("};").unwrap()];
     assert!(new.contains("since: (9u32, 2u32, 0u32),"), "{new}");
 }
@@ -545,16 +532,16 @@ fn a_wire_identical_successor_returns_from_the_release_that_matches_it() {
 /// leaves the command one return type, and no enum.
 #[test]
 fn a_predecessor_the_same_throughout_leaves_one_return_type() {
-    let registry = coalescing(&[("v9.0.0", "'a':'int'")], &[("v9.1.0", "'a':'int'")], "").unwrap();
+    let registry =
+        coalescing(&[("v9.0.0", "'a':'int'")], &[("v9.1.0", "'a':'int'")], "")
+            .unwrap();
     assert_eq!(
         command(&registry).returns_history,
         [((9, 0, 0), "New".to_owned())]
     );
     assert_eq!(command(&registry).returns(), Some("New"));
     assert_eq!(command(&registry).returns_enum, None);
-    let UnifiedType::Struct(old) = &registry.types["Old"] else {
-        panic!()
-    };
+    let UnifiedType::Struct(old) = &registry.types["Old"] else { panic!() };
     assert_eq!(old.alias, Some(((9, 0, 0), "New".to_owned())));
 }
 
@@ -586,21 +573,9 @@ fn nested_structs_compare_by_their_members() {
 fn only_a_new_successor_the_same_as_its_predecessor_coalesces() {
     for (old, new, extra) in [
         // Another member type, optionality or wire name.
-        (
-            vec![("v9.0.0", "'a':'int'")],
-            vec![("v9.1.0", "'a':'str'")],
-            "",
-        ),
-        (
-            vec![("v9.0.0", "'a':'int'")],
-            vec![("v9.1.0", "'*a':'int'")],
-            "",
-        ),
-        (
-            vec![("v9.0.0", "'a':'int'")],
-            vec![("v9.1.0", "'b':'int'")],
-            "",
-        ),
+        (vec![("v9.0.0", "'a':'int'")], vec![("v9.1.0", "'a':'str'")], ""),
+        (vec![("v9.0.0", "'a':'int'")], vec![("v9.1.0", "'*a':'int'")], ""),
+        (vec![("v9.0.0", "'a':'int'")], vec![("v9.1.0", "'b':'int'")], ""),
     ] {
         let registry = coalescing(&old, &new, extra).unwrap();
         assert!(registry.coalesced.is_empty(), "{old:?} {new:?}");

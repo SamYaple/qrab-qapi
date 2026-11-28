@@ -10,21 +10,23 @@
 //! entity with the types it uses. Every error names the definition that
 //! QEMU's message names, at the line and column where it starts.
 
-use crate::builtins::Builtins;
-use crate::parsers::common::{Malformed, Raw, RawValue};
-use crate::schema_docs::{self, Pragmas};
-use crate::schema_shapes::bad;
-use crate::unified::{
-    NameRule, SchemaContext, SchemaError, SchemaErrorKind, SchemaResult, Version, definition,
-    require,
-};
-use crate::union_layout::{Member, Objects};
 use crate::{
-    MembersOrRef, QapiCond, QapiFeatures, QapiMember, QapiMembers, QapiPragma, QapiSchema,
-    QapiSchemaToken, QapiTypeRef, QapiUnion, QapiVariant,
+    MembersOrRef, QapiCond, QapiFeatures, QapiMember, QapiMembers, QapiPragma,
+    QapiSchema, QapiSchemaToken, QapiTypeRef, QapiUnion, QapiVariant,
+    builtins::Builtins,
+    parsers::common::{Malformed, Raw, RawValue},
+    schema_docs::{self, Pragmas},
+    schema_shapes::bad,
+    unified::{
+        NameRule, SchemaContext, SchemaError, SchemaErrorKind, SchemaResult,
+        Version, definition, require,
+    },
+    union_layout::{Member, Objects},
 };
-use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
+use std::{
+    collections::{HashMap, HashSet},
+    path::{Path, PathBuf},
+};
 
 /// Whether the release being checked is `version` or later.
 pub(crate) fn since(version: Version) -> bool {
@@ -60,7 +62,9 @@ impl Meta {
         Some(match token {
             QapiSchemaToken::Enum(_) => Self::Enum,
             QapiSchemaToken::Struct(_) => Self::Struct,
-            QapiSchemaToken::Union(value) if value.legacy_alternate => Self::Alternate,
+            QapiSchemaToken::Union(value) if value.legacy_alternate => {
+                Self::Alternate
+            }
             QapiSchemaToken::Union(_) => Self::Union,
             QapiSchemaToken::Alternate(_) => Self::Alternate,
             QapiSchemaToken::Command(_) => Self::Command,
@@ -210,7 +214,8 @@ struct Loose<'a> {
 
 impl<'a> Loose<'a> {
     fn new(path: &'a Path, content: &'a str, text: &'a str, at: usize) -> Self {
-        let entries = match crate::parsers::common::expression_value(text).map(|value| value.value)
+        let entries = match crate::parsers::common::expression_value(text)
+            .map(|value| value.value)
         {
             Some(crate::parsers::common::Raw::Object(entries)) => entries,
             _ => Vec::new(),
@@ -241,9 +246,7 @@ impl<'a> Loose<'a> {
     /// QEMU's failure on its missing `data`, at it.
     fn crash<T>(&self, name: &str) -> SchemaResult<T> {
         Err(SchemaError::from(SchemaErrorKind::Crash {
-            crash: crate::unified::Crash::MissingData {
-                name: name.to_owned(),
-            },
+            crash: crate::unified::Crash::MissingData { name: name.to_owned() },
         }))
         .in_file(self.path)
         .at(|| crate::locate(self.content, self.text))
@@ -281,15 +284,15 @@ pub(crate) fn validate(
 fn in_include_order<'a, 's>(
     schemas: &'a [(&'a Path, QapiSchema<'s>)],
 ) -> Vec<(&'a Path, &'a QapiSchemaToken<'s>)> {
-    let files: HashMap<&Path, &QapiSchema<'_>> = schemas
-        .iter()
-        .map(|(path, schema)| (*path, schema))
-        .collect();
+    let files: HashMap<&Path, &QapiSchema<'_>> =
+        schemas.iter().map(|(path, schema)| (*path, schema)).collect();
     let include = |from: &Path, name: &str| -> Option<&'a Path> {
         let target = sibling(from, name)?;
         let canonical = target.canonicalize().ok();
         schemas.iter().map(|(path, _)| *path).find(|path| {
-            *path == target || (canonical.is_some() && path.canonicalize().ok() == canonical)
+            *path == target
+                || (canonical.is_some()
+                    && path.canonicalize().ok() == canonical)
         })
     };
     let included: HashSet<&Path> = schemas
@@ -335,7 +338,8 @@ fn in_include_order<'a, 's>(
 fn sibling(from: &Path, name: &str) -> Option<PathBuf> {
     let parent = from.parent()?;
     if parent.as_os_str().is_empty()
-        && let Some((label, _)) = from.to_str().and_then(|from| from.split_once(':'))
+        && let Some((label, _)) =
+            from.to_str().and_then(|from| from.split_once(':'))
     {
         return Some(PathBuf::from(format!("{label}:{name}")));
     }
@@ -344,7 +348,9 @@ fn sibling(from: &Path, name: &str) -> Option<PathBuf> {
 
 /// The schema's pragma directives in the order QEMU reads them, so the
 /// value set last wins.
-fn pragmas<'a, 's>(schemas: &'a [(&'a Path, QapiSchema<'s>)]) -> Vec<&'a QapiPragma<'s>> {
+fn pragmas<'a, 's>(
+    schemas: &'a [(&'a Path, QapiSchema<'s>)],
+) -> Vec<&'a QapiPragma<'s>> {
     in_include_order(schemas)
         .into_iter()
         .filter_map(|(_, token)| match token {
@@ -355,7 +361,10 @@ fn pragmas<'a, 's>(schemas: &'a [(&'a Path, QapiSchema<'s>)]) -> Vec<&'a QapiPra
 }
 
 impl<'a, 's> Schema<'a, 's> {
-    fn new(schemas: &'a [(&'a Path, QapiSchema<'s>)], sources: &'a [(PathBuf, String)]) -> Self {
+    fn new(
+        schemas: &'a [(&'a Path, QapiSchema<'s>)],
+        sources: &'a [(PathBuf, String)],
+    ) -> Self {
         let contents: HashMap<_, _> = sources
             .iter()
             .map(|(path, content)| (path.as_path(), content.as_str()))
@@ -403,8 +412,10 @@ impl<'a, 's> Schema<'a, 's> {
             let (role, fields) = match item.token {
                 QapiSchemaToken::Union(value) => {
                     // 2.4 and 2.5 define the tag enum of an alternate too.
-                    if value.discriminator.is_none() && !value.legacy_alternate {
-                        implicit_enums.insert(crate::symbols::implicit_tag(name));
+                    if value.discriminator.is_none() && !value.legacy_alternate
+                    {
+                        implicit_enums
+                            .insert(crate::symbols::implicit_tag(name));
                     }
                     ("base", &value.base)
                 }
@@ -412,18 +423,24 @@ impl<'a, 's> Schema<'a, 's> {
                 // alternate, which only 2.4 and 2.5 define.
                 QapiSchemaToken::Alternate(_) => {
                     if !since((4, 2, 0)) {
-                        implicit_enums.insert(crate::symbols::implicit_tag(name));
+                        implicit_enums
+                            .insert(crate::symbols::implicit_tag(name));
                     }
                     continue;
                 }
-                QapiSchemaToken::Command(value) => ("arg", value.data.as_ref().unwrap_or(&NONE)),
-                QapiSchemaToken::Event(value) => ("arg", value.data.as_ref().unwrap_or(&NONE)),
+                QapiSchemaToken::Command(value) => {
+                    ("arg", value.data.as_ref().unwrap_or(&NONE))
+                }
+                QapiSchemaToken::Event(value) => {
+                    ("arg", value.data.as_ref().unwrap_or(&NONE))
+                }
                 _ => continue,
             };
             if let MembersOrRef::Members(fields) = fields
                 && !fields.0.is_empty()
             {
-                implicit.insert(format!("q_obj_{name}-{role}"), (index, fields));
+                implicit
+                    .insert(format!("q_obj_{name}-{role}"), (index, fields));
             }
         }
         Self {
@@ -439,7 +456,11 @@ impl<'a, 's> Schema<'a, 's> {
 
     /// Name the definition at `index` as the place of an error that does
     /// not name one already.
-    pub(crate) fn located<T>(&self, index: usize, result: SchemaResult<T>) -> SchemaResult<T> {
+    pub(crate) fn located<T>(
+        &self,
+        index: usize,
+        result: SchemaResult<T>,
+    ) -> SchemaResult<T> {
         let item = &self.definitions[index];
         result
             .in_definition(|| definition(item.token))
@@ -453,7 +474,10 @@ impl<'a, 's> Schema<'a, 's> {
 
     /// The implicit object type `name`: the definition that QEMU makes it
     /// for, and its members.
-    pub(crate) fn implicit(&self, name: &str) -> Option<(usize, &'a QapiMembers<'s>)> {
+    pub(crate) fn implicit(
+        &self,
+        name: &str,
+    ) -> Option<(usize, &'a QapiMembers<'s>)> {
         self.implicit.get(name).copied()
     }
 
@@ -489,7 +513,9 @@ impl<'a, 's> Schema<'a, 's> {
             && name
                 .strip_suffix("Kind")
                 .and_then(|alternate| self.token(alternate))
-                .is_some_and(|token| matches!(token, QapiSchemaToken::Alternate(_)));
+                .is_some_and(|token| {
+                    matches!(token, QapiSchemaToken::Alternate(_))
+                });
         require(!tag, || SchemaErrorKind::Crash {
             crash: crate::unified::Crash::AlternateTag {
                 name: name.to_owned(),
@@ -500,18 +526,24 @@ impl<'a, 's> Schema<'a, 's> {
     /// The values of the enum `name`, if it is one.
     pub(crate) fn enum_values(&self, name: &str) -> Option<Vec<&'a str>> {
         if let Some(QapiSchemaToken::Enum(value)) = self.token(name) {
-            return Some(value.data.iter().map(|value| value.name.as_ref()).collect());
+            return Some(
+                value.data.iter().map(|value| value.name.as_ref()).collect(),
+            );
         }
         let union = name.strip_suffix("Kind")?;
         match self.token(union)? {
-            QapiSchemaToken::Union(value) if self.implicit_enums.contains(name) => Some(
-                value
-                    .data
-                    .0
-                    .iter()
-                    .map(|branch| branch.name.as_ref())
-                    .collect(),
-            ),
+            QapiSchemaToken::Union(value)
+                if self.implicit_enums.contains(name) =>
+            {
+                Some(
+                    value
+                        .data
+                        .0
+                        .iter()
+                        .map(|branch| branch.name.as_ref())
+                        .collect(),
+                )
+            }
             _ => None,
         }
     }
@@ -566,9 +598,9 @@ impl<'a, 's> Schema<'a, 's> {
             }
             for &index in &all {
                 let item = &self.definitions[index];
-                let check = self
-                    .expression_classic(index)
-                    .and_then(|()| schema_docs::check_sections(item.token, item.content));
+                let check = self.expression_classic(index).and_then(|()| {
+                    schema_docs::check_sections(item.token, item.content)
+                });
                 self.located(index, check)?;
             }
             // QEMU then builds the schema, from 2.5.
@@ -585,7 +617,8 @@ impl<'a, 's> Schema<'a, 's> {
                     if let Entity::Definition(index) = entity
                         && !matches!(
                             self.definitions[index].token,
-                            QapiSchemaToken::Struct(_) | QapiSchemaToken::Union(_)
+                            QapiSchemaToken::Struct(_)
+                                | QapiSchemaToken::Union(_)
                         )
                     {
                         self.described(index)?;
@@ -632,7 +665,9 @@ impl<'a, 's> Schema<'a, 's> {
     fn build(&self, index: usize) -> SchemaResult {
         let token = self.definitions[index].token;
         let malformed = malformed_of(token);
-        let null = |raw: Option<&RawValue<'_>>| raw.is_some_and(|raw| raw.value == Raw::Null);
+        let null = |raw: Option<&RawValue<'_>>| {
+            raw.is_some_and(|raw| raw.value == Raw::Null)
+        };
         let members = |fields: &QapiMembers<'_>| {
             require(
                 !fields
@@ -640,7 +675,9 @@ impl<'a, 's> Schema<'a, 's> {
                     .iter()
                     .any(|field| null(bad(&field.malformed, "type"))),
                 || SchemaErrorKind::Crash {
-                    crash: crate::unified::Crash::UncheckedValue { key: "type".into() },
+                    crash: crate::unified::Crash::UncheckedValue {
+                        key: "type".into(),
+                    },
                 },
             )
         };
@@ -649,7 +686,10 @@ impl<'a, 's> Schema<'a, 's> {
                 bad(malformed, "data").map(|raw| &raw.value),
                 Some(Raw::String(_))
             );
-            if matches!(token, QapiSchemaToken::Struct(_)) && named && !since((8, 1, 0)) {
+            if matches!(token, QapiSchemaToken::Struct(_))
+                && named
+                && !since((8, 1, 0))
+            {
                 return Err(crate::schema_shapes::unchecked("data"));
             }
             return Ok(());
@@ -661,8 +701,12 @@ impl<'a, 's> Schema<'a, 's> {
                 }
                 members(&value.data)?;
                 // 4.1 iterates the features that its checks skip as false.
-                let iterable = |raw: &RawValue<'_>| !matches!(raw.value, Raw::Null | Raw::Bool(_));
-                if since((4, 1, 0)) && bad(malformed, "features").is_some_and(|raw| !iterable(raw))
+                let iterable = |raw: &RawValue<'_>| {
+                    !matches!(raw.value, Raw::Null | Raw::Bool(_))
+                };
+                if since((4, 1, 0))
+                    && bad(malformed, "features")
+                        .is_some_and(|raw| !iterable(raw))
                 {
                     return Err(crate::schema_shapes::unchecked("features"));
                 }
@@ -698,7 +742,10 @@ impl<'a, 's> Schema<'a, 's> {
     fn unchecked(&self, all: &[usize]) -> SchemaResult {
         for &index in all {
             if let Some(key) = leftover(self.definitions[index].token) {
-                return self.located(index, Err(crate::schema_shapes::unsupported(key)));
+                return self.located(
+                    index,
+                    Err(crate::schema_shapes::unsupported(key)),
+                );
             }
         }
         Ok(())
@@ -710,29 +757,37 @@ impl<'a, 's> Schema<'a, 's> {
     fn entities(&self, all: &[usize]) -> Vec<Entity<'a, 's>> {
         let mut entities = Vec::new();
         let mut made = HashSet::new();
-        let mut array = |entities: &mut Vec<_>, value: &'a QapiTypeRef<'s>, owner| {
-            if let QapiTypeRef::ArrayRef(element) = value
-                && !Builtins::current().defines(element)
-                && made.insert(format!("{element}List"))
-            {
-                entities.push(Entity::Array { element, owner });
-            }
-        };
+        let mut array =
+            |entities: &mut Vec<_>, value: &'a QapiTypeRef<'s>, owner| {
+                if let QapiTypeRef::ArrayRef(element) = value
+                    && !Builtins::current().defines(element)
+                    && made.insert(format!("{element}List"))
+                {
+                    entities.push(Entity::Array { element, owner });
+                }
+            };
         let mut wrapped = HashSet::new();
         for &index in all {
             let token = self.definitions[index].token;
             let name = token.definition_name().unwrap_or_default();
-            let implicit = |entities: &mut Vec<_>,
-                            array: &mut dyn FnMut(&mut Vec<_>, &'a QapiTypeRef<'s>, usize),
-                            role: &str,
-                            fields: &'a QapiMembers<'s>| {
-                for field in &fields.0 {
-                    array(entities, &field.r#type, index);
-                }
-                if !fields.0.is_empty() {
-                    entities.push(Entity::Implicit(format!("q_obj_{name}-{role}")));
-                }
-            };
+            let implicit =
+                |entities: &mut Vec<_>,
+                 array: &mut dyn FnMut(
+                    &mut Vec<_>,
+                    &'a QapiTypeRef<'s>,
+                    usize,
+                ),
+                 role: &str,
+                 fields: &'a QapiMembers<'s>| {
+                    for field in &fields.0 {
+                        array(entities, &field.r#type, index);
+                    }
+                    if !fields.0.is_empty() {
+                        entities.push(Entity::Implicit(format!(
+                            "q_obj_{name}-{role}"
+                        )));
+                    }
+                };
             match token {
                 QapiSchemaToken::Struct(value) => {
                     for field in &value.data.0 {
@@ -743,7 +798,8 @@ impl<'a, 's> Schema<'a, 's> {
                     if let MembersOrRef::Members(fields) = &value.base {
                         implicit(&mut entities, &mut array, "base", fields);
                     }
-                    if value.discriminator.is_none() && !value.legacy_alternate {
+                    if value.discriminator.is_none() && !value.legacy_alternate
+                    {
                         for branch in &value.data.0 {
                             array(&mut entities, &branch.r#type, index);
                             // A wrapper type for each type that branches use.
@@ -788,16 +844,15 @@ impl<'a, 's> Schema<'a, 's> {
     /// The name of an entity in QEMU's schema.
     fn entity_name(&self, entity: &Entity<'_, '_>) -> String {
         let name = |index: usize| {
-            self.definitions[index]
-                .token
-                .definition_name()
-                .unwrap_or_default()
+            self.definitions[index].token.definition_name().unwrap_or_default()
         };
         match entity {
             Entity::Array { element, .. } => format!("{element}List"),
             Entity::Implicit(name) => name.clone(),
             Entity::Wrapper { branch, .. } => match &branch.r#type {
-                QapiTypeRef::ArrayRef(element) => format!("q_obj_{element}List-wrapper"),
+                QapiTypeRef::ArrayRef(element) => {
+                    format!("q_obj_{element}List-wrapper")
+                }
                 QapiTypeRef::Ref(name) => format!("q_obj_{name}-wrapper"),
                 _ => String::new(),
             },
@@ -818,21 +873,26 @@ impl<'a, 's> Schema<'a, 's> {
 
     /// The struct that QEMU 2.0 to 2.3 find first by the name `name`: a
     /// definition, or a loose expression, which is `Err` without `data`.
-    fn first_struct(&self, name: &str) -> Option<Result<&'a QapiMembers<'s>, &Loose<'a>>> {
-        let definition = self
-            .definitions
-            .iter()
-            .enumerate()
-            .find_map(|(index, item)| match item.token {
-                QapiSchemaToken::Struct(value) if value.name == name => Some((index, &value.data)),
-                _ => None,
+    fn first_struct(
+        &self,
+        name: &str,
+    ) -> Option<Result<&'a QapiMembers<'s>, &Loose<'a>>> {
+        let definition =
+            self.definitions.iter().enumerate().find_map(|(index, item)| {
+                match item.token {
+                    QapiSchemaToken::Struct(value) if value.name == name => {
+                        Some((index, &value.data))
+                    }
+                    _ => None,
+                }
             });
-        let loose = self
-            .loose
-            .iter()
-            .find(|item| item.meta == Some("type") && item.name.as_deref() == Some(name));
+        let loose = self.loose.iter().find(|item| {
+            item.meta == Some("type") && item.name.as_deref() == Some(name)
+        });
         match (definition, loose) {
-            (Some((index, _)), Some(item)) if item.at <= index => Some(Err(item)),
+            (Some((index, _)), Some(item)) if item.at <= index => {
+                Some(Err(item))
+            }
             (Some((_, fields)), _) => Some(Ok(fields)),
             (None, Some(item)) => Some(Err(item)),
             (None, None) => None,
@@ -857,10 +917,12 @@ impl<'a, 's> Schema<'a, 's> {
         let mut loose = self.loose.iter().peekable();
         for (index, item) in self.definitions.iter().enumerate() {
             while let Some(union) = loose.next_if(|union| union.at <= index) {
-                if let (Some(base), Some(_)) = (&union.base, &union.discriminator)
+                if let (Some(base), Some(_)) =
+                    (&union.base, &union.discriminator)
                     && let Some(Err(base)) = self.first_struct(base)
                 {
-                    return union.crash(base.name.as_deref().unwrap_or_default());
+                    return union
+                        .crash(base.name.as_deref().unwrap_or_default());
                 }
             }
             if let QapiSchemaToken::Union(value) = item.token
@@ -884,7 +946,10 @@ impl<'a, 's> Schema<'a, 's> {
 
     /// The members of the struct `base` that QEMU 2.0 to 2.3 find first,
     /// which fail without `data`.
-    fn base_data(&self, base: &str) -> SchemaResult<Option<&'a QapiMembers<'s>>> {
+    fn base_data(
+        &self,
+        base: &str,
+    ) -> SchemaResult<Option<&'a QapiMembers<'s>>> {
         match self.first_struct(base) {
             Some(Ok(fields)) => Ok(Some(fields)),
             Some(Err(_)) => Err(SchemaErrorKind::Crash {
@@ -908,7 +973,9 @@ impl<'a, 's> Schema<'a, 's> {
             return item.crash(name);
         }
         match item.base.as_deref().map(|base| self.first_struct(base)) {
-            Some(Some(Err(_))) => item.crash(item.base.as_deref().unwrap_or_default()),
+            Some(Some(Err(_))) => {
+                item.crash(item.base.as_deref().unwrap_or_default())
+            }
             _ => Ok(()),
         }
     }
@@ -919,10 +986,9 @@ impl<'a, 's> Schema<'a, 's> {
     fn early(&self, index: usize) -> SchemaResult {
         let token = self.definitions[index].token;
         let first = |name: &str, kind: fn(&QapiSchemaToken<'_>) -> bool| {
-            self.definitions
-                .iter()
-                .map(|item| item.token)
-                .find(|token| token.definition_name() == Some(name) && kind(token))
+            self.definitions.iter().map(|item| item.token).find(|token| {
+                token.definition_name() == Some(name) && kind(token)
+            })
         };
         let structure = |name: &str| self.base_data(name);
         match token {
@@ -931,19 +997,24 @@ impl<'a, 's> Schema<'a, 's> {
                 let base = match &value.base {
                     MembersOrRef::Ref(name) if !name.is_empty() => {
                         let Some(fields) = structure(name)? else {
-                            return Err(self.not_allowed(name)).within(|| "'base'".into());
+                            return Err(self.not_allowed(name))
+                                .within(|| "'base'".into());
                         };
-                        require(!fields.0.is_empty(), || SchemaErrorKind::EmptyBase {
-                            name: name.to_string(),
+                        require(!fields.0.is_empty(), || {
+                            SchemaErrorKind::EmptyBase {
+                                name: name.to_string(),
+                            }
                         })?;
                         Some(fields)
                     }
                     MembersOrRef::Members(fields) if !fields.0.is_empty() => {
-                        return Err(SchemaErrorKind::AnonymousStruct).within(|| "'base'".into());
+                        return Err(SchemaErrorKind::AnonymousStruct)
+                            .within(|| "'base'".into());
                     }
                     _ => None,
                 };
-                let discriminator = value.discriminator.as_deref().unwrap_or_default();
+                let discriminator =
+                    value.discriminator.as_deref().unwrap_or_default();
                 if value.legacy_alternate || discriminator.is_empty() {
                     return Ok(());
                 }
@@ -953,13 +1024,17 @@ impl<'a, 's> Schema<'a, 's> {
                 let member = base
                     .0
                     .iter()
-                    .find(|member| member.name == discriminator && !member.optional)
+                    .find(|member| {
+                        member.name == discriminator && !member.optional
+                    })
                     .ok_or_else(|| SchemaErrorKind::DiscriminatorNotMember {
                         discriminator: discriminator.to_owned(),
                     })?;
                 let enumeration = match &member.r#type {
                     QapiTypeRef::Ref(name) => {
-                        match first(name, |token| matches!(token, QapiSchemaToken::Enum(_))) {
+                        match first(name, |token| {
+                            matches!(token, QapiSchemaToken::Enum(_))
+                        }) {
                             Some(QapiSchemaToken::Enum(value)) => Some((
                                 name,
                                 value
@@ -976,7 +1051,9 @@ impl<'a, 's> Schema<'a, 's> {
                 let Some((enumeration, values)) = enumeration else {
                     return Err(SchemaErrorKind::DiscriminatorNotEnum {
                         discriminator: discriminator.to_owned(),
-                        discriminator_type: spelled(&member.r#type).trim_matches('\'').to_owned(),
+                        discriminator_type: spelled(&member.r#type)
+                            .trim_matches('\'')
+                            .to_owned(),
                     }
                     .into());
                 };
@@ -990,17 +1067,19 @@ impl<'a, 's> Schema<'a, 's> {
                 // be objects written out in place.
                 let fields = match &value.data {
                     Some(MembersOrRef::Members(fields)) => fields,
-                    Some(MembersOrRef::Ref(name)) if !name.is_empty() => match structure(name)? {
-                        Some(fields) => fields,
-                        None => {
-                            return Err(SchemaErrorKind::Crash {
-                                crash: crate::unified::Crash::EventData {
-                                    name: name.to_string(),
-                                },
+                    Some(MembersOrRef::Ref(name)) if !name.is_empty() => {
+                        match structure(name)? {
+                            Some(fields) => fields,
+                            None => {
+                                return Err(SchemaErrorKind::Crash {
+                                    crash: crate::unified::Crash::EventData {
+                                        name: name.to_string(),
+                                    },
+                                }
+                                .into());
                             }
-                            .into());
                         }
-                    },
+                    }
                     _ => return Ok(()),
                 };
                 for field in &fields.0 {
@@ -1023,7 +1102,8 @@ impl<'a, 's> Schema<'a, 's> {
     /// discriminator's type up as a key, which fails for an array and,
     /// until 3.1, an object written out in place.
     fn discriminator_key(&self, index: usize) -> SchemaResult {
-        let QapiSchemaToken::Union(value) = self.definitions[index].token else {
+        let QapiSchemaToken::Union(value) = self.definitions[index].token
+        else {
             return Ok(());
         };
         let raw_discriminator = bad(&value.malformed, "discriminator");
@@ -1039,12 +1119,18 @@ impl<'a, 's> Schema<'a, 's> {
             }
             .into())
         };
-        let unhashable = |raw: &RawValue<'_>| matches!(raw.value, Raw::Array(_) | Raw::Object(_));
-        if !(raw_discriminator.is_some_and(RawValue::truthy) || !discriminator.is_empty()) {
+        let unhashable = |raw: &RawValue<'_>| {
+            matches!(raw.value, Raw::Array(_) | Raw::Object(_))
+        };
+        if !(raw_discriminator.is_some_and(RawValue::truthy)
+            || !discriminator.is_empty())
+        {
             return Ok(());
         }
         let base = match (&value.base, raw_base) {
-            (_, Some(raw)) if raw.truthy() && unhashable(raw) && since((2, 9, 0)) => {
+            (_, Some(raw))
+                if raw.truthy() && unhashable(raw) && since((2, 9, 0)) =>
+            {
                 return fails();
             }
             (MembersOrRef::Members(fields), None) if since((2, 6, 0)) => fields,
@@ -1070,11 +1156,12 @@ impl<'a, 's> Schema<'a, 's> {
             .0
             .iter()
             .find(|member| member.name == discriminator && !member.optional);
-        let unhashable_type = member.is_some_and(|member| match &member.r#type {
-            QapiTypeRef::ArrayRef(_) => true,
-            QapiTypeRef::InlineStruct(_) => !since((4, 0, 0)),
-            _ => bad(&member.malformed, "type").is_some_and(unhashable),
-        });
+        let unhashable_type =
+            member.is_some_and(|member| match &member.r#type {
+                QapiTypeRef::ArrayRef(_) => true,
+                QapiTypeRef::InlineStruct(_) => !since((4, 0, 0)),
+                _ => bad(&member.malformed, "type").is_some_and(unhashable),
+            });
         if unhashable_type { fails() } else { Ok(()) }
     }
 
@@ -1098,7 +1185,9 @@ impl<'a, 's> Schema<'a, 's> {
             }
         })?;
         let values = match &member.r#type {
-            QapiTypeRef::Ref(name) if self.meta(name) == Some(Meta::Enum) => self.enum_values(name),
+            QapiTypeRef::Ref(name) if self.meta(name) == Some(Meta::Enum) => {
+                self.enum_values(name)
+            }
             _ => None,
         };
         match values {
@@ -1108,7 +1197,9 @@ impl<'a, 's> Schema<'a, 's> {
             )),
             None => Err(SchemaErrorKind::DiscriminatorNotEnum {
                 discriminator: discriminator.to_owned(),
-                discriminator_type: spelled(&member.r#type).trim_matches('\'').to_owned(),
+                discriminator_type: spelled(&member.r#type)
+                    .trim_matches('\'')
+                    .to_owned(),
             }
             .into()),
         }
@@ -1121,25 +1212,25 @@ impl<'a, 's> Schema<'a, 's> {
         enumeration: &str,
         values: &[&str],
     ) -> SchemaResult {
-        require(values.contains(&branch), || {
-            SchemaErrorKind::UnknownBranch {
-                branch: branch.to_owned(),
-                discriminator_type: enumeration.to_owned(),
-            }
+        require(values.contains(&branch), || SchemaErrorKind::UnknownBranch {
+            branch: branch.to_owned(),
+            discriminator_type: enumeration.to_owned(),
         })
     }
 
     fn predefined(&self, token: &QapiSchemaToken<'_>) -> SchemaResult {
         let name = token.definition_name().unwrap_or_default();
         require(!Builtins::current().reserves(name), || {
-            SchemaErrorKind::Predefined {
-                name: name.to_owned(),
-            }
+            SchemaErrorKind::Predefined { name: name.to_owned() }
         })
     }
 
     /// Record a definition's name, refusing a second definition of it.
-    fn duplicate(&self, index: usize, defined: &mut HashMap<&'a str, &'a Path>) -> SchemaResult {
+    fn duplicate(
+        &self,
+        index: usize,
+        defined: &mut HashMap<&'a str, &'a Path>,
+    ) -> SchemaResult {
         let item = &self.definitions[index];
         let name = item.token.definition_name().unwrap_or_default();
         match defined.insert(name, item.path) {
@@ -1154,7 +1245,11 @@ impl<'a, 's> Schema<'a, 's> {
 
     /// The first pass of QEMU 2.4 to 4.1 over a definition: its keys, flag
     /// values and name, that the name is new, and its suffix.
-    fn learn(&self, index: usize, defined: &mut HashMap<&'a str, &'a Path>) -> SchemaResult {
+    fn learn(
+        &self,
+        index: usize,
+        defined: &mut HashMap<&'a str, &'a Path>,
+    ) -> SchemaResult {
         let token = self.definitions[index].token;
         schema_docs::check_required(token, &self.docs)?;
         self.metatypes(token)?;
@@ -1168,7 +1263,11 @@ impl<'a, 's> Schema<'a, 's> {
 
     /// The definition pass of QEMU 4.2 and later, which builds the schema:
     /// duplicates.
-    fn define(&self, index: usize, defined: &mut HashMap<&'a str, &'a Path>) -> SchemaResult {
+    fn define(
+        &self,
+        index: usize,
+        defined: &mut HashMap<&'a str, &'a Path>,
+    ) -> SchemaResult {
         self.build(index)?;
         self.predefined(self.definitions[index].token)?;
         self.duplicate(index, defined)
@@ -1177,7 +1276,11 @@ impl<'a, 's> Schema<'a, 's> {
     /// Refuse an empty condition, from QEMU 3.0 to 6.1; from 6.2 the parser
     /// reads only conditions with configuration names. From 4.2 a blank
     /// name is empty too.
-    fn condition(&self, cond: Option<&QapiCond<'_>>, raw: Option<&RawValue<'_>>) -> SchemaResult {
+    fn condition(
+        &self,
+        cond: Option<&QapiCond<'_>>,
+        raw: Option<&RawValue<'_>>,
+    ) -> SchemaResult {
         if let Some(raw) = raw.filter(|_| since((3, 0, 0))) {
             return crate::schema_shapes::condition(raw);
         }
@@ -1197,8 +1300,8 @@ impl<'a, 's> Schema<'a, 's> {
         match cond {
             Some(QapiCond::ConfigName(name)) => empty(name),
             Some(QapiCond::All(names)) => {
-                require(!names.is_empty(), || SchemaErrorKind::EmptyCondition {
-                    condition: "[]".into(),
+                require(!names.is_empty(), || {
+                    SchemaErrorKind::EmptyCondition { condition: "[]".into() }
                 })?;
                 for name in names {
                     if let QapiCond::ConfigName(name) = name {
@@ -1214,7 +1317,9 @@ impl<'a, 's> Schema<'a, 's> {
     /// The keys of a definition's expression that the release knows, as
     /// QEMU's lists of required and optional keys, without the key that
     /// names the definition's kind.
-    fn known_keys(token: &QapiSchemaToken<'_>) -> Option<(Vec<&'static str>, Vec<&'static str>)> {
+    fn known_keys(
+        token: &QapiSchemaToken<'_>,
+    ) -> Option<(Vec<&'static str>, Vec<&'static str>)> {
         let era = |keys: &[(&'static str, Version)]| -> Vec<&'static str> {
             keys.iter()
                 .filter(|(_, from)| since(*from))
@@ -1233,13 +1338,16 @@ impl<'a, 's> Schema<'a, 's> {
             ),
             QapiSchemaToken::Struct(_) => (
                 vec!["data"],
-                era(&[("base", ALWAYS), ("if", (3, 0, 0)), ("features", (4, 1, 0))]),
+                era(&[
+                    ("base", ALWAYS),
+                    ("if", (3, 0, 0)),
+                    ("features", (4, 1, 0)),
+                ]),
             ),
             // From 6.2 every union is flat.
-            QapiSchemaToken::Union(_) if since((6, 2, 0)) => (
-                vec!["base", "discriminator", "data"],
-                vec!["if", "features"],
-            ),
+            QapiSchemaToken::Union(_) if since((6, 2, 0)) => {
+                (vec!["base", "discriminator", "data"], vec!["if", "features"])
+            }
             QapiSchemaToken::Union(_) => (
                 vec!["data"],
                 era(&[
@@ -1286,11 +1394,13 @@ impl<'a, 's> Schema<'a, 's> {
     /// until 6.1 it must name one, and the kind that QEMU looks for first
     /// takes another kind's key as unknown; from 6.2 exactly one.
     fn metatypes(&self, token: &QapiSchemaToken<'_>) -> SchemaResult {
-        const METAS: [&str; 6] = ["enum", "union", "alternate", "struct", "command", "event"];
+        const METAS: [&str; 6] =
+            ["enum", "union", "alternate", "struct", "command", "event"];
         if !since((6, 2, 0)) {
-            return require(!matches!(token, QapiSchemaToken::NoMetatype(_)), || {
-                SchemaErrorKind::MissingMetatype
-            });
+            return require(
+                !matches!(token, QapiSchemaToken::NoMetatype(_)),
+                || SchemaErrorKind::MissingMetatype,
+            );
         }
         let keys = keys_of(token);
         let metas = keys.iter().filter(|key| METAS.contains(&key.as_ref()));
@@ -1315,10 +1425,15 @@ impl<'a, 's> Schema<'a, 's> {
             QapiSchemaToken::Command(_) => "command",
             _ => "event",
         };
-        let keys: Vec<&str> = keys_of(token).iter().map(|key| key.as_ref()).collect();
-        let known = |key: &&str| *key == meta || required.contains(key) || optional.contains(key);
+        let keys: Vec<&str> =
+            keys_of(token).iter().map(|key| key.as_ref()).collect();
+        let known = |key: &&str| {
+            *key == meta || required.contains(key) || optional.contains(key)
+        };
         // Until 4.1 the keys' check starts with the name.
-        if let Some(raw) = bad(malformed_of(token), meta).filter(|_| !since((4, 2, 0))) {
+        if let Some(raw) =
+            bad(malformed_of(token), meta).filter(|_| !since((4, 2, 0)))
+        {
             crate::schema_shapes::name(raw)?;
         }
         if !since((4, 0, 0)) {
@@ -1341,9 +1456,15 @@ impl<'a, 's> Schema<'a, 's> {
 
     /// The value of a definition's key that QEMU checks with the keys
     /// until 4.1: a flag, and the condition.
-    fn key_value(&self, token: &QapiSchemaToken<'_>, key: &str) -> SchemaResult {
+    fn key_value(
+        &self,
+        token: &QapiSchemaToken<'_>,
+        key: &str,
+    ) -> SchemaResult {
         match key {
-            "if" => self.condition(condition(token), bad(malformed_of(token), "if")),
+            "if" => {
+                self.condition(condition(token), bad(malformed_of(token), "if"))
+            }
             _ => self.flag(token, key),
         }
     }
@@ -1351,40 +1472,39 @@ impl<'a, 's> Schema<'a, 's> {
     /// The keys of a member written as a dictionary, from QEMU 4.0, with
     /// its features from 5.0.
     pub(crate) fn member_keys(&self, field: &QapiMember<'_>) -> SchemaResult {
-        let optional: &[&str] = if since((5, 0, 0)) {
-            &["if", "features"]
-        } else {
-            &["if"]
-        };
+        let optional: &[&str] =
+            if since((5, 0, 0)) { &["if", "features"] } else { &["if"] };
         keyed(field.keys.as_deref(), &["type"], optional)
     }
 
     /// The keys of a union's or alternate's branch written as a
     /// dictionary, from QEMU 4.0.
-    pub(crate) fn branch_keys(&self, branch: &crate::QapiVariant<'_>) -> SchemaResult {
+    pub(crate) fn branch_keys(
+        &self,
+        branch: &crate::QapiVariant<'_>,
+    ) -> SchemaResult {
         keyed(branch.keys.as_deref(), &["type"], &["if"])
     }
 
     /// The keys of an enum value written as a dictionary, from QEMU 4.0
     /// (before, its name is refused instead), with its features from 6.2.
-    pub(crate) fn enum_value_keys(&self, value: &crate::QapiEnumValue<'_>) -> SchemaResult {
+    pub(crate) fn enum_value_keys(
+        &self,
+        value: &crate::QapiEnumValue<'_>,
+    ) -> SchemaResult {
         if !since((4, 0, 0)) {
             return Ok(());
         }
-        let optional: &[&str] = if since((6, 2, 0)) {
-            &["if", "features"]
-        } else {
-            &["if"]
-        };
-        keyed(
-            value.dictionary.then_some(&value.keys[..]),
-            &["name"],
-            optional,
-        )
+        let optional: &[&str] =
+            if since((6, 2, 0)) { &["if", "features"] } else { &["if"] };
+        keyed(value.dictionary.then_some(&value.keys[..]), &["name"], optional)
     }
 
     /// The keys of a feature written as a dictionary, from QEMU 4.1.
-    pub(crate) fn feature_keys(&self, feature: &crate::QapiFeature<'_>) -> SchemaResult {
+    pub(crate) fn feature_keys(
+        &self,
+        feature: &crate::QapiFeature<'_>,
+    ) -> SchemaResult {
         keyed(feature.keys.as_deref(), &["name"], &["if"])
     }
 
@@ -1499,11 +1619,9 @@ impl<'a, 's> Schema<'a, 's> {
                 || SchemaErrorKind::UntypedWithoutGen,
             );
         }
-        let meta = self
-            .meta(name)
-            .ok_or_else(|| SchemaErrorKind::UnknownType {
-                name: name.to_owned(),
-            })?;
+        let meta = self.meta(name).ok_or_else(|| {
+            SchemaErrorKind::UnknownType { name: name.to_owned() }
+        })?;
         require(metas.contains(&meta), || SchemaErrorKind::TypeNotAllowed {
             meta: meta.word(),
             reference: format!("'{name}'"),
@@ -1517,16 +1635,18 @@ impl<'a, 's> Schema<'a, 's> {
                 meta: meta.word(),
                 reference: format!("'{name}'"),
             },
-            None => SchemaErrorKind::UnknownType {
-                name: name.to_owned(),
-            },
+            None => SchemaErrorKind::UnknownType { name: name.to_owned() },
         }
         .into()
     }
 
     /// The members of an object written out in place, as QEMU 2.4 to 4.1
     /// checks them: names, reserved names and types.
-    fn members_classic(&self, fields: &QapiMembers<'_>, allow_untyped: bool) -> SchemaResult {
+    fn members_classic(
+        &self,
+        fields: &QapiMembers<'_>,
+        allow_untyped: bool,
+    ) -> SchemaResult {
         for field in &fields.0 {
             let check = || -> SchemaResult {
                 crate::schema_names::validate(&field.name)?;
@@ -1564,7 +1684,9 @@ impl<'a, 's> Schema<'a, 's> {
             .map(|name| ((*name).to_owned(), "(automatic)".to_owned()))
             .collect();
         for name in names {
-            if let Some(previous) = seen.insert(camel_to_upper(name), (*name).to_owned()) {
+            if let Some(previous) =
+                seen.insert(camel_to_upper(name), (*name).to_owned())
+            {
                 return Err(SchemaErrorKind::MemberClash {
                     name: (*name).to_owned(),
                     previous,
@@ -1595,7 +1717,11 @@ impl<'a, 's> Schema<'a, 's> {
             };
             for field in &fields.0 {
                 require(
-                    !value.data.0.iter().any(|member| member.name == field.name),
+                    !value
+                        .data
+                        .0
+                        .iter()
+                        .any(|member| member.name == field.name),
                     || SchemaErrorKind::BaseClash {
                         name: field.name.to_string(),
                         base: name.to_owned(),
@@ -1620,22 +1746,31 @@ impl<'a, 's> Schema<'a, 's> {
                 if let Some(raw) = bad(malformed, "prefix") {
                     crate::schema_shapes::string(raw)?;
                 }
-                let names: Vec<_> = value.data.iter().map(|value| value.name.as_ref()).collect();
+                let names: Vec<_> = value
+                    .data
+                    .iter()
+                    .map(|value| value.name.as_ref())
+                    .collect();
                 for (position, member) in value.data.iter().enumerate() {
                     // From 4.0 QEMU checks an enum value's keys and condition
                     // first.
                     if since((4, 0, 0)) {
                         self.enum_value_keys(member)
                             .and_then(|()| {
-                                self.condition(member.r#if.as_ref(), bad(&member.malformed, "if"))
+                                self.condition(
+                                    member.r#if.as_ref(),
+                                    bad(&member.malformed, "if"),
+                                )
                             })
                             .within(|| format!("member '{}'", member.name))?;
                     }
                     let unnamed = bad(&member.malformed, "name").is_some()
                         || (member.dictionary && !since((4, 0, 0)));
                     if unnamed {
-                        return Err(SchemaError::from(SchemaErrorKind::NameNotString))
-                            .within(|| format!("member '{}'", member.name));
+                        return Err(SchemaError::from(
+                            SchemaErrorKind::NameNotString,
+                        ))
+                        .within(|| format!("member '{}'", member.name));
                     }
                     empty_enum_value(&member.name)?;
                     crate::schema_names::validate_enum_member(&member.name)
@@ -1649,10 +1784,16 @@ impl<'a, 's> Schema<'a, 's> {
                 match bad(malformed, "data").map(|raw| &raw.value) {
                     // A type name, of no kind that members take.
                     Some(Raw::String(members)) => self
-                        .reference_classic(&QapiTypeRef::Ref(members.clone()), false, &[], false)
+                        .reference_classic(
+                            &QapiTypeRef::Ref(members.clone()),
+                            false,
+                            &[],
+                            false,
+                        )
                         .within(|| "'data'".into())?,
                     Some(_) => {
-                        let raw = bad(malformed, "data").unwrap_or_else(|| unreachable!());
+                        let raw = bad(malformed, "data")
+                            .unwrap_or_else(|| unreachable!());
                         crate::schema_shapes::type_value(raw, false, true)
                             .within(|| "'data'".into())?;
                     }
@@ -1675,13 +1816,20 @@ impl<'a, 's> Schema<'a, 's> {
                     self.base_clash(base, &value.data)?;
                 }
                 // 4.1 checks only true features.
-                if let Some(raw) = bad(malformed, "features").filter(|raw| raw.truthy()) {
+                if let Some(raw) =
+                    bad(malformed, "features").filter(|raw| raw.truthy())
+                {
                     crate::schema_shapes::array(raw)?;
                 }
-                for feature in value.features.iter().flat_map(|features| features.iter()) {
+                for feature in
+                    value.features.iter().flat_map(|features| features.iter())
+                {
                     let check = || -> SchemaResult {
                         self.feature_keys(feature)?;
-                        self.condition(feature.r#if.as_ref(), bad(&feature.malformed, "if"))?;
+                        self.condition(
+                            feature.r#if.as_ref(),
+                            bad(&feature.malformed, "if"),
+                        )?;
                         if let Some(raw) = bad(&feature.malformed, "name") {
                             crate::schema_shapes::name(raw)?;
                         }
@@ -1695,13 +1843,15 @@ impl<'a, 's> Schema<'a, 's> {
             QapiSchemaToken::Alternate(value) => {
                 match bad(malformed, "data") {
                     Some(raw) => crate::schema_shapes::branches(raw, Some(2))?,
-                    None => require(value.data.0.len() >= 2 || !since((2, 6, 0)), || {
-                        SchemaErrorKind::AlternateBranches { minimum: 2 }
-                    })?,
+                    None => require(
+                        value.data.0.len() >= 2 || !since((2, 6, 0)),
+                        || SchemaErrorKind::AlternateBranches { minimum: 2 },
+                    )?,
                 }
                 // Branch by branch: the name, its constant, the type and
                 // its JSON types.
-                let names: Vec<_> = value.data.0.iter().map(|b| b.name.as_ref()).collect();
+                let names: Vec<_> =
+                    value.data.0.iter().map(|b| b.name.as_ref()).collect();
                 let mut kinds = HashMap::new();
                 for (position, branch) in value.data.0.iter().enumerate() {
                     crate::schema_names::validate_mandatory(&branch.name)
@@ -1719,9 +1869,12 @@ impl<'a, 's> Schema<'a, 's> {
                                 reference: "null".into(),
                             }
                             .into()),
-                            _ => crate::schema_shapes::type_value(raw, false, false),
+                            _ => crate::schema_shapes::type_value(
+                                raw, false, false,
+                            ),
                         };
-                        return check.within(|| format!("branch '{}'", branch.name));
+                        return check
+                            .within(|| format!("branch '{}'", branch.name));
                     }
                     self.reference_classic(
                         &branch.r#type,
@@ -1755,7 +1908,11 @@ impl<'a, 's> Schema<'a, 's> {
                 } else if let Some(returns) = &value.returns {
                     let mut metas = vec![Meta::Union, Meta::Struct];
                     if self.returns_exempt(name) {
-                        metas.extend([Meta::Builtin, Meta::Alternate, Meta::Enum]);
+                        metas.extend([
+                            Meta::Builtin,
+                            Meta::Alternate,
+                            Meta::Enum,
+                        ]);
                     }
                     self.reference_classic(returns, true, &metas, untyped)
                         .within(|| "'returns'".into())?;
@@ -1763,11 +1920,10 @@ impl<'a, 's> Schema<'a, 's> {
                 Ok(())
             }
             QapiSchemaToken::Event(value) => {
-                require(since((2, 6, 0)) || name.to_uppercase() != "MAX", || {
-                    SchemaErrorKind::ReservedName {
-                        name: name.to_owned(),
-                    }
-                })?;
+                require(
+                    since((2, 6, 0)) || name.to_uppercase() != "MAX",
+                    || SchemaErrorKind::ReservedName { name: name.to_owned() },
+                )?;
                 self.arguments_classic(
                     value.data.as_ref(),
                     bad(malformed, "data"),
@@ -1793,14 +1949,15 @@ impl<'a, 's> Schema<'a, 's> {
         // entities.
         let boxed = boxed == Some("true");
         if let Some(raw) = raw {
-            return crate::schema_shapes::type_value(raw, false, !boxed).within(|| "'data'".into());
+            return crate::schema_shapes::type_value(raw, false, !boxed)
+                .within(|| "'data'".into());
         }
         match data {
             None | Some(MembersOrRef::Unset) => Ok(()),
             Some(MembersOrRef::Members(fields)) => {
-                require(!boxed, || SchemaErrorKind::AnonymousStruct).within(|| "'data'".into())?;
-                self.members_classic(fields, untyped)
-                    .within(|| "'data'".into())
+                require(!boxed, || SchemaErrorKind::AnonymousStruct)
+                    .within(|| "'data'".into())?;
+                self.members_classic(fields, untyped).within(|| "'data'".into())
             }
             Some(MembersOrRef::Ref(name)) => {
                 let metas: &[Meta] = if !since((2, 5, 0)) {
@@ -1810,8 +1967,13 @@ impl<'a, 's> Schema<'a, 's> {
                 } else {
                     &[Meta::Struct]
                 };
-                self.reference_classic(&QapiTypeRef::Ref(name.clone()), false, metas, false)
-                    .within(|| "'data'".into())
+                self.reference_classic(
+                    &QapiTypeRef::Ref(name.clone()),
+                    false,
+                    metas,
+                    false,
+                )
+                .within(|| "'data'".into())
             }
         }
     }
@@ -1824,8 +1986,9 @@ impl<'a, 's> Schema<'a, 's> {
         let raw_discriminator = bad(malformed, "discriminator");
         let raw_data = bad(malformed, "data");
         // A legacy alternate's `{}` is a discriminator too.
-        let flat =
-            value.discriminator.is_some() || raw_discriminator.is_some() || value.legacy_alternate;
+        let flat = value.discriminator.is_some()
+            || raw_discriminator.is_some()
+            || value.legacy_alternate;
         if !flat {
             require(
                 value.base == MembersOrRef::Unset && raw_base.is_none(),
@@ -1837,7 +2000,8 @@ impl<'a, 's> Schema<'a, 's> {
             require(!value.data.0.is_empty() || !since((2, 6, 0)), || {
                 SchemaErrorKind::NoBranches
             })?;
-            let names: Vec<_> = value.data.0.iter().map(|b| b.name.as_ref()).collect();
+            let names: Vec<_> =
+                value.data.0.iter().map(|b| b.name.as_ref()).collect();
             let automatic: &[&str] = if since((2, 5, 0)) {
                 &["MAX", "KIND", "TYPE"]
             } else {
@@ -1848,7 +2012,9 @@ impl<'a, 's> Schema<'a, 's> {
                     crate::schema_names::validate_mandatory(&branch.name)?;
                     self.branch_keys(branch)?;
                     if let Some(raw) = bad(&branch.malformed, "type") {
-                        return crate::schema_shapes::type_value(raw, true, false);
+                        return crate::schema_shapes::type_value(
+                            raw, true, false,
+                        );
                     }
                     self.reference_classic(
                         &branch.r#type,
@@ -1870,18 +2036,27 @@ impl<'a, 's> Schema<'a, 's> {
         }
         // 2.4 requires a flat union's base to be a type name.
         require(
-            since((2, 5, 0)) || (matches!(value.base, MembersOrRef::Ref(_)) && raw_base.is_none()),
+            since((2, 5, 0))
+                || (matches!(value.base, MembersOrRef::Ref(_))
+                    && raw_base.is_none()),
             || SchemaErrorKind::StringBase,
         )?;
         let base = match (&value.base, raw_base) {
             (_, Some(raw)) => {
-                return crate::schema_shapes::type_value(raw, false, since((2, 6, 0)))
-                    .within(|| "'base'".into());
+                return crate::schema_shapes::type_value(
+                    raw,
+                    false,
+                    since((2, 6, 0)),
+                )
+                .within(|| "'base'".into());
             }
-            (MembersOrRef::Unset, None) => return Err(SchemaErrorKind::MissingBase.into()),
+            (MembersOrRef::Unset, None) => {
+                return Err(SchemaErrorKind::MissingBase.into());
+            }
             (MembersOrRef::Members(fields), None) => {
                 if !since((2, 6, 0)) {
-                    return Err(SchemaErrorKind::AnonymousStruct).within(|| "'base'".into());
+                    return Err(SchemaErrorKind::AnonymousStruct)
+                        .within(|| "'base'".into());
                 }
                 self.members_classic(fields, false)
                     .within(|| "'base'".into())?;
@@ -1899,19 +2074,21 @@ impl<'a, 's> Schema<'a, 's> {
                 .within(|| "'base'".into())?;
                 let fields = match self.token(base) {
                     Some(QapiSchemaToken::Struct(value)) => &value.data,
-                    _ => return Err(self.not_allowed(base)).within(|| "'base'".into()),
+                    _ => {
+                        return Err(self.not_allowed(base))
+                            .within(|| "'base'".into());
+                    }
                 };
                 // Until 2.8 QEMU requires the base to have members.
                 require(!fields.0.is_empty() || since((2, 9, 0)), || {
-                    SchemaErrorKind::EmptyBase {
-                        name: base.to_string(),
-                    }
+                    SchemaErrorKind::EmptyBase { name: base.to_string() }
                 })?;
                 fields
             }
         };
         if let Some(raw) = raw_discriminator {
-            return crate::schema_shapes::name(raw).within(|| "'discriminator'".into());
+            return crate::schema_shapes::name(raw)
+                .within(|| "'discriminator'".into());
         }
         // A legacy alternate's `{}` is no name.
         require(!value.legacy_alternate, || SchemaErrorKind::NameNotString)
@@ -1919,7 +2096,8 @@ impl<'a, 's> Schema<'a, 's> {
         let discriminator = value.discriminator.as_deref().unwrap_or_default();
         crate::schema_names::validate_mandatory(discriminator)
             .within(|| "'discriminator'".into())?;
-        let (enumeration, values) = self.discriminator_enum(base, discriminator)?;
+        let (enumeration, values) =
+            self.discriminator_enum(base, discriminator)?;
         if let Some(raw) = raw_data {
             return crate::schema_shapes::branches(raw, None);
         }
@@ -1933,10 +2111,16 @@ impl<'a, 's> Schema<'a, 's> {
                 if let Some(raw) = bad(&branch.malformed, "type") {
                     return crate::schema_shapes::type_value(raw, false, false);
                 }
-                self.reference_classic(&branch.r#type, false, &[Meta::Struct], false)?;
+                self.reference_classic(
+                    &branch.r#type,
+                    false,
+                    &[Meta::Struct],
+                    false,
+                )?;
                 if let (QapiTypeRef::Ref(payload), MembersOrRef::Ref(base)) =
                     (&branch.r#type, &value.base)
-                    && let Some(QapiSchemaToken::Struct(payload)) = self.token(payload)
+                    && let Some(QapiSchemaToken::Struct(payload)) =
+                        self.token(payload)
                 {
                     self.base_clash(base, &payload.data)?;
                 }
@@ -1945,7 +2129,9 @@ impl<'a, 's> Schema<'a, 's> {
             check().within(|| format!("branch '{}'", branch.name))?;
             self.branch_value(&branch.name, &enumeration, &values)?;
             require(
-                !since((2, 5, 0)) || since((2, 6, 0)) || !values.contains(&discriminator),
+                !since((2, 5, 0))
+                    || since((2, 6, 0))
+                    || !values.contains(&discriminator),
                 || SchemaErrorKind::DiscriminatorClash {
                     discriminator: discriminator.to_owned(),
                     enumeration: enumeration.clone(),
@@ -1984,8 +2170,8 @@ impl<'a, 's> Schema<'a, 's> {
                     "null" => Some(Json::Null),
                     "number" if numbers => Some(Json::Number),
                     "number" => Some(Json::Float),
-                    "int" | "int8" | "int16" | "int32" | "int64" | "uint8" | "uint16"
-                    | "uint32" | "uint64" | "size" => {
+                    "int" | "int8" | "int16" | "int32" | "int64" | "uint8"
+                    | "uint16" | "uint32" | "uint64" | "size" => {
                         Some(if numbers { Json::Number } else { Json::Integer })
                     }
                     // Until 4.2, QType is a builtin string type.
@@ -1993,9 +2179,15 @@ impl<'a, 's> Schema<'a, 's> {
                     _ => None,
                 };
                 match (builtin, self.meta(name)) {
-                    (Some(json), Some(Meta::Builtin | Meta::Enum)) => (Some(json), None),
-                    (None, Some(Meta::Enum)) => (Some(Json::String), self.enum_values(name)),
-                    (None, Some(Meta::Struct | Meta::Union)) => (Some(Json::Object), None),
+                    (Some(json), Some(Meta::Builtin | Meta::Enum)) => {
+                        (Some(json), None)
+                    }
+                    (None, Some(Meta::Enum)) => {
+                        (Some(Json::String), self.enum_values(name))
+                    }
+                    (None, Some(Meta::Struct | Meta::Union)) => {
+                        (Some(Json::Object), None)
+                    }
                     _ => (None, None),
                 }
             }
@@ -2081,7 +2273,8 @@ impl<'a, 's> Schema<'a, 's> {
         let name = token.definition_name().unwrap_or_default();
         let malformed = malformed_of(token);
         self.metatypes(token)?;
-        if let Some(raw) = meta_key(token).and_then(|meta| bad(malformed, meta)) {
+        if let Some(raw) = meta_key(token).and_then(|meta| bad(malformed, meta))
+        {
             crate::schema_shapes::name(raw)?;
         }
         // The name, from 6.0 its case, then its suffix.
@@ -2102,18 +2295,32 @@ impl<'a, 's> Schema<'a, 's> {
                     let check = || -> SchemaResult {
                         // 6.0 takes the name first.
                         let named = member.keys.iter().any(|key| key == "name");
-                        if since((6, 0, 0)) && !since((6, 1, 0)) && member.dictionary && !named {
-                            return Err(crate::schema_shapes::unchecked("name"));
+                        if since((6, 0, 0))
+                            && !since((6, 1, 0))
+                            && member.dictionary
+                            && !named
+                        {
+                            return Err(crate::schema_shapes::unchecked(
+                                "name",
+                            ));
                         }
                         self.enum_value_keys(member)?;
                         if let Some(raw) = bad(&member.malformed, "name") {
                             crate::schema_shapes::name(raw)?;
                         }
                         empty_enum_value(&member.name)?;
-                        crate::schema_names::validate_enum_member(&member.name)?;
+                        crate::schema_names::validate_enum_member(
+                            &member.name,
+                        )?;
                         self.member_case(&member.name, Some(name))?;
-                        self.condition(member.r#if.as_ref(), bad(&member.malformed, "if"))?;
-                        self.features(member.features.as_ref(), bad(&member.malformed, "features"))
+                        self.condition(
+                            member.r#if.as_ref(),
+                            bad(&member.malformed, "if"),
+                        )?;
+                        self.features(
+                            member.features.as_ref(),
+                            bad(&member.malformed, "features"),
+                        )
                     };
                     check().within(|| format!("member '{}'", member.name))?;
                 }
@@ -2121,12 +2328,12 @@ impl<'a, 's> Schema<'a, 's> {
             QapiSchemaToken::Struct(value) => {
                 match bad(malformed, "data") {
                     // Until 8.0 a type name passes, and fails later.
-                    Some(RawValue {
-                        value: Raw::String(_),
-                        ..
-                    }) if !since((8, 1, 0)) => {}
-                    Some(raw) => crate::schema_shapes::type_value(raw, false, true)
-                        .within(|| "'data'".into())?,
+                    Some(RawValue { value: Raw::String(_), .. })
+                        if !since((8, 1, 0)) => {}
+                    Some(raw) => {
+                        crate::schema_shapes::type_value(raw, false, true)
+                            .within(|| "'data'".into())?
+                    }
                     None => self
                         .members(&value.data, Some(name))
                         .within(|| "'data'".into())?,
@@ -2149,12 +2356,23 @@ impl<'a, 's> Schema<'a, 's> {
                         crate::schema_names::validate(&branch.name)?;
                         self.member_case(&branch.name, None)?;
                         self.branch_keys(branch)?;
-                        self.condition(branch.r#if.as_ref(), bad(&branch.malformed, "if"))?;
+                        self.condition(
+                            branch.r#if.as_ref(),
+                            bad(&branch.malformed, "if"),
+                        )?;
                         if let Some(raw) = bad(&branch.malformed, "type") {
-                            return crate::schema_shapes::type_value(raw, since((7, 1, 0)), false);
+                            return crate::schema_shapes::type_value(
+                                raw,
+                                since((7, 1, 0)),
+                                false,
+                            );
                         }
                         require(
-                            since((7, 1, 0)) || !matches!(branch.r#type, QapiTypeRef::ArrayRef(_)),
+                            since((7, 1, 0))
+                                || !matches!(
+                                    branch.r#type,
+                                    QapiTypeRef::ArrayRef(_)
+                                ),
                             || SchemaErrorKind::ArrayNotAllowed,
                         )
                     };
@@ -2177,9 +2395,15 @@ impl<'a, 's> Schema<'a, 's> {
         // features.
         if since((5, 0, 0)) {
             self.condition(condition(token), bad(malformed, "if"))?;
-            self.features(features(token).as_ref(), bad(malformed, "features"))?;
+            self.features(
+                features(token).as_ref(),
+                bad(malformed, "features"),
+            )?;
         } else {
-            self.features(features(token).as_ref(), bad(malformed, "features"))?;
+            self.features(
+                features(token).as_ref(),
+                bad(malformed, "features"),
+            )?;
             self.condition(condition(token), bad(malformed, "if"))?;
         }
         self.flags(token)
@@ -2194,20 +2418,23 @@ impl<'a, 's> Schema<'a, 's> {
         let raw_discriminator = bad(malformed, "discriminator");
         let base = value.base != MembersOrRef::Unset || raw_base.is_some();
         // A legacy alternate's `{}` is a discriminator too.
-        let flat =
-            value.discriminator.is_some() || raw_discriminator.is_some() || value.legacy_alternate;
+        let flat = value.discriminator.is_some()
+            || raw_discriminator.is_some()
+            || value.legacy_alternate;
         match (&value.base, flat) {
             (_, false) if base && !since((6, 2, 0)) => {
                 return Err(SchemaErrorKind::BaseWithoutDiscriminator.into());
             }
             _ if raw_base.is_some() => {
                 let raw = raw_base.unwrap_or_else(|| unreachable!());
-                crate::schema_shapes::type_value(raw, false, true).within(|| "'base'".into())?;
-            }
-            (MembersOrRef::Unset, true) => return Err(SchemaErrorKind::MissingBase.into()),
-            (MembersOrRef::Members(fields), true) => {
-                self.members(fields, Some(name))
+                crate::schema_shapes::type_value(raw, false, true)
                     .within(|| "'base'".into())?;
+            }
+            (MembersOrRef::Unset, true) => {
+                return Err(SchemaErrorKind::MissingBase.into());
+            }
+            (MembersOrRef::Members(fields), true) => {
+                self.members(fields, Some(name)).within(|| "'base'".into())?;
                 // Until 6.1 an empty object is no base.
                 require(!fields.0.is_empty() || since((6, 2, 0)), || {
                     SchemaErrorKind::MissingBase
@@ -2231,13 +2458,19 @@ impl<'a, 's> Schema<'a, 's> {
                     self.member_case(&branch.name, None)?;
                 }
                 self.branch_keys(branch)?;
-                self.condition(branch.r#if.as_ref(), bad(&branch.malformed, "if"))?;
+                self.condition(
+                    branch.r#if.as_ref(),
+                    bad(&branch.malformed, "if"),
+                )?;
                 if let Some(raw) = bad(&branch.malformed, "type") {
-                    return crate::schema_shapes::type_value(raw, simple, false);
+                    return crate::schema_shapes::type_value(
+                        raw, simple, false,
+                    );
                 }
                 // From 8.1 QEMU asks for a type name.
                 require(
-                    simple || !matches!(branch.r#type, QapiTypeRef::ArrayRef(_)),
+                    simple
+                        || !matches!(branch.r#type, QapiTypeRef::ArrayRef(_)),
                     || match since((8, 1, 0)) {
                         true => SchemaErrorKind::ValueShape {
                             expected: crate::unified::Shape::TypeName,
@@ -2255,7 +2488,11 @@ impl<'a, 's> Schema<'a, 's> {
     /// uppercase, commands in lowercase unless the pragma exempts them,
     /// types in CamelCase. A downstream `__RFQDN_` prefix and an `x-` do
     /// not count.
-    fn definition_case(&self, token: &QapiSchemaToken<'_>, name: &str) -> SchemaResult {
+    fn definition_case(
+        &self,
+        token: &QapiSchemaToken<'_>,
+        name: &str,
+    ) -> SchemaResult {
         if !since((6, 0, 0)) {
             return Ok(());
         }
@@ -2268,7 +2505,9 @@ impl<'a, 's> Schema<'a, 's> {
             QapiSchemaToken::Command(_) => {
                 let exempt = self.pragma.command_names.contains(&name);
                 (
-                    !stem.contains(|c: char| c.is_ascii_uppercase() || (c == '_' && !exempt)),
+                    !stem.contains(|c: char| {
+                        c.is_ascii_uppercase() || (c == '_' && !exempt)
+                    }),
                     NameRule::Lowercase,
                 )
             }
@@ -2291,17 +2530,29 @@ impl<'a, 's> Schema<'a, 's> {
     /// The members of an object written out in place, from QEMU 4.2: names,
     /// case unless the pragma exempts `owner`, reserved names, features
     /// and the shape of the type.
-    fn members(&self, fields: &QapiMembers<'_>, owner: Option<&str>) -> SchemaResult {
+    fn members(
+        &self,
+        fields: &QapiMembers<'_>,
+        owner: Option<&str>,
+    ) -> SchemaResult {
         for field in &fields.0 {
             let check = || -> SchemaResult {
                 crate::schema_names::validate(&field.name)?;
                 self.member_case(&field.name, owner)?;
                 self.reserved(field)?;
                 self.member_keys(field)?;
-                self.condition(field.r#if.as_ref(), bad(&field.malformed, "if"))?;
-                self.features(field.features.as_ref(), bad(&field.malformed, "features"))?;
+                self.condition(
+                    field.r#if.as_ref(),
+                    bad(&field.malformed, "if"),
+                )?;
+                self.features(
+                    field.features.as_ref(),
+                    bad(&field.malformed, "features"),
+                )?;
                 match bad(&field.malformed, "type") {
-                    Some(raw) => crate::schema_shapes::type_value(raw, true, false),
+                    Some(raw) => {
+                        crate::schema_shapes::type_value(raw, true, false)
+                    }
                     None => Ok(()),
                 }
             };
@@ -2332,7 +2583,10 @@ impl<'a, 's> Schema<'a, 's> {
                 } else if since((7, 1, 0)) || !since((6, 1, 0)) {
                     lower_case(&feature.name, NameRule::Lowercase)?;
                 }
-                self.condition(feature.r#if.as_ref(), bad(&feature.malformed, "if"))
+                self.condition(
+                    feature.r#if.as_ref(),
+                    bad(&feature.malformed, "if"),
+                )
             };
             check().within(|| format!("feature '{}'", feature.name))?;
         }
@@ -2348,14 +2602,17 @@ impl<'a, 's> Schema<'a, 's> {
         boxed: Option<&str>,
     ) -> SchemaResult {
         let raw_boxed = bad(malformed_of(token), "boxed");
-        let boxed = boxed == Some("true") || raw_boxed.is_some_and(RawValue::truthy);
+        let boxed =
+            boxed == Some("true") || raw_boxed.is_some_and(RawValue::truthy);
         if let Some(raw) = bad(malformed_of(token), "data") {
-            return crate::schema_shapes::type_value(raw, false, !boxed).within(|| "'data'".into());
+            return crate::schema_shapes::type_value(raw, false, !boxed)
+                .within(|| "'data'".into());
         }
         match data {
             Some(MembersOrRef::Ref(_)) => Ok(()),
             Some(MembersOrRef::Members(fields)) => {
-                require(!boxed, || SchemaErrorKind::AnonymousStruct).within(|| "'data'".into())?;
+                require(!boxed, || SchemaErrorKind::AnonymousStruct)
+                    .within(|| "'data'".into())?;
                 self.members(fields, None).within(|| "'data'".into())
             }
             None | Some(MembersOrRef::Unset) => {
@@ -2368,14 +2625,20 @@ impl<'a, 's> Schema<'a, 's> {
     /// the clashes between members and the cycles, from 4.2 also that each
     /// type a definition uses is defined and of the right kind. An error
     /// is located at the definition the entity belongs to.
-    fn entity(&self, entity: &Entity<'a, 's>, objects: &mut Objects) -> SchemaResult {
+    fn entity(
+        &self,
+        entity: &Entity<'a, 's>,
+        objects: &mut Objects,
+    ) -> SchemaResult {
         let resolve = since((4, 2, 0));
         match *entity {
             Entity::Array { element, owner } if resolve => self.located(
                 owner,
                 self.resolve(&QapiTypeRef::Ref(element.into())).map(drop),
             ),
-            Entity::Array { element, owner } => self.located(owner, self.alternate_tag(element)),
+            Entity::Array { element, owner } => {
+                self.located(owner, self.alternate_tag(element))
+            }
             Entity::Implicit(ref name) => objects.check(self, name).map(drop),
             Entity::Wrapper { branch, owner } => match &branch.r#type {
                 // The array type that a branch wraps is checked itself.
@@ -2392,7 +2655,9 @@ impl<'a, 's> Schema<'a, 's> {
                         .into()
                     }),
                 ),
-                QapiTypeRef::Ref(name) => self.located(owner, self.alternate_tag(name)),
+                QapiTypeRef::Ref(name) => {
+                    self.located(owner, self.alternate_tag(name))
+                }
                 _ => Ok(()),
             },
             Entity::Kind(index) => {
@@ -2403,7 +2668,11 @@ impl<'a, 's> Schema<'a, 's> {
                 let owner = crate::symbols::implicit_tag(value.name.as_ref());
                 let mut seen = HashMap::new();
                 let clashes = value.data.0.iter().try_for_each(|branch| {
-                    crate::union_layout::clash(self, &mut seen, Member::new(&branch.name, &owner))
+                    crate::union_layout::clash(
+                        self,
+                        &mut seen,
+                        Member::new(&branch.name, &owner),
+                    )
                 });
                 self.located(index, clashes)
             }
@@ -2414,7 +2683,11 @@ impl<'a, 's> Schema<'a, 's> {
     }
 
     /// The checks of a definition's entity.
-    fn definition_entity(&self, index: usize, objects: &mut Objects) -> SchemaResult {
+    fn definition_entity(
+        &self,
+        index: usize,
+        objects: &mut Objects,
+    ) -> SchemaResult {
         let token = self.definitions[index].token;
         let name = token.definition_name().unwrap_or_default();
         let resolve = since((4, 2, 0));
@@ -2423,7 +2696,11 @@ impl<'a, 's> Schema<'a, 's> {
                 self.definition_features(token)?;
                 let mut seen = HashMap::new();
                 for member in &value.data {
-                    crate::union_layout::clash(self, &mut seen, Member::new(&member.name, name))?;
+                    crate::union_layout::clash(
+                        self,
+                        &mut seen,
+                        Member::new(&member.name, name),
+                    )?;
                 }
                 Ok(())
             }
@@ -2446,7 +2723,11 @@ impl<'a, 's> Schema<'a, 's> {
                     if let QapiTypeRef::Ref(branch_type) = &branch.r#type {
                         self.alternate_tag(branch_type)?;
                     }
-                    crate::union_layout::clash(self, &mut seen, Member::new(&branch.name, name))?;
+                    crate::union_layout::clash(
+                        self,
+                        &mut seen,
+                        Member::new(&branch.name, name),
+                    )?;
                     if resolve {
                         self.alternate_kind(branch, &mut kinds)?;
                     }
@@ -2465,9 +2746,11 @@ impl<'a, 's> Schema<'a, 's> {
                     self.alternate_tag(returns)?;
                 }
                 if let (true, Some(returns)) = (resolve, &value.returns) {
-                    let element = self.resolve(returns).within(|| "'returns'".into())?;
+                    let element =
+                        self.resolve(returns).within(|| "'returns'".into())?;
                     require(
-                        self.returns_exempt(name) || matches!(element, Meta::Struct | Meta::Union),
+                        self.returns_exempt(name)
+                            || matches!(element, Meta::Struct | Meta::Union),
                         || SchemaErrorKind::TypeNotAllowed {
                             meta: match returns {
                                 QapiTypeRef::ArrayRef(_) => "array",
@@ -2495,26 +2778,36 @@ impl<'a, 's> Schema<'a, 's> {
 
     /// Resolve a type reference, from QEMU 4.2, to the kind of the type it
     /// names or, for an array, of its elements.
-    pub(crate) fn resolve(&self, value: &QapiTypeRef<'_>) -> SchemaResult<Meta> {
+    pub(crate) fn resolve(
+        &self,
+        value: &QapiTypeRef<'_>,
+    ) -> SchemaResult<Meta> {
         let name = match value {
-            QapiTypeRef::Ref(name) | QapiTypeRef::ArrayRef(name) => name.as_ref(),
+            QapiTypeRef::Ref(name) | QapiTypeRef::ArrayRef(name) => {
+                name.as_ref()
+            }
             QapiTypeRef::InlineStruct(_) | QapiTypeRef::Unset => {
                 return Err(SchemaErrorKind::AnonymousStruct.into());
             }
         };
         match self.meta(name) {
-            Some(meta) if !matches!(meta, Meta::Command | Meta::Event) => Ok(meta),
-            _ => Err(SchemaErrorKind::UnknownType {
-                name: name.to_owned(),
+            Some(meta) if !matches!(meta, Meta::Command | Meta::Event) => {
+                Ok(meta)
             }
-            .into()),
+            _ => {
+                Err(SchemaErrorKind::UnknownType { name: name.to_owned() }
+                    .into())
+            }
         }
     }
 
     /// The features of a definition: no two clash, from QEMU 4.1, and from
     /// 5.0 a type has none of the special ones. In 4.2 QEMU connects each
     /// feature to the documentation as it checks it.
-    pub(crate) fn definition_features(&self, token: &QapiSchemaToken<'_>) -> SchemaResult {
+    pub(crate) fn definition_features(
+        &self,
+        token: &QapiSchemaToken<'_>,
+    ) -> SchemaResult {
         let features = features(token);
         let owner = token.definition_name().unwrap_or_default();
         let mut seen = HashMap::new();
@@ -2565,16 +2858,17 @@ impl<'a, 's> Schema<'a, 's> {
         feature: &str,
         owner: &str,
     ) -> SchemaResult {
-        crate::union_layout::clash(self, seen, Member::new(feature, owner)).map_err(|error| {
-            match error.kind() {
-                SchemaErrorKind::MemberClash { name, previous } => SchemaErrorKind::FeatureClash {
-                    name: name.clone(),
-                    previous: previous.clone(),
+        crate::union_layout::clash(self, seen, Member::new(feature, owner))
+            .map_err(|error| match error.kind() {
+                SchemaErrorKind::MemberClash { name, previous } => {
+                    SchemaErrorKind::FeatureClash {
+                        name: name.clone(),
+                        previous: previous.clone(),
+                    }
+                    .into()
                 }
-                .into(),
                 _ => error,
-            }
-        })
+            })
     }
 
     /// A command's or event's arguments in the schema: an object type, a
@@ -2594,7 +2888,9 @@ impl<'a, 's> Schema<'a, 's> {
             return require(!boxed, || SchemaErrorKind::BoxedWithoutType);
         }
         let object = match data {
-            Some(MembersOrRef::Members(fields)) if !fields.0.is_empty() && checked => {
+            Some(MembersOrRef::Members(fields))
+                if !fields.0.is_empty() && checked =>
+            {
                 objects.check(self, &format!("q_obj_{name}-arg"))?
             }
             Some(MembersOrRef::Ref(argument)) => {
@@ -2632,7 +2928,10 @@ impl<'a, 's> Schema<'a, 's> {
                 }
                 let object = objects.check(self, argument)?;
                 require(
-                    !boxed || resolve || !object.members.is_empty() || object.branches,
+                    !boxed
+                        || resolve
+                        || !object.members.is_empty()
+                        || object.branches,
                     || SchemaErrorKind::BoxedEmpty {
                         name: argument.to_string(),
                     },
@@ -2642,7 +2941,9 @@ impl<'a, 's> Schema<'a, 's> {
             _ => return Ok(()),
         };
         require(
-            boxed || !since((8, 1, 0)) || !object.members.iter().any(|member| member.conditional),
+            boxed
+                || !since((8, 1, 0))
+                || !object.members.iter().any(|member| member.conditional),
             || SchemaErrorKind::ConditionalArguments,
         )
     }
@@ -2657,7 +2958,10 @@ impl<'a, 's> Schema<'a, 's> {
         for &index in indices {
             for feature in features_in_order(self.definitions[index].token) {
                 if names.insert(feature) && names.len() > 64 {
-                    return self.located(index, Err(SchemaErrorKind::TooManyFeatures.into()));
+                    return self.located(
+                        index,
+                        Err(SchemaErrorKind::TooManyFeatures.into()),
+                    );
                 }
             }
         }
@@ -2670,7 +2974,9 @@ fn leftover<'t>(token: &'t QapiSchemaToken<'_>) -> Option<&'t str> {
     fn first<'t>(malformed: &'t Malformed<'_>) -> Option<&'t str> {
         malformed.first().map(|(key, _)| key.as_ref())
     }
-    fn feature_list<'t>(features: &'t Option<QapiFeatures<'_>>) -> Option<&'t str> {
+    fn feature_list<'t>(
+        features: &'t Option<QapiFeatures<'_>>,
+    ) -> Option<&'t str> {
         features
             .iter()
             .flat_map(|features| features.iter())
@@ -2695,26 +3001,23 @@ fn leftover<'t>(token: &'t QapiSchemaToken<'_>) -> Option<&'t str> {
     first(malformed_of(token))
         .or_else(|| feature_list(features(token)))
         .or_else(|| match token {
-            QapiSchemaToken::Enum(value) => value.data.iter().find_map(|value| {
-                first(&value.malformed).or_else(|| feature_list(&value.features))
-            }),
+            QapiSchemaToken::Enum(value) => {
+                value.data.iter().find_map(|value| {
+                    first(&value.malformed)
+                        .or_else(|| feature_list(&value.features))
+                })
+            }
             QapiSchemaToken::Struct(value) => members(&value.data),
             QapiSchemaToken::Union(value) => match &value.base {
                 MembersOrRef::Members(fields) => members(fields),
                 _ => None,
             }
             .or_else(|| {
-                value
-                    .data
-                    .0
-                    .iter()
-                    .find_map(|branch| first(&branch.malformed))
+                value.data.0.iter().find_map(|branch| first(&branch.malformed))
             }),
-            QapiSchemaToken::Alternate(value) => value
-                .data
-                .0
-                .iter()
-                .find_map(|branch| first(&branch.malformed)),
+            QapiSchemaToken::Alternate(value) => {
+                value.data.0.iter().find_map(|branch| first(&branch.malformed))
+            }
             QapiSchemaToken::Command(value) => {
                 arguments(&value.data).or_else(|| match &value.returns {
                     Some(QapiTypeRef::InlineStruct(fields)) => members(fields),
@@ -2729,10 +3032,8 @@ fn leftover<'t>(token: &'t QapiSchemaToken<'_>) -> Option<&'t str> {
 /// From 2.6 QEMU looks at the first character of an enum value's name,
 /// which an empty one lacks.
 fn empty_enum_value(name: &str) -> SchemaResult {
-    require(!name.is_empty() || !since((2, 6, 0)), || {
-        SchemaErrorKind::Crash {
-            crash: crate::unified::Crash::UncheckedValue { key: "name".into() },
-        }
+    require(!name.is_empty() || !since((2, 6, 0)), || SchemaErrorKind::Crash {
+        crash: crate::unified::Crash::UncheckedValue { key: "name".into() },
     })
 }
 
@@ -2751,7 +3052,9 @@ fn meta_key(token: &QapiSchemaToken<'_>) -> Option<&'static str> {
 }
 
 /// The values of a definition's keys that the grammar refused.
-pub(crate) fn malformed_of<'t, 's>(token: &'t QapiSchemaToken<'s>) -> &'t Malformed<'s> {
+pub(crate) fn malformed_of<'t, 's>(
+    token: &'t QapiSchemaToken<'s>,
+) -> &'t Malformed<'s> {
     static NONE: Malformed<'static> = Vec::new();
     match token {
         QapiSchemaToken::Enum(value) => &value.malformed,
@@ -2765,7 +3068,9 @@ pub(crate) fn malformed_of<'t, 's>(token: &'t QapiSchemaToken<'s>) -> &'t Malfor
 }
 
 /// A definition's own features.
-fn features<'t, 's>(token: &'t QapiSchemaToken<'s>) -> &'t Option<QapiFeatures<'s>> {
+fn features<'t, 's>(
+    token: &'t QapiSchemaToken<'s>,
+) -> &'t Option<QapiFeatures<'s>> {
     match token {
         QapiSchemaToken::Enum(value) => &value.features,
         QapiSchemaToken::Struct(value) => &value.features,
@@ -2777,7 +3082,9 @@ fn features<'t, 's>(token: &'t QapiSchemaToken<'s>) -> &'t Option<QapiFeatures<'
     }
 }
 
-fn condition<'t, 's>(token: &'t QapiSchemaToken<'s>) -> Option<&'t QapiCond<'s>> {
+fn condition<'t, 's>(
+    token: &'t QapiSchemaToken<'s>,
+) -> Option<&'t QapiCond<'s>> {
     match token {
         QapiSchemaToken::Enum(value) => value.r#if.as_ref(),
         QapiSchemaToken::Struct(value) => value.r#if.as_ref(),
@@ -2790,7 +3097,9 @@ fn condition<'t, 's>(token: &'t QapiSchemaToken<'s>) -> Option<&'t QapiCond<'s>>
 }
 
 /// The keys of a definition's expression, in their order in the source.
-fn keys_of<'t, 's>(token: &'t QapiSchemaToken<'s>) -> &'t [crate::QapiString<'s>] {
+fn keys_of<'t, 's>(
+    token: &'t QapiSchemaToken<'s>,
+) -> &'t [crate::QapiString<'s>] {
     match token {
         QapiSchemaToken::Enum(value) => &value.keys,
         QapiSchemaToken::Struct(value) => &value.keys,
@@ -2805,18 +3114,22 @@ fn keys_of<'t, 's>(token: &'t QapiSchemaToken<'s>) -> &'t [crate::QapiString<'s>
 /// The first of the `required` keys, in QEMU's order, that `keys` lacks.
 fn missing(required: &[&str], keys: &[&str]) -> SchemaResult {
     match required.iter().find(|key| !keys.contains(key)) {
-        Some(key) => Err(SchemaErrorKind::MissingKey {
-            key: (*key).to_owned(),
+        Some(key) => {
+            Err(SchemaErrorKind::MissingKey { key: (*key).to_owned() }.into())
         }
-        .into()),
         None => Ok(()),
     }
 }
 
 /// Check the keys of a dictionary as QEMU does from 4.0: the first missing
 /// key, then the first unknown one, each in sorted order.
-fn dictionary_keys(keys: &[&str], required: &[&str], optional: &[&str]) -> SchemaResult {
-    let mut absent: Vec<_> = required.iter().filter(|key| !keys.contains(key)).collect();
+fn dictionary_keys(
+    keys: &[&str],
+    required: &[&str],
+    optional: &[&str],
+) -> SchemaResult {
+    let mut absent: Vec<_> =
+        required.iter().filter(|key| !keys.contains(key)).collect();
     absent.sort();
     missing(&absent.into_iter().copied().collect::<Vec<_>>(), &[])?;
     let mut unknown: Vec<_> = keys
@@ -2825,10 +3138,9 @@ fn dictionary_keys(keys: &[&str], required: &[&str], optional: &[&str]) -> Schem
         .collect();
     unknown.sort();
     match unknown.first() {
-        Some(key) => Err(SchemaErrorKind::UnknownKey {
-            key: (**key).to_owned(),
+        Some(key) => {
+            Err(SchemaErrorKind::UnknownKey { key: (**key).to_owned() }.into())
         }
-        .into()),
         None => Ok(()),
     }
 }
@@ -2850,7 +3162,10 @@ fn keyed(
 /// The feature names of a definition, in the order QEMU's schema meets
 /// them: its own, then those of its members.
 fn features_in_order<'t>(token: &'t QapiSchemaToken<'_>) -> Vec<&'t str> {
-    fn add<'t>(names: &mut Vec<&'t str>, features: &'t Option<QapiFeatures<'_>>) {
+    fn add<'t>(
+        names: &mut Vec<&'t str>,
+        features: &'t Option<QapiFeatures<'_>>,
+    ) {
         names.extend(
             features
                 .iter()
@@ -2895,9 +3210,7 @@ fn stem(name: &str) -> &str {
         .strip_prefix("__")
         .and_then(|rest| rest.split_once('_').map(|(_, stem)| stem))
         .unwrap_or(name);
-    name.strip_prefix("x-")
-        .or_else(|| name.strip_prefix("X-"))
-        .unwrap_or(name)
+    name.strip_prefix("x-").or_else(|| name.strip_prefix("X-")).unwrap_or(name)
 }
 
 /// Refuse uppercase in `name` and, for [`NameRule::Lowercase`], `_`: from
@@ -2908,10 +3221,7 @@ pub(crate) fn lower_case(name: &str, rule: NameRule) -> SchemaResult {
         !checked.contains(|c: char| {
             c.is_ascii_uppercase() || (c == '_' && rule == NameRule::Lowercase)
         }),
-        || SchemaErrorKind::NameCase {
-            name: name.to_owned(),
-            rule,
-        },
+        || SchemaErrorKind::NameCase { name: name.to_owned(), rule },
     )
 }
 
@@ -2922,7 +3232,9 @@ fn camel_to_upper(value: &str) -> String {
         .chars()
         .map(|c| if matches!(c, '.' | '-') { '_' } else { c })
         .collect();
-    if value.chars().any(char::is_alphabetic) && !value.chars().any(char::is_lowercase) {
+    if value.chars().any(char::is_alphabetic)
+        && !value.chars().any(char::is_lowercase)
+    {
         return name.iter().collect();
     }
     let mut upper = String::new();

@@ -12,7 +12,7 @@ qemu-ga version of any live test (docs/testing.md). -->
 
 - [ ] Every commit is signed off (`git commit -s`) under the
       [DCO](https://developercertificate.org/); the `DCO` check verifies this.
-- [ ] `cargo fmt --all --check`, the strict Clippy command and
+- [ ] `cargo xfmt --check`, the strict Clippy command and
       `cargo test --locked` pass locally; for parser, generator or macro
       changes, `bash contrib/check-qapi.sh` passes too.
 - [ ] Generated sources under `projects/qapi/src/generated` and
