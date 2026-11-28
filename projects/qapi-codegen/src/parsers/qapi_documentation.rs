@@ -19,7 +19,8 @@ fn not_name_break(c: char) -> bool {
 }
 
 fn take_line_start(input: &str) -> IResult<&str, &str> {
-    // Accept optional leading whitespace before # (some versions indent doc blocks)
+    // Accept optional leading whitespace before # (some versions indent doc
+    // blocks)
     recognize((line_space0, tag("#"), not(peek(tag("#"))), space0)).parse(input)
 }
 
@@ -82,7 +83,8 @@ pub(crate) fn extract_since_from_comment(desc: &Vec<&str>) -> Option<String> {
 pub struct QapiDocumentation<'i> {
     pub name: &'i str,
     pub description: Vec<&'i str>,
-    /// Ordered prose and sections, excluding member descriptions and Since metadata.
+    /// Ordered prose and sections, excluding member descriptions and Since
+    /// metadata.
     pub body: Vec<&'i str>,
     pub fields: Vec<(&'i str, Vec<&'i str>)>,
     pub features: Vec<(&'i str, Vec<&'i str>)>,

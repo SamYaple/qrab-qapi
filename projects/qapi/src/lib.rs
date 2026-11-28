@@ -52,11 +52,13 @@ pub use qapi_core::{
     to_value, with_version,
 };
 
-/// Inspect and decode a QAPI union branch selected by its discriminator.
-/// Flat union payloads are objects; historical simple unions can carry any JSON value.
+/// Inspect and decode a QAPI union branch selected by its discriminator. Flat
+/// union payloads are objects; historical simple unions can carry any JSON
+/// value.
 pub trait QapiFlatUnion: Sized {
     /// The branch's wire tag, when known. Serializers use it to check the
-    /// explicit discriminator; handwritten implementations may keep the default.
+    /// explicit discriminator; handwritten implementations may keep the
+    /// default.
     fn wire_tag(&self) -> Option<&'static str> {
         None
     }

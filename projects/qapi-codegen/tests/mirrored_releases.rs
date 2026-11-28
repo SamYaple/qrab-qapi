@@ -1,4 +1,5 @@
-//! Explicit broad scan; normal generation remains independent of extra local tags.
+//! Explicit broad scan; normal generation remains independent of extra local
+//! tags.
 use qapi_codegen::{
     unified::{build_qga_registry, build_qmp_registry},
     versions::{

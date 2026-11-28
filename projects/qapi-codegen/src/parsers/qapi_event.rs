@@ -77,7 +77,8 @@ impl<'i> QapiEvent<'i> {
             return Err(nom::Err::Error(Error::new(start, ErrorKind::Tag)));
         }
         // Named boxed payload requirements are checked after schema resolution.
-        // the qapi spec needs to be correct here, data being equal to None is allowed for us.
+        // the qapi spec needs to be correct here, data being equal to None is
+        // allowed for us.
         s.keys = keys;
         s.text = expression_text(start, input);
         Ok((input, s))

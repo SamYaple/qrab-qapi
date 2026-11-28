@@ -173,7 +173,8 @@ async fn descriptors_of_a_refused_request_are_closed() {
     });
     let (qmp, _events) = Qmp::new(&path).await.unwrap();
     let (read, write) = rustix::pipe::pipe().unwrap();
-    // Invalid arguments are refused before any I/O, and the descriptor goes with it.
+    // Invalid arguments are refused before any I/O, and the descriptor goes
+    // with it.
     assert!(matches!(
         qmp.execute_raw_with_fds::<Value>("getfd", json!([]), vec![read]).await,
         Err(qapi_protocol::Error::InvalidRequest(

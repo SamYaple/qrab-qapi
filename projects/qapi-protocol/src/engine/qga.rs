@@ -72,10 +72,11 @@ enum Step {
 ///
 /// The client writes each frame of [`poll_transmit`](Self::poll_transmit)
 /// before it reads on. While [`is_syncing`](Self::is_syncing), it passes the
-/// lines of the sentinel scan ([`Inbound::sync_line`](super::Inbound::sync_line))
-/// to [`handle_sync_line`](Self::handle_sync_line), and then the messages
-/// to [`handle_frame`](Self::handle_frame), until [`is_done`](Self::is_done).
-/// Any error ends the connection.
+/// lines of the sentinel scan
+/// ([`Inbound::sync_line`](super::Inbound::sync_line)) to
+/// [`handle_sync_line`](Self::handle_sync_line), and then the messages to
+/// [`handle_frame`](Self::handle_frame), until [`is_done`](Self::is_done). Any
+/// error ends the connection.
 pub(crate) struct QgaHandshake {
     step: Step,
     nonce: i64,

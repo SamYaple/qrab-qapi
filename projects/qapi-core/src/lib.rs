@@ -186,7 +186,10 @@ pub fn set_qemu_version(
 /// struct AddedIn10(u32);
 ///
 /// impl Serialize for AddedIn10 {
-///     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+///     fn serialize<S: Serializer>(
+///         &self,
+///         serializer: S,
+///     ) -> Result<S::Ok, S::Error> {
 ///         if qapi_core::qemu_version() < (10, 0, 0) {
 ///             return Err(qapi_core::unavailable_error("AddedIn10"));
 ///         }
@@ -331,7 +334,9 @@ pub fn unavailable_error<E: serde::ser::Error>(name: &str) -> E {
 ///
 /// ```
 /// assert_eq!(
-///     qapi_core::with_version((9, 2, 0), || qapi_core::unavailable_type_message("AddedIn10")),
+///     qapi_core::with_version((9, 2, 0), || {
+///         qapi_core::unavailable_type_message("AddedIn10")
+///     }),
 ///     "AddedIn10 is not available in QEMU 9.2.0",
 /// );
 /// ```

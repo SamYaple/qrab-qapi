@@ -569,8 +569,8 @@ impl EnumExpansion<'_> {
 }
 
 /// Try narrow JSON shapes before permissive payloads. Integers precede floats
-/// because serde accepts integer JSON as f64, losing precision for large values.
-/// Pre-2.10 QAPI alternates distinguish those two numeric branches.
+/// because serde accepts integer JSON as f64, losing precision for large
+/// values. Pre-2.10 QAPI alternates distinguish those two numeric branches.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum AlternateShape {
     Null,

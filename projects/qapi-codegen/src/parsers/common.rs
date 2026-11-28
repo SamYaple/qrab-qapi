@@ -301,7 +301,8 @@ where
 {
     move |mut input: &'i str| {
         let mut items = Vec::new();
-        // Try to parse the first item (with optional leading whitespace via clean_lines)
+        // Try to parse the first item (with optional leading whitespace via
+        // clean_lines)
         let first_input =
             clean_lines.parse(input).map(|(i, _)| i).unwrap_or(input);
         match item_parser.parse(first_input) {
@@ -337,7 +338,8 @@ where
                     input = remaining;
                 }
                 Err(nom::Err::Error(_)) => {
-                    // No more items — if we consumed a comma, that's a trailing comma (ok)
+                    // No more items — if we consumed a comma, that's a trailing
+                    // comma (ok)
                     return Ok((after_comma, items));
                 }
                 Err(e) => return Err(e),

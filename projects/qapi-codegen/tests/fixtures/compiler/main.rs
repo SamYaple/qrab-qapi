@@ -522,7 +522,8 @@ fn main() {
                 serde_json::json!(wire)
             );
         }
-        // Schema optionality still describes the member when its peer condition holds.
+        // Schema optionality still describes the member when its peer condition
+        // holds.
         assert!(
             metadata::STRUCTS
                 .get("PeerFields")

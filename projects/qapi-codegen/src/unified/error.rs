@@ -20,7 +20,8 @@ use std::{
 /// ```
 /// use qapi_codegen::unified::{SchemaError, SchemaErrorKind};
 ///
-/// let error = SchemaError::from(SchemaErrorKind::InvalidName { name: "q-x".into() });
+/// let error =
+///     SchemaError::from(SchemaErrorKind::InvalidName { name: "q-x".into() });
 /// assert_eq!(error.to_string(), "Invalid QAPI name 'q-x'");
 /// assert_eq!(error.file(), None);
 /// assert_eq!(error.line(), None);
@@ -552,7 +553,8 @@ pub enum SchemaErrorKind {
         /// The enum value.
         branch: String,
     },
-    /// Documentation that names another symbol than its definition, from QEMU 2.9.
+    /// Documentation that names another symbol than its definition, from QEMU
+    /// 2.9.
     #[error("documentation comment is for '{documented}'")]
     DocumentationSymbol {
         /// The definition the documentation names.

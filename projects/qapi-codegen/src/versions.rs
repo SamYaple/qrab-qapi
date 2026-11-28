@@ -109,7 +109,8 @@ pub struct ExtractedSchemas {
 }
 
 impl ExtractedSchemas {
-    /// The directory the release's `qapi`, `qga` and top-level schema files are in.
+    /// The directory the release's `qapi`, `qga` and top-level schema files are
+    /// in.
     pub fn path(&self) -> &Path {
         self.dir.path()
     }

@@ -245,7 +245,8 @@ impl Qga {
 
     /// Send an explicitly response-less command and close the connection.
     /// Success only means the bytes were written. The agent can still fail the
-    /// command or shut down later, and no remote success acknowledgement exists.
+    /// command or shut down later, and no remote success acknowledgement
+    /// exists.
     pub async fn send_no_response<C: QapiCommand<Returns = ()>>(
         &mut self,
         cmd: &C,

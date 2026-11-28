@@ -123,11 +123,13 @@ impl<'i> QapiUnion<'i> {
         }
         s.keys = keys;
         s.text = expression_text(start, input);
-        // v2: both simple (no discriminator) and flat (with discriminator) are valid
+        // v2: both simple (no discriminator) and flat (with discriminator) are
+        // valid
         Ok((input, s))
     }
 
-    /// v3 (QEMU v6.2.0+): discriminated (flat) unions only — base + discriminator required.
+    /// v3 (QEMU v6.2.0+): discriminated (flat) unions only — base +
+    /// discriminator required.
     pub(crate) fn parse_v3(input: &'i str) -> IResult<&'i str, Self> {
         let (input, doc) = opt(QapiDocumentation::parse).parse(input)?;
         let mut s = Self { doc, ..Default::default() };

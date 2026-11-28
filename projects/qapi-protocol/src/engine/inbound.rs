@@ -123,7 +123,8 @@ impl Inbound {
                 }
             }
             let take = end.unwrap_or(input.len());
-            // A CR belongs to the terminator; leave one byte of allowance until LF.
+            // A CR belongs to the terminator; leave one byte of allowance until
+            // LF.
             if self.partial.len().saturating_add(take) > limit.saturating_add(1)
             {
                 return Err(Error::MessageTooLarge { limit });

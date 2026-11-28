@@ -68,7 +68,8 @@ impl<'i> QapiCommand<'i> {
         }
     }
 
-    /// v1 (QEMU v1.0–v2.3.0): accepts `'gen': 'no'`/`'gen': 'yes'` (string booleans).
+    /// v1 (QEMU v1.0–v2.3.0): accepts `'gen': 'no'`/`'gen': 'yes'` (string
+    /// booleans).
     pub(crate) fn parse_v1(input: &'i str) -> IResult<&'i str, Self> {
         Self::parse_common(input, true)
     }

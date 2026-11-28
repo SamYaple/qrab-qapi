@@ -558,8 +558,8 @@ pub(crate) fn process_union(
                     member: clash.name.clone(),
                 });
             }
-            // Its wire name is QAPI's; its IR name keeps it apart from the `type`
-            // member that a later release of the union may declare.
+            // Its wire name is QAPI's; its IR name keeps it apart from the
+            // `type` member that a later release of the union may declare.
             let mut meta = Metadata::default();
             meta.attributes.push(Attribute::new("discriminator"));
             meta.attributes.push(Attribute::with_value("name", "type"));
@@ -1482,7 +1482,9 @@ mod tests {
     #[test]
     fn test_process_struct_with_inline_struct() {
         // Simulates VersionInfo.qemu from v1.1.0:
-        // { 'type': 'VersionInfo', 'data': { 'qemu': {'major': 'int', 'minor': 'int', 'micro': 'int'}, ... } }
+        // { 'type': 'VersionInfo', 'data': {
+        //     'qemu': { 'major': 'int', 'minor': 'int', 'micro': 'int' },
+        //     ... } }
         let int = || QapiTypeRef::Ref("int".into());
         let q = QapiStruct {
             name: "VersionInfo".into(),

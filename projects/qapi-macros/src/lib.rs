@@ -60,34 +60,41 @@ use syn::{DeriveInput, parse_macro_input};
 /// attribute is an error at its path, and one above it conflicts with the
 /// expansion.
 ///
-/// The item is `#[non_exhaustive]`, so that a new QEMU release can add
-/// fields and variants without breaking code outside the crate: such code
-/// matches an enum with a wildcard arm and builds a struct with one of the
-/// constructors the expansion gives it. A struct whose fields are all
-/// `Option`, or that has none, implements `Default`, with every field
-/// `None`, and the fields are then assigned. Any other struct has
-/// `new`, which takes its non-`Option` fields in declaration order and
-/// leaves the others `None`; a struct does not derive `Default` itself.
-/// Enum variants are constructed as usual. String enums also implement `Display`, writing the wire name.
-/// Structs implement it as their QAPI name; a struct with fields that is
-/// not a command follows it with the fields that are set, as
-/// `name(wire=value, ...)` with each value in its `Debug` form.
-/// Generic items are not supported.
+/// The item is `#[non_exhaustive]`, so that a new QEMU release can add fields
+/// and variants without breaking code outside the crate: such code matches an
+/// enum with a wildcard arm and builds a struct with one of the constructors
+/// the expansion gives it. A struct whose fields are all `Option`, or that has
+/// none, implements `Default`, with every field `None`, and the fields are then
+/// assigned. Any other struct has `new`, which takes its non-`Option` fields in
+/// declaration order and leaves the others `None`; a struct does not derive
+/// `Default` itself. Enum variants are constructed as usual. String enums also
+/// implement `Display`, writing the wire name. Structs implement it as their
+/// QAPI name; a struct with fields that is not a command follows it with the
+/// fields that are set, as `name(wire=value, ...)` with each value in its
+/// `Debug` form. Generic items are not supported.
 ///
 /// ```
 /// # // A stand-in for qrab-qapi, which this crate cannot depend on: the
 /// # // example crate names itself `qapi`.
 /// # extern crate self as qapi;
 /// # use std::cell::Cell;
-/// # thread_local!(static VERSION: Cell<Option<(u32, u32, u32)>> = const { Cell::new(None) });
-/// # pub fn with_version<T>(version: (u32, u32, u32), f: impl FnOnce() -> T) -> T {
+/// # thread_local! {
+/// #     static VERSION: Cell<Option<(u32, u32, u32)>> =
+/// #         const { Cell::new(None) };
+/// # }
+/// # pub fn with_version<T>(
+/// #     version: (u32, u32, u32),
+/// #     f: impl FnOnce() -> T,
+/// # ) -> T {
 /// #     let outer = VERSION.replace(Some(version));
 /// #     let result = f();
 /// #     VERSION.set(outer);
 /// #     result
 /// # }
 /// # pub fn scoped_qemu_version() -> Option<(u32, u32, u32)> { VERSION.get() }
-/// # pub fn qemu_version() -> (u32, u32, u32) { VERSION.get().unwrap_or((0, 0, 0)) }
+/// # pub fn qemu_version() -> (u32, u32, u32) {
+/// #     VERSION.get().unwrap_or((0, 0, 0))
+/// # }
 /// # pub mod __private {
 /// #     pub use serde;
 /// #     pub fn unavailable_type_message(name: &str) -> String {
@@ -119,9 +126,14 @@ use syn::{DeriveInput, parse_macro_input};
 /// );
 ///
 /// let decode = |version, json| {
-///     qapi::with_version(version, || serde_json::from_str::<BlockdevDriver>(json))
+///     qapi::with_version(version, || {
+///         serde_json::from_str::<BlockdevDriver>(json)
+///     })
 /// };
-/// assert!(matches!(decode((2, 5, 0), r#""archipelago""#), Ok(BlockdevDriver::Archipelago)));
+/// assert!(matches!(
+///     decode((2, 5, 0), r#""archipelago""#),
+///     Ok(BlockdevDriver::Archipelago)
+/// ));
 /// assert_eq!(
 ///     decode((9, 2, 0), r#""archipelago""#).unwrap_err().to_string(),
 ///     "BlockdevDriver::Archipelago is not available in QEMU 9.2.0",

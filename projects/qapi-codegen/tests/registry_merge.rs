@@ -226,9 +226,9 @@ fn tolerated_schema_quirks_are_returned_as_warnings() {
 // ── Boxed commands ──
 
 /// When a command uses `'data': 'TypeRef', 'boxed': true` and the command name
-/// rustifies to a different name than the data type (e.g., netdev_add -> NetdevAdd
-/// vs Netdev -> Netdev), the command struct must survive as its own entry in the
-/// registry, not be merged onto the data type and lost.
+/// rustifies to a different name than the data type (e.g., netdev_add ->
+/// NetdevAdd vs Netdev -> Netdev), the command struct must survive as its own
+/// entry in the registry, not be merged onto the data type and lost.
 #[test]
 fn test_boxed_command_different_name_not_lost() {
     let boxed_commands = [

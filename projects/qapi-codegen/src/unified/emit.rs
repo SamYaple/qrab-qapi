@@ -442,7 +442,8 @@ fn separate_items(code: &str) -> String {
     let mut result = String::with_capacity(code.len() + code.len() / 20);
     let mut prev_line = "";
     for line in code.lines() {
-        // Insert blank line after a top-level item ends (line is or ends with `}`)
+        // Insert blank line after a top-level item ends (line is or ends with
+        // `}`)
         let prev_ends_item = prev_line == "}" || prev_line.ends_with(" {}");
         if prev_ends_item && !line.is_empty() {
             result.push('\n');

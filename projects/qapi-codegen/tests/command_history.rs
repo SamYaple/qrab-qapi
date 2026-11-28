@@ -82,7 +82,8 @@ fn main() {
         assert!(serde_json::to_value(Late {value:"data".into()}).is_ok());
         assert!(serde_json::to_value(commands::LateCommand {value:"request".into()}).is_err());
     });
-    // The first run keeps the plain names; the run that returns is named after it.
+    // The first run keeps the plain names; the run that returns is named after
+    // it.
     with_version((6,1,0), || {
         let command = commands::FooCommand { value:"old".into() };
         assert_eq!(commands::FooCommand::NAME, "foo");

@@ -29,9 +29,10 @@ thread_local! {
     static PARSER_VERSION: Cell<(u32, u32, u32)> = const { Cell::new((99, 0, 0)) };
 }
 
-/// Set the QEMU schema version for parser dispatch.
-/// Each parser's `parse()` uses this to select the correct versioned parser.
-/// Prefer `with_parser_version` for operations that should restore the caller's grammar.
+/// Set the QEMU schema version for parser dispatch. Each parser's `parse()`
+/// uses this to select the correct versioned parser. Prefer
+/// `with_parser_version` for operations that should restore the caller's
+/// grammar.
 pub fn set_parser_version(v: (u32, u32, u32)) {
     PARSER_VERSION.with(|c| c.set(v));
 }

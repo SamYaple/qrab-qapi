@@ -729,13 +729,15 @@ impl ErrorClass {
 ///
 /// ```
 /// use qapi::events::BlockIoErrorEvent;
-/// let event: qapi_protocol::QmpEvent = serde_json::from_value(serde_json::json!({
-///     "event": "BLOCK_IO_ERROR",
-///     "data": {"device": "", "node-name": "disk0", "operation": "read",
-///              "action": "report", "reason": "Input/output error"},
-///     "timestamp": {"seconds": 1, "microseconds": 0},
-/// }))?;
-/// let decode = || serde_json::from_value::<BlockIoErrorEvent>(event.data.clone());
+/// let event: qapi_protocol::QmpEvent =
+///     serde_json::from_value(serde_json::json!({
+///         "event": "BLOCK_IO_ERROR",
+///         "data": {"device": "", "node-name": "disk0", "operation": "read",
+///                  "action": "report", "reason": "Input/output error"},
+///         "timestamp": {"seconds": 1, "microseconds": 0},
+///     }))?;
+/// let decode =
+///     || serde_json::from_value::<BlockIoErrorEvent>(event.data.clone());
 /// let scoped = qapi::with_version((2, 11, 0), decode)?;
 /// assert_eq!(scoped.node_name_legacy.as_deref(), Some("disk0"));
 /// let unscoped = decode()?;
@@ -747,7 +749,8 @@ impl ErrorClass {
 ///
 /// ```
 /// use qapi_protocol::{QmpEvent, Timestamp};
-/// let event = QmpEvent::new("POWER", Timestamp::new(-1, -1), serde_json::json!({}));
+/// let event =
+///     QmpEvent::new("POWER", Timestamp::new(-1, -1), serde_json::json!({}));
 /// assert_eq!(event.event, "POWER");
 /// ```
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

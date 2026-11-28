@@ -284,7 +284,8 @@ async fn pretty_printed_json_and_escaped_delimiters_are_framed_as_one_message()
     )
     .unwrap();
     bytes.extend_from_slice(b"\r\n");
-    // Split in the middle of an escaped string to exercise persistent lexer state.
+    // Split in the middle of an escaped string to exercise persistent lexer
+    // state.
     for chunk in bytes.chunks(7) {
         writer.write_all(chunk).await.unwrap();
         tokio::task::yield_now().await;

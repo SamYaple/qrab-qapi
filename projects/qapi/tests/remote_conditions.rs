@@ -1,4 +1,5 @@
-//! The peer's QEMU/guest build does not have to match the Rust client's host OS.
+//! The peer's QEMU/guest build does not have to match the Rust client's host
+//! OS.
 use serde_json::json;
 
 #[qapi::qapi(condition = "CONFIG_WIN32")]

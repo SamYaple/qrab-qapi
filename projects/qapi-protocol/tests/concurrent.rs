@@ -109,7 +109,8 @@ async fn oob_bypasses_saturated_normal_admission_and_shutdown_wakes_everyone() {
     assert!(request.oob);
     peer.send_return_with_id(json!([]), request.id).await.unwrap();
     assert_eq!(oob.await.unwrap().unwrap(), json!([]));
-    // This is real client shutdown, not killing the mock server as a workaround.
+    // This is real client shutdown, not killing the mock server as a
+    // workaround.
     client.shutdown().await;
     for task in tasks {
         assert!(matches!(task.await.unwrap(), Err(Error::Disconnected(_))));

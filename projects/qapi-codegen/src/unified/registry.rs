@@ -11,7 +11,8 @@ use super::{
 };
 
 /// Parse the QMP schemas of the given release tags and merge them into one
-/// registry. Releases before 1.0, which have no QMP schema, are left out. Extraction and parsing run in parallel across versions; merging is
+/// registry. Releases before 1.0, which have no QMP schema, are left out.
+/// Extraction and parsing run in parallel across versions; merging is
 /// sequential, in release order.
 pub fn build_qmp_registry(
     qemu_repo: &Path,
@@ -62,7 +63,8 @@ pub(super) fn merge_releases(
         prev_hash = Some(vr.schema_hash);
         tags.entry(vr.version).or_insert_with(|| vr.tag.clone());
 
-        // In name order, so that the refused lifetime reported is always the same.
+        // In name order, so that the refused lifetime reported is always the
+        // same.
         let mut enums: Vec<_> = vr.enums.iter().collect();
         enums.sort_by_key(|(name, _)| name.as_str());
         let mut structs: Vec<_> = vr.structs.iter().collect();

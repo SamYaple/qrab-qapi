@@ -276,7 +276,8 @@ pub enum IncludeError {
     },
 }
 
-/// Parse one file with an explicit grammar, restoring the caller's parser version.
+/// Parse one file with an explicit grammar, restoring the caller's parser
+/// version.
 #[doc(hidden)]
 pub fn parse_schema_with_version(
     input: &str,
@@ -377,13 +378,15 @@ pub(crate) fn position(input: &str, offset: usize) -> (usize, usize) {
     (line, column)
 }
 
-/// Read a schema file and the files it includes, parsing each to find the includes.
+/// Read a schema file and the files it includes, parsing each to find the
+/// includes.
 ///
-/// `Some(version)` reads under that grammar and restores the caller's afterwards,
-/// as [`with_parser_version`] does; `None` reads under the current [`parser_version`].
-/// The parser handles the format of each release directly, except that from
-/// 1.2 to 1.5 an expression with characters outside strings that QEMU's
-/// tokenizer drops, such as `true`, is read as that tokenizer reads it.
+/// `Some(version)` reads under that grammar and restores the caller's
+/// afterwards, as [`with_parser_version`] does; `None` reads under the current
+/// [`parser_version`]. The parser handles the format of each release directly,
+/// except that from 1.2 to 1.5 an expression with characters outside strings
+/// that QEMU's tokenizer drops, such as `true`, is read as that tokenizer reads
+/// it.
 #[doc(hidden)]
 pub fn read_schema_with_version(
     schema_file: &Path,

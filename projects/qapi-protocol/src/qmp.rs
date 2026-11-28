@@ -193,9 +193,12 @@ impl Qmp {
     /// expires.
     ///
     /// ```no_run
-    /// # async fn run(stream: tokio::net::UnixStream) -> qapi_protocol::Result<()> {
+    /// # async fn run(
+    /// #     stream: tokio::net::UnixStream,
+    /// # ) -> qapi_protocol::Result<()> {
     /// use qapi_protocol::{ClientOptions, Qmp};
-    /// let (qmp, _events, driver) = Qmp::handshake(stream, ClientOptions::default()).await?;
+    /// let (qmp, _events, driver) =
+    ///     Qmp::handshake(stream, ClientOptions::default()).await?;
     /// tokio::spawn(driver);
     /// println!("QEMU {:?}", qmp.version());
     /// # Ok(())
@@ -291,14 +294,18 @@ impl Qmp {
     /// # async fn run(qmp: &qapi_protocol::Qmp) -> qapi_protocol::Result<()> {
     /// use qapi::commands::{BlockdevAdd, QueryStatus};
     /// use qapi_protocol::Required;
-    /// qmp.require(&[Required::of::<QueryStatus>(), Required::of::<BlockdevAdd>()])?;
+    /// qmp.require(&[
+    ///     Required::of::<QueryStatus>(),
+    ///     Required::of::<BlockdevAdd>(),
+    /// ])?;
     /// # Ok(())
     /// # }
     /// ```
     pub fn require(&self, required: &[Required]) -> Result<()> {
         crate::require(required, self.version(), self.commands())
     }
-    /// Number of dispatched requests awaiting a reply, including cancelled callers.
+    /// Number of dispatched requests awaiting a reply, including cancelled
+    /// callers.
     pub fn queue_depth(&self) -> usize {
         self.shared.depth.load(Ordering::Relaxed)
     }
@@ -381,9 +388,9 @@ impl Qmp {
         qapi_core::with_version(self.version(), || wire::decode(&reply))
     }
 
-    /// Run the command `name` with `args`, a JSON object (`{}` for none),
-    /// and decode its reply into `T`, such as a `serde_json::Value`, in the
-    /// peer's version scope, as [`Qga::execute_raw`](crate::qga::Qga::execute_raw)
+    /// Run the command `name` with `args`, a JSON object (`{}` for none), and
+    /// decode its reply into `T`, such as a `serde_json::Value`, in the peer's
+    /// version scope, as [`Qga::execute_raw`](crate::qga::Qga::execute_raw)
     /// does. The connection owns the request ID. A name that the peer's
     /// [`commands`](Self::commands) do not list fails before anything is sent.
     pub async fn execute_raw<T: DeserializeOwned + 'static>(

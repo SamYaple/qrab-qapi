@@ -38,7 +38,8 @@ fn plan_version(
     Ok((symbols, used))
 }
 
-/// The name a definition's documentation block gives, with the definition's own.
+/// The name a definition's documentation block gives, with the definition's
+/// own.
 fn documented_symbol<'a>(
     token: &'a QapiSchemaToken<'_>,
 ) -> Option<(&'a str, &'a str)> {
@@ -899,7 +900,8 @@ pub(super) fn process_version_schema_with_names(
                 .push(Attribute::with_value("name", processed.name.clone()));
             processed.name.clone_from(command_name);
             cmd_key = rustify_name(&processed.name);
-            // The plan gives that name to nothing else, nor do the extracted types take it.
+            // The plan gives that name to nothing else, nor do the extracted
+            // types take it.
             assert!(
                 !occupied.contains(&cmd_key),
                 "{cmd_key} is planned for the command alone"
@@ -994,7 +996,8 @@ pub(super) fn normalize_member_names(versions: &mut [VersionResult]) {
                 if !group.collision {
                     continue;
                 }
-                // Declared wire fields keep priority over virtual flatten receivers.
+                // Declared wire fields keep priority over virtual flatten
+                // receivers.
                 group
                     .identities
                     .sort_by_key(|(_, virtual_field)| *virtual_field);

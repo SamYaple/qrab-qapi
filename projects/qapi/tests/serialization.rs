@@ -311,7 +311,8 @@ fn sev_info_deser_snp_variant() {
 
 #[test]
 fn sev_info_deser_pre_91() {
-    // Pre-9.1.0 QEMU: no sev-type, no union branch, has handle/policy as direct fields
+    // Pre-9.1.0 QEMU: no sev-type, no union branch, has handle/policy as direct
+    // fields
     let json = r#"{"api-major":1,"api-minor":55,"build-id":49,"enabled":true,"state":"running","handle":1,"policy":1}"#;
     let info: SevInfo = serde_json::from_str(json).unwrap();
     assert!(info.enabled);

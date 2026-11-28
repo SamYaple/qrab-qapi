@@ -2,8 +2,10 @@
 //! clients. Enabled by the `mock` feature; add it to the dev-dependency:
 //!
 //! ```toml
-//! [dev-dependencies]
-//! qapi-protocol = { package = "qrab-qapi-protocol", version = "0.1", features = ["mock"] }
+//! [dev-dependencies.qapi-protocol]
+//! package = "qrab-qapi-protocol"
+//! version = "0.1"
+//! features = ["mock"]
 //! ```
 use crate::{
     Error, ProtocolViolation, Result, engine,

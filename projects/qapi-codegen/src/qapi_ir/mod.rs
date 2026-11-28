@@ -211,7 +211,8 @@ pub enum Attribute {
     List(Vec<Attribute>),
     /// A key alone, such as `command`.
     Unit(String),
-    /// A key with nested attributes, such as `allow_preconfig(added = "7.1.0")`.
+    /// A key with nested attributes, such as `allow_preconfig(added =
+    /// "7.1.0")`.
     Nested { name: String, inner: Vec<Attribute> },
 }
 
@@ -247,7 +248,8 @@ impl Attribute {
         Self::List(attrs)
     }
 
-    /// A key with nested attributes, such as `name(added = "1.0.0", removed = "2.0.0")`.
+    /// A key with nested attributes, such as `name(added = "1.0.0", removed =
+    /// "2.0.0")`.
     pub(crate) fn nested<N: ToString>(name: N, inner: Vec<Attribute>) -> Self {
         Self::Nested { name: name.to_string(), inner }
     }

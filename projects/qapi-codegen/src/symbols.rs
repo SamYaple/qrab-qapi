@@ -792,7 +792,8 @@ mod tests {
 
     #[test]
     fn wire_distinct_events_of_one_rust_name_get_names_of_their_own() {
-        // The earlier event keeps the plain name, whatever the spellings' order.
+        // The earlier event keeps the plain name, whatever the spellings'
+        // order.
         let after = symbols(&[
             ((5, 0, 0), "{'event':'NOTICE__BAR'}"),
             ((5, 1, 0), "{'event':'NOTICE_BAR'} {'event':'NOTICE__BAR'}"),

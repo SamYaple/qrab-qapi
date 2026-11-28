@@ -81,7 +81,8 @@ impl<R: AsyncRead + Unpin> JsonReader<R> {
 }
 
 /// write_all can partially write or be cancelled. The owner must discard the
-/// session on any failure; putting bytes in one buffer does not make I/O atomic.
+/// session on any failure; putting bytes in one buffer does not make I/O
+/// atomic.
 #[cfg(feature = "mock")]
 pub(crate) async fn write_json<W: AsyncWrite + Unpin>(
     writer: &mut W,

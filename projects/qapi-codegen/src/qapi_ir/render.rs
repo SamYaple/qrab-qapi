@@ -1,4 +1,5 @@
-//! Rendering of the IR as Rust tokens, with rustdoc and `#[qapi(...)]` attributes.
+//! Rendering of the IR as Rust tokens, with rustdoc and `#[qapi(...)]`
+//! attributes.
 
 use super::{
     Attribute, Enum, EnumVariantKind, Struct, rustify_field, rustify_name,
@@ -85,7 +86,8 @@ impl Struct {
             if field.array {
                 field_type = quote!( Vec<#field_type> );
             }
-            // "boxed" marks a recursive field; it is internal, not a #[qapi] option.
+            // "boxed" marks a recursive field; it is internal, not a #[qapi]
+            // option.
             let is_boxed =
                 |attr: &Attribute| matches!(attr, Attribute::Unit(name) if name == "boxed");
             if field.meta.attributes.iter().any(is_boxed) {
@@ -326,7 +328,8 @@ fn render_doc(doc: &str) -> Vec<String> {
             while index < lines.len() {
                 let (indent, text) = indentation(lines[index]);
                 if text.is_empty() {
-                    // Blank lines belong to the block when it continues after them.
+                    // Blank lines belong to the block when it continues after
+                    // them.
                     let next = lines[index..]
                         .iter()
                         .map(|line| indentation(line))

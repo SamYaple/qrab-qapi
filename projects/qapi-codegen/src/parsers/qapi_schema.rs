@@ -250,7 +250,8 @@ fn invalid_documentation(input: &str) -> IResult<&str, QapiSchemaToken<'_>> {
     )))
 }
 
-/// Matches a bare `##` line (with optional trailing whitespace) that acts as a separator.
+/// Matches a bare `##` line (with optional trailing whitespace) that acts as a
+/// separator.
 fn bare_doc_separator(input: &str) -> IResult<&str, &str> {
     recognize(terminated((space0, tag("##"), space0), line_ending)).parse(input)
 }
@@ -302,8 +303,9 @@ mod tests {
 
     #[test]
     fn test_comment_and_whitespace() {
-        // Comments before a definition get absorbed by clean_lines during parsing.
-        // A standalone comment only appears as a Comment token when not adjacent to a definition.
+        // Comments before a definition get absorbed by clean_lines during
+        // parsing. A standalone comment only appears as a Comment token when
+        // not adjacent to a definition.
         let input = "# a comment\n{ 'enum': 'E', 'data': ['a'] }\n";
         let (rem, s) = QapiSchema::parse(input).unwrap();
         assert_eq!(rem, "");

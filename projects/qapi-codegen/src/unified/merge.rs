@@ -37,8 +37,9 @@ fn extract_bool_attr_versions(
     map
 }
 
-/// Merge boolean command attributes from a new version's struct into an existing UnifiedStruct.
-/// Adds newly-appearing attributes, marks removed ones with `until`.
+/// Merge boolean command attributes from a new version's struct into an
+/// existing UnifiedStruct. Adds newly-appearing attributes, marks removed ones
+/// with `until`.
 fn merge_bool_attrs(
     existing: &mut UnifiedStruct,
     new_meta: &Metadata,
@@ -119,9 +120,9 @@ fn same_variant_shape(left: &EnumVariant, right: &EnumVariant) -> bool {
         }
 }
 
-/// Materialize old payloads only after merging, so synthetic names never look like schema renames.
-/// Each earlier payload shape or wire spelling becomes a variant of its own,
-/// named as [`legacy_names`] says from `{Variant}Legacy`.
+/// Materialize old payloads only after merging, so synthetic names never look
+/// like schema renames. Each earlier payload shape or wire spelling becomes a
+/// variant of its own, named as [`legacy_names`] says from `{Variant}Legacy`.
 pub(super) fn materialize_variant_history(
     registry: &mut UnifiedRegistry,
     protocol: &'static str,
@@ -534,7 +535,8 @@ pub(super) fn merge_enum(
                     }
                 }
             } else {
-                // Check if this is a rename (same Rust name, different QAPI name)
+                // Check if this is a rename (same Rust name, different QAPI
+                // name)
                 let rust_name = variant_rust_name(variant);
                 let renamed_from = existing.ir.variants.iter().position(|v| {
                     variant_rust_name(v) == rust_name && v.name != variant.name
@@ -554,7 +556,8 @@ pub(super) fn merge_enum(
                         VersionRange::new(version),
                     );
                 } else {
-                    // A new variant: the IR has exactly the variants with a range.
+                    // A new variant: the IR has exactly the variants with a
+                    // range.
                     existing.variant_versions.insert(
                         variant.name.clone(),
                         VersionRange::new(version),
@@ -748,7 +751,8 @@ pub(super) fn merge_struct(
             &s.name,
             &s.meta,
         );
-        // Merge version-tracked boolean command attributes (allow_preconfig, allow_oob, etc.)
+        // Merge version-tracked boolean command attributes (allow_preconfig,
+        // allow_oob, etc.)
         merge_bool_attrs(existing, &s.meta, version);
         merge_returns(existing, &s.meta, version);
         // Union struct-level attributes across versions: keep the older
@@ -922,7 +926,8 @@ pub(super) fn fix_recursive_types(registry: &mut UnifiedRegistry) {
     // Collect (type_name, field_name) pairs that need Box wrapping, then
     // apply mutations after releasing the immutable borrow on registry.
     let needs_box: BTreeSet<(String, String)> = {
-        // Only inline references affect Rust size; Vec and Box already break cycles.
+        // Only inline references affect Rust size; Vec and Box already break
+        // cycles.
         let mut deps: HashMap<String, BTreeSet<String>> = HashMap::new();
         for (name, ut) in &registry.types {
             let mut referenced = BTreeSet::new();
