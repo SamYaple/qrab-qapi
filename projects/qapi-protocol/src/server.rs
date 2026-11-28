@@ -4,7 +4,7 @@
 //! ```toml
 //! [dev-dependencies.qapi-protocol]
 //! package = "qrab-qapi-protocol"
-//! version = "0.1"
+//! version = "0.2"
 //! features = ["mock"]
 //! ```
 use crate::{
