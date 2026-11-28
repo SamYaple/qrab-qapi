@@ -83,19 +83,24 @@ name `guest-info` itself. `ClientOptions::probe_commands` set to false (or
 
 ## QMP requests and lifecycle
 
-One task owns the socket and routing table. Reads and partial writes progress
-independently, so a large upload cannot prevent reading an earlier reply.
-Request IDs belong to the connection. Typed calls use `qapi::commands` and
-decode the reply into `QapiCommand::Returns` in the peer's version scope, which
-selects the return type of the peer's release for a command whose return type
-changed. `execute_raw(name, args)` runs a command by name with a JSON object of
+The connection's driver owns the socket and routing table: `from_stream` and
+the connecting constructors spawn it on tokio, and `Qmp::handshake` returns it
+as a `QmpDriver` future for code that runs it itself, such as on a `LocalSet`
+or next to its own work. Until the driver runs, no request is sent and no
+deadline expires. Reads and partial writes progress independently, so a large
+upload cannot prevent reading an earlier reply. Request IDs belong to the
+connection. Typed calls use `qapi::commands` and decode the reply into
+`QapiCommand::Returns` in the peer's version scope, which selects the return
+type of the peer's release for a command whose return type changed.
+`execute_raw(name, args)` runs a command by name with a JSON object of
 arguments (`{}` for none) and decodes the reply into the caller's type in the
 peer's version scope, as the guest agent's `execute_raw` does;
 `execute_raw_oob` sends it as `exec-oob`. The client builds the envelope and
 owns its ID, so the name and the arguments are all a caller can get wrong: an
-empty name or arguments that are not an object fail before any socket I/O. Unknown
-response IDs of any JSON type are dropped as required by QMP. An ID-less server
-parser error closes the connection while preserving its error class and description.
+empty name or arguments that are not an object fail before any socket I/O.
+Unknown response IDs of any JSON type are dropped as required by QMP. An
+ID-less server parser error closes the connection while preserving its error
+class and description.
 
 `execute_raw_with_fds` (and its `getfd(name, fd)` shorthand) attaches file
 descriptors to an in-band command as SCM_RIGHTS, the way QEMU's `getfd` and
@@ -107,11 +112,12 @@ the request is refused or expires.
 
 Admission is bounded to eight unanswered in-band commands
 (`QMP_QUEUE_CAPACITY`), following QEMU's recommendation for keeping OOB
-responsive. A separate eight-command bound limits OOB requests. Permits belong
-to dispatched requests, not their callers: cancelling a future cannot free a
-slot while QEMU may still be executing it. Requests cancelled while still
-queued are skipped. `queue_depth()` counts dispatched requests, including OOB
-and requests whose callers were cancelled.
+responsive. A separate eight-command bound limits OOB requests. Requests that
+wait for a slot queue in the driver, out-of-band ones before in-band ones.
+Slots belong to dispatched requests, not their callers: cancelling a future
+cannot free a slot while QEMU may still be executing it. Requests cancelled
+while still queued are skipped. `queue_depth()` counts dispatched requests,
+including OOB and requests whose callers were cancelled.
 
 Command deadlines cover admission, queued writes and waiting for a reply. They
 can be configured per connection, or per call: each call has a `_with_timeout`
@@ -127,14 +133,13 @@ still within their deadlines get `Error::Disconnected` holding it. No
 automatic retry occurs: cancellation, timeout or disconnect never proves that
 a command did not execute.
 
-`shutdown(&self)` works through `Arc<Qmp>`, wakes both admitted callers and
-callers waiting for capacity, closes the socket and ends the driver. It is
-async because it waits for that driver task to stop, while the guest agent's
-`shutdown(&mut self)`, on a client with one owner and no task, only drops the
-socket. Dropping
-the owner aborts the driver with the same cleanup. `is_closed()`,
-`close_reason()` and `closed().await` expose connection lifecycle. Pending
-callers share the original failure via `Error::Disconnected`.
+`shutdown(&self)` works through `Arc<Qmp>`, wakes both dispatched callers and
+those still queued, closes the socket and ends the driver. It is async because
+it waits for the driver to stop, while the guest agent's `shutdown(&mut self)`,
+on a client with one owner and no task, only drops the socket. Dropping the
+owner ends the driver with the same cleanup. `is_closed()`, `close_reason()`
+and `closed().await` expose connection lifecycle. Pending callers share the
+original failure via `Error::Disconnected`.
 
 Events within `max_event_bytes` are parsed once and delivered without blocking
 replies. `QmpEvents::recv().await` waits for the next one and returns `None`

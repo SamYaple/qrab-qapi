@@ -39,7 +39,7 @@ qapi-core = { workspace = true }
 [dependencies.tokio]
 workspace = true
 optional = true
-features = ["net", "io-util", "sync", "rt", "macros", "time"]
+features = ["net", "io-util", "sync", "rt", "time"]
 
 [dev-dependencies]
 # The crate's own tests use the mock sessions.

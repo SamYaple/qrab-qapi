@@ -1,41 +1,34 @@
 use crate::{
-    ClientOptions, Error, Greeting, InvalidRequestKind, PeerCommands, ProtocolViolation, QmpEvent,
-    Required, Result, TimeoutPhase,
+    ClientOptions, Error, Greeting, InvalidRequestKind, PeerCommands, QmpEvent, Required, Result,
+    Socket, TimeoutPhase,
     engine::{
-        self,
-        connection::{MAX_FDS, OOB_CAPACITY, QMP_QUEUE_CAPACITY},
+        Inbound,
+        connection::{self, Output, QmpConnection, Request},
         qmp::{Established, QmpHandshake},
     },
-    framing::JsonReader,
-    wire::{self, Envelope},
+    wire,
 };
 use qapi_core::QapiCommand;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json, value::RawValue};
 use std::{
-    collections::HashMap,
-    os::fd::{AsFd, OwnedFd},
+    future::{Future, poll_fn},
+    io,
+    os::fd::OwnedFd,
     path::Path,
+    pin::{Pin, pin},
     sync::{
         Arc,
-        atomic::{AtomicU8, AtomicU64, Ordering},
+        atomic::{AtomicU64, AtomicUsize, Ordering},
     },
-    time::Duration,
+    task::{Context, Poll},
+    time::{Duration, Instant},
 };
 use tokio::{
-    io::AsyncWriteExt,
     net::UnixStream,
-    sync::{OwnedSemaphorePermit, Semaphore, mpsc, oneshot, watch},
-    task::AbortHandle,
-    time::{Instant, timeout, timeout_at},
+    sync::{mpsc, oneshot, watch},
+    time::timeout,
 };
-
-// A request's dispatch state. The driver claims a queued request before
-// writing it, and a caller whose deadline elapses abandons it if it can,
-// so exactly one of them decides whether it is sent.
-const QUEUED: u8 = 0;
-const DISPATCHED: u8 = 1;
-const ABANDONED: u8 = 2;
 
 /// The events of one QMP connection, in the order the peer sent them.
 ///
@@ -63,29 +56,29 @@ impl QmpEvents {
     }
 }
 
-struct Request {
-    json: Value,
-    // Sent as SCM_RIGHTS with the frame's first bytes, then closed.
-    fds: Vec<OwnedFd>,
-    deadline: Instant,
-    state: Arc<AtomicU8>,
-    reply: oneshot::Sender<Result<Box<RawValue>>>,
-    // The request owns admission, even after its caller stops waiting.
-    _permit: OwnedSemaphorePermit,
+/// The handle's side of a request: the sender of its outcome.
+type Waiter = oneshot::Sender<Result<Box<RawValue>>>;
+
+/// What a handle asks of the driver.
+enum Command {
+    Request(Request, Waiter),
+    Shutdown,
 }
 
+/// The counters that the driver keeps for the handle.
+#[derive(Default)]
+struct Shared {
+    depth: AtomicUsize,
+    dropped: AtomicU64,
+}
+
+/// The driver's side of [`QmpEvents`].
 struct Events {
-    limit: usize,
     tx: mpsc::Sender<QmpEvent>,
-    dropped: Arc<AtomicU64>,
+    shared: Arc<Shared>,
 }
 
 impl Events {
-    fn publish(&self, bytes: &[u8], envelope: &Envelope) -> Result<()> {
-        self.deliver(engine::qmp::event(bytes, envelope, self.limit)?);
-        Ok(())
-    }
-
     /// Queue an event, or count it as dropped: one too large to parse
     /// (`None`), or one that finds the queue full. Dropping the event
     /// receiver does not close a healthy QMP connection.
@@ -98,31 +91,56 @@ impl Events {
             None => true,
         };
         if dropped {
-            self.dropped.fetch_add(1, Ordering::Relaxed);
+            self.shared.dropped.fetch_add(1, Ordering::Relaxed);
         }
     }
 }
 
-/// One task owns the socket and pending map. No shared mutable routing state,
-/// reaper task or secondary event worker is needed.
+/// Records the connection as closed when the driver ends, however it ends:
+/// with the connection's reason, or [`Error::Closed`] for a driver dropped
+/// before the connection closed.
+struct Closing {
+    closed: watch::Sender<Option<Arc<Error>>>,
+    shared: Arc<Shared>,
+    reason: Option<Arc<Error>>,
+}
+
+impl Drop for Closing {
+    fn drop(&mut self) {
+        self.shared.depth.store(0, Ordering::Relaxed);
+        let reason = self
+            .reason
+            .take()
+            .unwrap_or_else(|| Arc::new(Error::Closed));
+        self.closed.send_replace(Some(reason));
+    }
+}
+
+/// A QMP connection, shared through `&self`, as through `Arc<Qmp>`.
 ///
-/// Cancellation before dispatch skips the request. After dispatch it cannot
-/// undo remote execution: admission stays reserved until the reply. A dispatched
-/// command reaching its deadline closes the session, since its outcome and the
-/// remote queue depth are then unknown. Commands are never retried automatically.
+/// Its [`QmpDriver`] owns the socket and every request: it writes one frame
+/// at a time, routes the replies and the events and enforces the deadlines,
+/// so no shared mutable routing state is needed.
+/// [`from_stream`](Self::from_stream) and the connecting constructors spawn
+/// it on tokio; [`handshake`](Self::handshake) returns it.
+///
+/// At most [`QMP_QUEUE_CAPACITY`](crate::QMP_QUEUE_CAPACITY) in-band and as
+/// many out-of-band requests are dispatched at a time; the others wait in the
+/// driver's queue, the out-of-band ones first. Cancellation before dispatch
+/// skips the request. After dispatch it cannot undo remote execution:
+/// admission stays reserved until the reply. A dispatched command reaching
+/// its deadline closes the session, since its outcome and the remote queue
+/// depth are then unknown. Commands are never retried automatically.
 pub struct Qmp {
     greeting: Greeting,
     oob: bool,
     commands: Option<PeerCommands>,
     options: ClientOptions,
-    requests: mpsc::Sender<Request>,
-    normal: Arc<Semaphore>,
-    out_of_band: Arc<Semaphore>,
-    depth: watch::Receiver<usize>,
+    requests: mpsc::UnboundedSender<Command>,
     closed: watch::Receiver<Option<Arc<Error>>>,
-    shutdown: watch::Sender<()>,
-    abort: AbortHandle,
-    dropped_events: Arc<AtomicU64>,
+    shared: Arc<Shared>,
+    // The clock of the socket's runtime, which the driver's deadlines use.
+    clock: fn() -> Instant,
 }
 
 impl std::fmt::Debug for Qmp {
@@ -157,96 +175,101 @@ impl Qmp {
         Self::from_stream_with_options(stream, ClientOptions::default()).await
     }
 
+    /// Handshake on an already connected Unix socket, and spawn the
+    /// connection's driver on the current tokio runtime.
     pub async fn from_stream_with_options(
         stream: UnixStream,
         options: ClientOptions,
     ) -> Result<(Self, QmpEvents)> {
+        let (qmp, events, driver) = Self::handshake(stream, options).await?;
+        tokio::spawn(driver);
+        Ok((qmp, events))
+    }
+
+    /// Handshake on a connected socket, and return the client, its events
+    /// and the connection's [`QmpDriver`], for code that runs the driver
+    /// itself, such as on a `LocalSet` or next to its own work.
+    /// [`from_stream_with_options`](Self::from_stream_with_options) spawns it
+    /// instead. Until the driver runs, no request is sent and no deadline
+    /// expires.
+    ///
+    /// ```no_run
+    /// # async fn run(stream: tokio::net::UnixStream) -> qapi_protocol::Result<()> {
+    /// use qapi_protocol::{ClientOptions, Qmp};
+    /// let (qmp, _events, driver) = Qmp::handshake(stream, ClientOptions::default()).await?;
+    /// tokio::spawn(driver);
+    /// println!("QEMU {:?}", qmp.version());
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn handshake<S: Socket>(
+        mut socket: S,
+        options: ClientOptions,
+    ) -> Result<(Self, QmpEvents, QmpDriver)> {
         options.validate()?;
-        let (read, mut write) = stream.into_split();
-        let mut reader = JsonReader::new(read, options.max_message_bytes);
-        let (event_tx, event_rx) = mpsc::channel(options.event_capacity);
-        let dropped_events = Arc::new(AtomicU64::new(0));
-        let events = Events {
-            limit: options.max_event_bytes,
-            tx: event_tx,
-            dropped: dropped_events.clone(),
-        };
-        let established = timeout(options.handshake_timeout, async {
+        let limit = options.max_message_bytes;
+        let deadline =
+            S::now()
+                .checked_add(options.handshake_timeout)
+                .ok_or(Error::InvalidRequest(InvalidRequestKind::Options {
+                    option: "handshake_timeout",
+                }))?;
+        let mut inbound = Inbound::new();
+        let steps = async {
             let mut handshake = QmpHandshake::new(&options);
             loop {
                 if let Some(frame) = handshake.poll_transmit() {
-                    write.write_all(&frame).await?;
+                    write_all(&mut socket, &frame).await?;
                 }
                 if handshake.is_done() {
                     break;
                 }
-                handshake.handle_frame(&reader.next().await?)?;
+                handshake.handle_frame(&read_frame(&mut socket, &mut inbound, limit).await?)?;
             }
             Ok::<_, Error>(handshake.finish())
-        })
-        .await
-        .map_err(|_| Error::Timeout {
-            phase: TimeoutPhase::Handshake,
-        })??;
+        };
         let Established {
             greeting,
             oob,
             commands,
             events: early,
-        } = established;
+        } = within::<S, _>(deadline, steps)
+            .await
+            .ok_or(Error::Timeout {
+                phase: TimeoutPhase::Handshake,
+            })??;
+        let shared = Arc::new(Shared::default());
+        let (event_tx, event_rx) = mpsc::channel(options.event_capacity);
+        let events = Events {
+            tx: event_tx,
+            shared: shared.clone(),
+        };
+        // The events of the handshake are queued before the client is returned.
         for event in early {
             events.deliver(event);
         }
-
-        let normal = Arc::new(Semaphore::new(QMP_QUEUE_CAPACITY));
-        let out_of_band = Arc::new(Semaphore::new(OOB_CAPACITY));
-        let (requests, request_rx) = mpsc::channel(QMP_QUEUE_CAPACITY + OOB_CAPACITY);
-        let (depth_tx, depth) = watch::channel(0);
+        let (requests, request_rx) = mpsc::unbounded_channel();
         let (closed_tx, closed) = watch::channel(None);
-        let (shutdown, shutdown_rx) = watch::channel(());
-        let lifecycle = Lifecycle {
-            normal: normal.clone(),
-            oob: out_of_band.clone(),
-            depth: depth_tx,
+        let closing = Closing {
             closed: closed_tx,
+            shared: shared.clone(),
             reason: None,
         };
-        let limit = options.max_message_bytes;
-        let task = tokio::spawn(async move {
-            let mut lifecycle = lifecycle;
-            let result = drive(
-                &mut reader,
-                &mut write,
-                request_rx,
-                shutdown_rx,
-                events,
-                &lifecycle.depth,
-                limit,
-            )
-            .await;
-            lifecycle.reason = Some(Arc::new(result.err().unwrap_or(Error::Closed)));
-        });
-        let abort = task.abort_handle();
-        // Lifecycle always runs on normal exit, panic or abort; dropping this
-        // JoinHandle detaches ownership, not cleanup responsibility.
-        drop(task);
-        Ok((
-            Self {
-                greeting,
-                oob,
-                commands,
-                options,
-                requests,
-                normal,
-                out_of_band,
-                depth,
-                closed,
-                shutdown,
-                abort,
-                dropped_events,
-            },
-            QmpEvents { rx: event_rx },
-        ))
+        let connection = QmpConnection::new(&options, oob, Vec::new());
+        let driver = drive(
+            socket, inbound, connection, request_rx, events, closing, limit,
+        );
+        let qmp = Self {
+            greeting,
+            oob,
+            commands,
+            options,
+            requests,
+            closed,
+            shared,
+            clock: S::now,
+        };
+        Ok((qmp, QmpEvents { rx: event_rx }, QmpDriver(Box::pin(driver))))
     }
 
     pub fn greeting(&self) -> &Greeting {
@@ -291,10 +314,10 @@ impl Qmp {
     }
     /// Number of dispatched requests awaiting a reply, including cancelled callers.
     pub fn queue_depth(&self) -> usize {
-        *self.depth.borrow()
+        self.shared.depth.load(Ordering::Relaxed)
     }
     pub fn dropped_events(&self) -> u64 {
-        self.dropped_events.load(Ordering::Relaxed)
+        self.shared.dropped.load(Ordering::Relaxed)
     }
     pub fn is_closed(&self) -> bool {
         self.closed.borrow().is_some()
@@ -321,10 +344,10 @@ impl Qmp {
     ///
     /// It takes `&self`, unlike the guest agent's synchronous
     /// [`Qga::shutdown`](crate::qga::Qga::shutdown): a QMP client is shared,
-    /// as through `Arc<Qmp>`, while other tasks await replies, and one task
-    /// that owns the socket must stop, which is awaited here.
+    /// as through `Arc<Qmp>`, while other tasks await replies, and the
+    /// driver that owns the socket must stop, which is awaited here.
     pub async fn shutdown(&self) {
-        self.shutdown.send_replace(());
+        let _ = self.requests.send(Command::Shutdown);
         let _ = self.closed().await;
     }
 
@@ -457,18 +480,14 @@ impl Qmp {
         qapi_core::with_version(self.version(), || wire::decode(&reply))
     }
 
-    fn disconnected(&self) -> Error {
-        Error::Disconnected(
-            self.close_reason()
-                .unwrap_or_else(|| Arc::new(Error::Closed)),
-        )
-    }
-
     /// The driver has stopped; wait for the reason it records as it ends.
     async fn lost(&self) -> Error {
         Error::Disconnected(self.closed().await)
     }
 
+    /// Queue a request with the driver and wait for its outcome. The driver
+    /// decides every deadline, queued or dispatched, so this future needs no
+    /// timer of its own.
     async fn dispatch(
         &self,
         request: Value,
@@ -476,67 +495,39 @@ impl Qmp {
         oob: bool,
         duration: Duration,
     ) -> Result<Box<RawValue>> {
-        engine::encode(&request, self.options.max_message_bytes)?;
-        if oob && !self.oob {
-            return Err(Error::InvalidRequest(InvalidRequestKind::OobNotNegotiated));
+        connection::check(
+            &request,
+            fds.len(),
+            oob,
+            self.oob,
+            self.options.max_message_bytes,
+        )?;
+        if let Some(reason) = self.close_reason() {
+            return Err(Error::Disconnected(reason));
         }
-        if fds.len() > MAX_FDS {
-            return Err(Error::InvalidRequest(InvalidRequestKind::TooManyFds {
-                count: fds.len(),
-                max: MAX_FDS,
-            }));
-        }
-        if self.is_closed() {
-            return Err(self.disconnected());
-        }
-        let deadline = Instant::now()
+        let deadline = (self.clock)()
             .checked_add(duration)
             .ok_or(Error::InvalidRequest(InvalidRequestKind::TimeoutTooLarge {
                 timeout: duration,
             }))?;
-        let state = Arc::new(AtomicU8::new(QUEUED));
-        let timed_out = || {
-            let unsent = state
-                .compare_exchange(QUEUED, ABANDONED, Ordering::AcqRel, Ordering::Acquire)
-                .is_ok();
-            Error::Timeout {
-                phase: if unsent {
-                    TimeoutPhase::BeforeDispatch
-                } else {
-                    TimeoutPhase::AfterDispatch
-                },
-            }
+        let (waiter, reply) = oneshot::channel();
+        let request = Request {
+            json: request,
+            fds,
+            oob,
+            deadline,
         };
-        let operation = async {
-            let permits = if oob { &self.out_of_band } else { &self.normal };
-            let Ok(permit) = permits.clone().acquire_owned().await else {
-                return Err(self.lost().await);
-            };
-            let (reply, receive) = oneshot::channel();
-            let request = Request {
-                json: request,
-                fds,
-                deadline,
-                state: state.clone(),
-                reply,
-                _permit: permit,
-            };
-            if self.requests.send(request).await.is_err() {
-                return Err(self.lost().await);
-            }
-            match receive.await {
-                Ok(result) => result,
-                // The driver drops its requests as it stops, also when this
-                // call's own deadline stopped it. A call whose deadline has
-                // passed reports its timeout, whichever of the two the
-                // runtime noticed first.
-                Err(_) if Instant::now() >= deadline => Err(timed_out()),
-                Err(_) => Err(self.lost().await),
-            }
-        };
-        timeout_at(deadline, operation)
-            .await
-            .unwrap_or_else(|_| Err(timed_out()))
+        if self
+            .requests
+            .send(Command::Request(request, waiter))
+            .is_err()
+        {
+            return Err(self.lost().await);
+        }
+        match reply.await {
+            Ok(result) => result,
+            Err(_) => Err(self.lost().await),
+        }
     }
 }
 
@@ -546,163 +537,209 @@ pub(crate) fn no_success_response<C: QapiCommand>() -> Error {
     })
 }
 
-impl Drop for Qmp {
-    fn drop(&mut self) {
-        self.abort.abort();
+/// The I/O and the deadlines of one QMP connection, as a future to spawn
+/// or to poll next to other work. Until it runs, no request is sent and no
+/// deadline expires. It ends once the connection closes, also when the
+/// [`Qmp`] is dropped. [`Qmp::from_stream`] spawns it on tokio, and
+/// [`Qmp::handshake`] returns it.
+#[must_use = "the driver does the connection's I/O and deadlines: spawn it or poll it"]
+pub struct QmpDriver(Pin<Box<dyn Future<Output = ()> + Send + 'static>>);
+
+impl Future for QmpDriver {
+    type Output = ();
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
+        self.0.as_mut().poll(cx)
     }
 }
 
-struct Lifecycle {
-    normal: Arc<Semaphore>,
-    oob: Arc<Semaphore>,
-    depth: watch::Sender<usize>,
-    closed: watch::Sender<Option<Arc<Error>>>,
-    reason: Option<Arc<Error>>,
-}
-impl Drop for Lifecycle {
-    fn drop(&mut self) {
-        self.closed.send_replace(Some(
-            self.reason
-                .clone()
-                .unwrap_or_else(|| Arc::new(Error::Closed)),
-        ));
-        self.normal.close();
-        self.oob.close();
-        self.depth.send_replace(0);
+impl std::fmt::Debug for QmpDriver {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("QmpDriver").finish_non_exhaustive()
     }
 }
 
-struct Pending {
-    deadline: Instant,
-    reply: oneshot::Sender<Result<Box<RawValue>>>,
-    _permit: OwnedSemaphorePermit,
+/// `future`, unless the socket's timer reaches `deadline` first.
+async fn within<S: Socket, F: Future>(deadline: Instant, future: F) -> Option<F::Output> {
+    let mut future = pin!(future);
+    let mut sleep = pin!(S::sleep_until(deadline));
+    poll_fn(|cx| {
+        if let Poll::Ready(output) = future.as_mut().poll(cx) {
+            return Poll::Ready(Some(output));
+        }
+        if sleep.as_mut().poll(cx).is_ready() {
+            return Poll::Ready(None);
+        }
+        Poll::Pending
+    })
+    .await
 }
 
-struct Writing {
-    id: u64,
-    bytes: Vec<u8>,
-    offset: usize,
-    fds: Vec<OwnedFd>,
-}
-
-/// One `sendmsg` carrying `fds` with (a prefix of) `bytes`. Like `write()`
-/// it is cancellation safe: nothing is sent until it returns.
-async fn send_with_fds(
-    stream: &UnixStream,
-    bytes: &[u8],
-    fds: &[OwnedFd],
-) -> std::io::Result<usize> {
-    use rustix::net::{SendAncillaryBuffer, SendAncillaryMessage, SendFlags, sendmsg};
-    let borrowed: Vec<_> = fds.iter().map(AsFd::as_fd).collect();
-    let mut space =
-        vec![std::mem::MaybeUninit::uninit(); rustix::cmsg_space!(ScmRights(borrowed.len()))];
-    let mut control = SendAncillaryBuffer::new(&mut space);
-    if !control.push(SendAncillaryMessage::ScmRights(&borrowed)) {
-        return Err(std::io::Error::other(
-            "the descriptors do not fit their control message",
-        ));
+async fn write_all<S: Socket>(socket: &mut S, mut bytes: &[u8]) -> Result<()> {
+    while !bytes.is_empty() {
+        let n = poll_fn(|cx| socket.poll_write(cx, bytes, &[])).await?;
+        if n == 0 {
+            return Err(io::Error::from(io::ErrorKind::WriteZero).into());
+        }
+        bytes = &bytes[n..];
     }
-    let iov = [std::io::IoSlice::new(bytes)];
-    stream
-        .async_io(tokio::io::Interest::WRITABLE, || {
-            sendmsg(stream, &iov, &mut control, SendFlags::NOSIGNAL).map_err(std::io::Error::from)
-        })
-        .await
+    Ok(())
 }
 
-async fn drive(
-    reader: &mut JsonReader<tokio::net::unix::OwnedReadHalf>,
-    writer: &mut tokio::net::unix::OwnedWriteHalf,
-    mut requests: mpsc::Receiver<Request>,
-    mut shutdown: watch::Receiver<()>,
-    events: Events,
-    depth: &watch::Sender<usize>,
+async fn read_frame<S: Socket>(
+    socket: &mut S,
+    inbound: &mut Inbound,
     limit: usize,
-) -> Result<()> {
-    let mut pending: HashMap<u64, Pending> = HashMap::new();
-    let mut writing: Option<Writing> = None;
-    let mut id = 0_u64;
+) -> Result<Vec<u8>> {
     loop {
-        let deadline = pending.values().map(|request| request.deadline).min();
-        let expire = async {
-            match deadline {
-                Some(deadline) => tokio::time::sleep_until(deadline).await,
-                None => std::future::pending::<()>().await,
+        if let Some(frame) = inbound.frame(limit)? {
+            return Ok(frame);
+        }
+        let n = poll_fn(|cx| socket.poll_read(cx, inbound.space())).await?;
+        if n == 0 {
+            return Err(inbound.eof());
+        }
+        inbound.filled(n);
+    }
+}
+
+/// The iterations of one poll of the driver, so that a busy connection
+/// cannot starve the other tasks of its executor.
+const BUDGET: usize = 64;
+
+/// The driver: one poll loop over the connection's engine, the handle's
+/// requests, the socket and one timer.
+async fn drive<S: Socket>(
+    mut socket: S,
+    mut inbound: Inbound,
+    mut connection: QmpConnection<Waiter>,
+    mut requests: mpsc::UnboundedReceiver<Command>,
+    events: Events,
+    mut closing: Closing,
+    limit: usize,
+) {
+    let mut sleep: Option<(Instant, Pin<Box<S::Sleep>>)> = None;
+    poll_fn(|cx| {
+        for _ in 0..BUDGET {
+            let mut progress = false;
+            // A deadline that passed expires first, so that its call reports
+            // its own timeout, not the closure that the expiry causes.
+            let now = S::now();
+            if connection
+                .poll_timeout()
+                .is_some_and(|deadline| deadline <= now)
+            {
+                connection.handle_timeout(now);
+                progress = true;
             }
-        };
-        tokio::select! {
-            _ = shutdown.changed() => return Ok(()),
-            _ = expire => return Err(Error::Timeout { phase: TimeoutPhase::AfterDispatch }),
-            message = reader.next() => {
-                let bytes = message?;
-                let envelope = wire::envelope(&bytes)?;
-                if envelope.event.is_some() { events.publish(&bytes, &envelope)?; continue; }
-                if envelope.id.is_none() {
-                    // QEMU may report a parser error before reading a request
-                    // ID. It cannot be correlated, so close and retain its cause.
-                    return match wire::response(&envelope) {
-                        Err(error @ Error::Remote(_)) => Err(error),
-                        _ => Err(Error::Protocol(ProtocolViolation::MissingResponseId)),
-                    };
+            while connection.close_reason().is_none() {
+                match requests.poll_recv(cx) {
+                    Poll::Ready(Some(Command::Request(request, waiter))) => {
+                        progress = true;
+                        if let Err((waiter, error)) = connection.submit(request, waiter) {
+                            let _ = waiter.send(Err(error));
+                        }
+                    }
+                    // A shutdown, or every handle dropped.
+                    Poll::Ready(Some(Command::Shutdown) | None) => {
+                        progress = true;
+                        connection.close(Error::Closed);
+                    }
+                    Poll::Pending => break,
                 }
-                // QMP IDs can be arbitrary JSON. Anything that is not one of
-                // our numeric IDs is unknown, not a malformed protocol value.
-                let Some(response_id) = envelope.numeric_id() else { continue; };
-                if !pending.contains_key(&response_id) { continue; }
-                if writing.as_ref().is_some_and(|w| w.id == response_id) {
-                    return Err(Error::Protocol(ProtocolViolation::EarlyResponse));
-                }
-                // Only the payload is kept, as raw JSON for the caller to decode.
-                let response = wire::response(&envelope).map(RawValue::to_owned);
-                if !matches!(response, Ok(_) | Err(Error::Remote(_))) { return response.map(|_| ()); }
-                let request = pending.remove(&response_id).unwrap();
-                depth.send_replace(pending.len());
-                let _ = request.reply.send(response);
             }
-            // write(), unlike write_all(), is cancellation safe. Retaining its
-            // offset lets reads, deadlines and shutdown progress under socket
-            // backpressure without losing or repeating bytes in the frame.
-            written = async {
-                let frame = writing.as_ref().unwrap();
-                if frame.fds.is_empty() {
-                    writer.write(&frame.bytes[frame.offset..]).await
-                } else {
-                    send_with_fds(writer.as_ref(), &frame.bytes[frame.offset..], &frame.fds).await
+            while connection.close_reason().is_none() {
+                match inbound.frame(limit) {
+                    Ok(Some(frame)) => {
+                        progress = true;
+                        connection.handle_frame(&frame);
+                    }
+                    Ok(None) => break,
+                    Err(error) => {
+                        progress = true;
+                        connection.close(error);
+                    }
                 }
-            }, if writing.is_some() => {
-                let n = written?;
-                if n == 0 { return Err(std::io::Error::from(std::io::ErrorKind::WriteZero).into()); }
-                let frame = writing.as_mut().unwrap();
-                // The descriptors went with these bytes; QEMU holds its own copies.
-                frame.fds.clear();
-                frame.offset += n;
-                if frame.offset == frame.bytes.len() { writing = None; }
             }
-            request = requests.recv(), if writing.is_none() => {
-                let Some(Request { mut json, fds, deadline: request_deadline, state, reply, _permit }) = request else { return Ok(()); };
-                if reply.is_closed() { continue; }
-                if deadline.is_some_and(|d| d <= Instant::now()) {
-                    return Err(Error::Timeout { phase: TimeoutPhase::AfterDispatch });
+            if let Some(transmit) = connection.poll_transmit(S::now(), |waiter| !waiter.is_closed())
+            {
+                match socket.poll_write(cx, transmit.bytes, transmit.fds) {
+                    Poll::Ready(Ok(0)) => {
+                        progress = true;
+                        connection.close(io::Error::from(io::ErrorKind::WriteZero).into());
+                    }
+                    Poll::Ready(Ok(n)) => {
+                        progress = true;
+                        connection.advance(n);
+                    }
+                    Poll::Ready(Err(error)) => {
+                        progress = true;
+                        connection.close(error.into());
+                    }
+                    Poll::Pending => {}
                 }
-                if request_deadline <= Instant::now() {
-                    let _ = reply.send(Err(Error::Timeout { phase: TimeoutPhase::BeforeDispatch }));
-                    continue;
+            }
+            if connection.close_reason().is_none() {
+                match socket.poll_read(cx, inbound.space()) {
+                    Poll::Ready(Ok(0)) => {
+                        progress = true;
+                        connection.close(inbound.eof());
+                    }
+                    Poll::Ready(Ok(n)) => {
+                        progress = true;
+                        inbound.filled(n);
+                    }
+                    Poll::Ready(Err(error)) => {
+                        progress = true;
+                        connection.close(error.into());
+                    }
+                    Poll::Pending => {}
                 }
-                // A caller that timed out first has abandoned the request.
-                if state.compare_exchange(QUEUED, DISPATCHED, Ordering::AcqRel, Ordering::Acquire).is_err() { continue; }
-                id = id.checked_add(1).ok_or(Error::Protocol(ProtocolViolation::IdsExhausted))?;
-                json["id"] = json!(id);
-                let bytes = match engine::encode(&json, limit) {
-                    Ok(bytes) => bytes,
-                    Err(error) => { let _ = reply.send(Err(error)); continue; }
-                };
-                // Keep only the encoded frame while writing, not a second copy
-                // of potentially large arguments throughout remote execution.
-                drop(json);
-                pending.insert(id, Pending { deadline: request_deadline, reply, _permit });
-                writing = Some(Writing { id, bytes, offset: 0, fds });
-                depth.send_replace(pending.len());
+            }
+            // The depth is current before a caller learns its outcome.
+            closing
+                .shared
+                .depth
+                .store(connection.queue_depth(), Ordering::Relaxed);
+            while let Some(output) = connection.poll_output() {
+                progress = true;
+                match output {
+                    Output::Reply(waiter, result) => {
+                        let _ = waiter.send(result);
+                    }
+                    Output::Event(event) => events.deliver(Some(event)),
+                    Output::EventDropped => events.deliver(None),
+                }
+            }
+            if let Some(reason) = connection.close_reason() {
+                closing.reason = Some(reason.clone());
+                return Poll::Ready(());
+            }
+            match connection.poll_timeout() {
+                Some(deadline) => {
+                    if sleep.as_ref().is_none_or(|(at, _)| *at != deadline) {
+                        sleep = Some((deadline, Box::pin(S::sleep_until(deadline))));
+                    }
+                    let (_, timer) = sleep.as_mut().expect("the timer is armed");
+                    if timer.as_mut().poll(cx).is_ready() {
+                        sleep = None;
+                        connection.handle_timeout(S::now().max(deadline));
+                        progress = true;
+                    }
+                }
+                None => sleep = None,
+            }
+            if !progress {
+                return Poll::Pending;
             }
         }
-    }
+        // The budget is spent: let the executor run its other tasks first.
+        cx.waker().wake_by_ref();
+        Poll::Pending
+    })
+    .await;
+    // The socket closes before the connection is reported closed.
+    drop(socket);
+    drop(events);
+    drop(closing);
 }

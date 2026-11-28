@@ -141,23 +141,14 @@ impl<W> QmpConnection<W> {
     /// be sent: too large, OOB without the peer's consent, with too many
     /// descriptors, or on a closed connection.
     pub fn submit(&mut self, request: Request, waiter: W) -> std::result::Result<(), (W, Error)> {
-        if let Err(error) = encode(&request.json, self.limit) {
+        if let Err(error) = check(
+            &request.json,
+            request.fds.len(),
+            request.oob,
+            self.oob,
+            self.limit,
+        ) {
             return Err((waiter, error));
-        }
-        if request.oob && !self.oob {
-            return Err((
-                waiter,
-                Error::InvalidRequest(InvalidRequestKind::OobNotNegotiated),
-            ));
-        }
-        if request.fds.len() > MAX_FDS {
-            return Err((
-                waiter,
-                Error::InvalidRequest(InvalidRequestKind::TooManyFds {
-                    count: request.fds.len(),
-                    max: MAX_FDS,
-                }),
-            ));
         }
         if let Some(reason) = &self.closed {
             return Err((waiter, Error::Disconnected(reason.clone())));
@@ -414,6 +405,30 @@ impl<W> QmpConnection<W> {
     pub fn queue_depth(&self) -> usize {
         self.pending.len()
     }
+}
+
+/// Whether a request can be sent, as [`QmpConnection::submit`] checks it
+/// before queueing it, for a client to check first: its JSON fits `limit`
+/// without its ID, it is in-band unless the peer `negotiated` OOB, and its
+/// `fds` fit one message.
+pub(crate) fn check(
+    json: &Value,
+    fds: usize,
+    oob: bool,
+    negotiated: bool,
+    limit: usize,
+) -> Result<()> {
+    encode(json, limit)?;
+    if oob && !negotiated {
+        return Err(Error::InvalidRequest(InvalidRequestKind::OobNotNegotiated));
+    }
+    if fds > MAX_FDS {
+        return Err(Error::InvalidRequest(InvalidRequestKind::TooManyFds {
+            count: fds,
+            max: MAX_FDS,
+        }));
+    }
+    Ok(())
 }
 
 fn capacity(oob: bool) -> usize {

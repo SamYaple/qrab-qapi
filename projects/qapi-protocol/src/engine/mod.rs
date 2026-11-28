@@ -4,10 +4,6 @@
 //!
 //! Nothing here reads or writes a socket, reads a clock or awaits, so the
 //! clients of every runtime share these rules.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "the tokio driver moves onto the connection next")
-)]
 pub(crate) mod connection;
 mod inbound;
 pub(crate) mod qga;

@@ -19,13 +19,17 @@ mod qmp;
 #[cfg(feature = "mock")]
 pub mod server;
 #[cfg(feature = "tokio")]
+mod socket;
+#[cfg(feature = "tokio")]
 mod wire;
 
 #[cfg(feature = "tokio")]
 pub use engine::{Greeting, QMP_QUEUE_CAPACITY, QemuVersion, VersionInfo};
 use qapi_core::QapiCommand;
 #[cfg(feature = "tokio")]
-pub use qmp::{Qmp, QmpEvents};
+pub use qmp::{Qmp, QmpDriver, QmpEvents};
+#[cfg(feature = "tokio")]
+pub use socket::Socket;
 use std::{collections::BTreeSet, fmt, sync::Arc, time::Duration};
 
 /// Why a connection or a call failed.

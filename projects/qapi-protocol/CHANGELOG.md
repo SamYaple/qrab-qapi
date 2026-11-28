@@ -9,6 +9,15 @@ and the version numbers follow the policy in the repository's
 
 - The client sends file descriptors with rustix instead of nix, which is
   no longer a dependency.
+- `Qmp::handshake` returns the client, its events and the connection's
+  `QmpDriver`, a future that does the connection's I/O and deadlines, for
+  code that runs it itself, such as on a `LocalSet`. `from_stream` and the
+  connecting constructors still spawn it on tokio. The new `Socket` trait,
+  which is sealed, names the sockets it takes: tokio's `UnixStream`.
+- Out-of-band requests are sent before queued in-band ones.
+- The QMP client's admission, deadlines and routing run in a sans-IO engine,
+  which the coming blocking and async-io clients are to share. The `tokio`
+  feature no longer enables tokio's `macros`.
 
 ## 0.2.0
 
