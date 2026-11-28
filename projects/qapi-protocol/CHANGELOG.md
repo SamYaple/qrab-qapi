@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the version numbers follow the policy in the repository's
 `docs/versioning.md`.
 
+## Unreleased
+
+- The client sends file descriptors with rustix instead of nix, which is
+  no longer a dependency.
+
 ## 0.2.0
 
 - Breaking: the crate depends on `qrab-qapi-core` instead of `qrab-qapi`.

@@ -23,13 +23,14 @@ name = "qapi_protocol"
 [features]
 default = ["tokio"]
 # The QMP and guest agent clients, which run on Tokio.
-tokio = ["dep:tokio", "dep:getrandom", "dep:nix"]
+tokio = ["dep:tokio", "dep:getrandom", "dep:rustix"]
 # The mock sessions of the server module, for tests.
 mock = ["tokio"]
 
 [dependencies]
 getrandom = { version = "0.4", optional = true }
-nix = { workspace = true, features = ["socket", "uio"], optional = true }
+# sendmsg with SCM_RIGHTS, for the descriptors of a QMP command.
+rustix = { workspace = true, features = ["net"], optional = true }
 thiserror = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true, features = ["raw_value"] }
@@ -46,6 +47,8 @@ qrab-qapi-protocol = { path = ".", features = ["mock"] }
 # The generated types of the tests and the documentation's examples.
 qapi = { workspace = true }
 tempfile = { workspace = true }
+# The tests receive the descriptors that the client sends.
+rustix = { workspace = true, features = ["net", "pipe"] }
 
 [dev-dependencies.tokio]
 workspace = true

@@ -1,11 +1,12 @@
 //! Descriptors ride SCM_RIGHTS with the frame of the command that takes them
 //! (`getfd`), the way QEMU's QMP socket chardev expects.
-use nix::sys::socket::{ControlMessageOwned, MsgFlags, recvmsg};
 use qapi_protocol::Qmp;
+use rustix::net::{RecvAncillaryBuffer, RecvAncillaryMessage, RecvFlags, recvmsg};
 use serde_json::{Value, json};
 use std::{
     io::{IoSliceMut, Read, Write},
-    os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd},
+    mem::MaybeUninit,
+    os::fd::OwnedFd,
 };
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
@@ -20,24 +21,15 @@ async fn line_with_fds(stream: &UnixStream) -> (Value, Vec<OwnedFd>) {
     let mut fds = Vec::new();
     loop {
         let mut chunk = [0u8; 1];
-        let mut space = nix::cmsg_space!([RawFd; 4]);
+        let mut space = [MaybeUninit::uninit(); rustix::cmsg_space!(ScmRights(4))];
         let n = stream
             .async_io(tokio::io::Interest::READABLE, || {
+                let mut control = RecvAncillaryBuffer::new(&mut space);
                 let mut iov = [IoSliceMut::new(&mut chunk)];
-                let msg = recvmsg::<()>(
-                    stream.as_raw_fd(),
-                    &mut iov,
-                    Some(&mut space),
-                    MsgFlags::empty(),
-                )
-                .map_err(std::io::Error::from)?;
-                for cmsg in msg.cmsgs().map_err(std::io::Error::from)? {
-                    if let ControlMessageOwned::ScmRights(received) = cmsg {
-                        fds.extend(
-                            received
-                                .into_iter()
-                                .map(|fd| unsafe { OwnedFd::from_raw_fd(fd) }),
-                        );
+                let msg = recvmsg(stream, &mut iov, &mut control, RecvFlags::empty())?;
+                for message in control.drain() {
+                    if let RecvAncillaryMessage::ScmRights(received) = message {
+                        fds.extend(received);
                     }
                 }
                 Ok(msg.bytes)
@@ -118,7 +110,7 @@ async fn getfd_carries_its_descriptor_and_plain_commands_carry_none() {
     });
 
     let (qmp, _events) = Qmp::new(&path).await.unwrap();
-    let (read, write) = nix::unistd::pipe().unwrap();
+    let (read, write) = rustix::pipe::pipe().unwrap();
     let mut write = std::fs::File::from(write);
     write.write_all(b"through the descriptor").unwrap();
     qmp.getfd("nic-lan-tap0", read).await.unwrap();
@@ -127,7 +119,7 @@ async fn getfd_carries_its_descriptor_and_plain_commands_carry_none() {
     let error = write.write_all(b"x").unwrap_err();
     assert_eq!(
         error.raw_os_error(),
-        Some(nix::libc::EPIPE),
+        Some(rustix::io::Errno::PIPE.raw_os_error()),
         "the client kept the descriptor"
     );
     let status = qmp
@@ -185,7 +177,7 @@ async fn descriptors_of_a_refused_request_are_closed() {
         let _ = BufReader::new(stream).read_line(&mut rest).await;
     });
     let (qmp, _events) = Qmp::new(&path).await.unwrap();
-    let (read, write) = nix::unistd::pipe().unwrap();
+    let (read, write) = rustix::pipe::pipe().unwrap();
     // Invalid arguments are refused before any I/O, and the descriptor goes with it.
     assert!(matches!(
         qmp.execute_raw_with_fds::<Value>("getfd", json!([]), vec![read])
@@ -197,7 +189,10 @@ async fn descriptors_of_a_refused_request_are_closed() {
     // With the only reader closed, writing to the pipe fails with EPIPE.
     let mut write = std::fs::File::from(write);
     let error = write.write_all(b"x").unwrap_err();
-    assert_eq!(error.raw_os_error(), Some(nix::libc::EPIPE));
+    assert_eq!(
+        error.raw_os_error(),
+        Some(rustix::io::Errno::PIPE.raw_os_error())
+    );
     drop(qmp);
     server.await.unwrap();
 }

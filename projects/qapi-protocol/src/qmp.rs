@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::{Value, json, value::RawValue};
 use std::{
     collections::HashMap,
-    os::fd::{AsRawFd, OwnedFd, RawFd},
+    os::fd::{AsFd, OwnedFd},
     path::Path,
     sync::{
         Arc,
@@ -679,20 +679,20 @@ async fn send_with_fds(
     bytes: &[u8],
     fds: &[OwnedFd],
 ) -> std::io::Result<usize> {
-    use nix::sys::socket::{ControlMessage, MsgFlags, sendmsg};
-    let raw: Vec<RawFd> = fds.iter().map(AsRawFd::as_raw_fd).collect();
+    use rustix::net::{SendAncillaryBuffer, SendAncillaryMessage, SendFlags, sendmsg};
+    let borrowed: Vec<_> = fds.iter().map(AsFd::as_fd).collect();
+    let mut space =
+        vec![std::mem::MaybeUninit::uninit(); rustix::cmsg_space!(ScmRights(borrowed.len()))];
+    let mut control = SendAncillaryBuffer::new(&mut space);
+    if !control.push(SendAncillaryMessage::ScmRights(&borrowed)) {
+        return Err(std::io::Error::other(
+            "the descriptors do not fit their control message",
+        ));
+    }
+    let iov = [std::io::IoSlice::new(bytes)];
     stream
         .async_io(tokio::io::Interest::WRITABLE, || {
-            let iov = [std::io::IoSlice::new(bytes)];
-            let cmsg = [ControlMessage::ScmRights(&raw)];
-            sendmsg::<()>(
-                stream.as_raw_fd(),
-                &iov,
-                &cmsg,
-                MsgFlags::MSG_NOSIGNAL,
-                None,
-            )
-            .map_err(std::io::Error::from)
+            sendmsg(stream, &iov, &mut control, SendFlags::NOSIGNAL).map_err(std::io::Error::from)
         })
         .await
 }
